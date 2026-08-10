@@ -1,0 +1,31 @@
+# Go build and test artifacts
+/bin/
+/build/
+/dist/
+*.test
+*.out
+coverage.*
+
+# TypeScript and frontend artifacts
+node_modules/
+.turbo/
+.vite/
+.next/
+storybook-static/
+*.tsbuildinfo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
