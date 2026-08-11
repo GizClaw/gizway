@@ -1,0 +1,3 @@
+This deterministic fixture represents uploaded audio bytes at the HTTP boundary.
+The external provider fake validates that the multipart file is non-empty; it
+does not bypass Gizway's upload limit, Bifrost conversion, usage, or settlement.

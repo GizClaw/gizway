@@ -2,9 +2,21 @@
 /bin/
 /build/
 /dist/
+/.coverage/
 *.test
+*.exe
 *.out
+*.coverprofile
+*.prof
+*.trace
 coverage.*
+
+# Executables produced by running `go build` from the repository root
+/gizway
+/fake-ai-provider
+/fake-payment-provider
+/fake-risk-provider
+/openapi-check
 
 # TypeScript and frontend artifacts
 node_modules/
@@ -18,11 +30,17 @@ storybook-static/
 .env
 .env.*
 !.env.example
+.envrc
+.direnv/
 
 # Logs and temporary files
 *.log
+*.pid
+*.sock
+*.tmp
 tmp/
 temp/
+/output/
 
 # Editors and operating systems
 .idea/

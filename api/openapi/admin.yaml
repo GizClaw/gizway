@@ -1,0 +1,1580 @@
+openapi: 3.1.0
+info:
+  title: Gizway Admin API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: |
+    Internal operations API for Gizway. Administrative actions are audited.
+    Immutable financial records and historical prices are never edited in place.
+servers:
+  - url: https://api.gizway.com/admin/v1
+security:
+  - adminSessionAuth: []
+  - adminApiKeyAuth: []
+tags:
+  - name: Admin authentication
+    description: Authenticate administrators and manage their own credentials.
+  - name: Administrators
+    description: Manage the flat list of equally privileged administrator accounts.
+  - name: Overview
+    description: Operational metrics for the administration dashboard.
+  - name: Users
+    description: Search users and manage access status.
+  - name: Merchants
+    description: Review and manage merchant accounts.
+  - name: Providers
+    description: Configure upstream AI providers and endpoints.
+  - name: Models
+    description: Manage the canonical model catalog and provider variants.
+  - name: Pricing
+    description: Publish append-only effective prices.
+  - name: API keys
+    description: Inspect metadata and revoke compromised keys.
+  - name: Gateway requests
+    description: Diagnose AI calls, routing, usage, and charges.
+  - name: Payments
+    description: Inspect top-ups, refunds, transfers, and merchant payments.
+  - name: Ledger
+    description: Inspect balances and issue controlled adjustments or reversals.
+  - name: Webhooks
+    description: Inspect and retry merchant webhook deliveries.
+  - name: Audit
+    description: Query immutable administrative audit events.
+paths:
+  /auth/login:
+    post:
+      tags: [Admin authentication]
+      operationId: loginAdministrator
+      summary: Create an administrator web session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, format: password, minLength: 1, writeOnly: true}
+      responses:
+        '200':
+          description: Authenticated administrator and short-lived access token.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminSession'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /auth/refresh:
+    post:
+      tags: [Admin authentication]
+      operationId: refreshAdministratorSession
+      summary: Atomically rotate an administrator bearer session
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Replacement session; the predecessor is revoked.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminSession'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /auth/logout:
+    post:
+      tags: [Admin authentication]
+      operationId: logoutAdministrator
+      summary: Revoke the current administrator session
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '204': {description: Session revoked.}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /me:
+    get:
+      tags: [Admin authentication]
+      operationId: getCurrentAdministrator
+      summary: Get the authenticated administrator
+      responses:
+        '200':
+          description: Current administrator.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Administrator'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /administrators:
+    get:
+      tags: [Administrators]
+      operationId: listAdministrators
+      summary: List administrator accounts
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [active, suspended, closed]}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Administrator page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdministratorPage'}
+        '403': {$ref: './common.yaml#/components/responses/Forbidden'}
+    post:
+      tags: [Administrators]
+      operationId: createAdministrator
+      summary: Create an administrator account
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateAdministratorRequest'}
+      responses:
+        '201':
+          description: Administrator created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Administrator'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /administrators/{administrator_id}:
+    get:
+      tags: [Administrators]
+      operationId: getAdministrator
+      summary: Get an administrator account
+      parameters:
+        - $ref: '#/components/parameters/AdministratorId'
+      responses:
+        '200':
+          description: Administrator.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Administrator'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+    patch:
+      tags: [Administrators]
+      operationId: updateAdministrator
+      summary: Update profile or administrator status
+      parameters:
+        - $ref: '#/components/parameters/AdministratorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateAdministratorRequest'}
+      responses:
+        '200':
+          description: Administrator updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Administrator'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /administrators/{administrator_id}/api_keys:
+    get:
+      tags: [Administrators]
+      operationId: listAdministratorApiKeys
+      summary: List Admin API Key metadata
+      parameters:
+        - $ref: '#/components/parameters/AdministratorId'
+      responses:
+        '200':
+          description: Admin API Keys without secrets or hashes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/AdminApiKey'}}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+    post:
+      tags: [Administrators]
+      operationId: createAdministratorApiKey
+      summary: Create an Admin API Key
+      parameters:
+        - $ref: '#/components/parameters/AdministratorId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateAdminApiKeyRequest'}
+      responses:
+        '201':
+          description: Key created. The secret is returned exactly once.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreatedAdminApiKey'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /administrators/{administrator_id}/api_keys/{admin_api_key_id}/revoke:
+    post:
+      tags: [Administrators]
+      operationId: revokeAdministratorApiKey
+      summary: Revoke an Admin API Key
+      parameters:
+        - $ref: '#/components/parameters/AdministratorId'
+        - name: admin_api_key_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReasonRequest'}
+      responses:
+        '204': {description: Admin API Key revoked.}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+
+  /overview:
+    get:
+      tags: [Overview]
+      operationId: getAdminOverview
+      summary: Get dashboard metrics
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Operational overview.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminOverview'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '403': {$ref: './common.yaml#/components/responses/Forbidden'}
+
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: Search users
+      parameters:
+        - name: query
+          in: query
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {type: string, enum: [active, suspended, closed]}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: User page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserPage'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '403': {$ref: './common.yaml#/components/responses/Forbidden'}
+  /users/{user_id}:
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Get a user and owned accounts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserDetail'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /users/{user_id}/status:
+    post:
+      tags: [Users]
+      operationId: changeUserStatus
+      summary: Suspend, reactivate, or close a user
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChangeStatusRequest'}
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+
+  /merchants:
+    get:
+      tags: [Merchants]
+      operationId: listMerchants
+      summary: List merchant reviews
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [pending, approved, rejected, suspended, closed]}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Merchant page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MerchantPage'}
+  /merchants/{account_id}:
+    get:
+      tags: [Merchants]
+      operationId: getMerchant
+      summary: Get merchant review detail
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Merchant detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Merchant'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /merchants/{account_id}/decision:
+    post:
+      tags: [Merchants]
+      operationId: decideMerchantReview
+      summary: Approve, reject, suspend, or reactivate a merchant
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MerchantDecisionRequest'}
+      responses:
+        '200':
+          description: Updated merchant.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Merchant'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+
+  /merchant_services/{service_id}/decision:
+    post:
+      tags: [Merchants]
+      operationId: decideMerchantService
+      summary: Approve, reject, suspend, or reactivate a screened merchant service
+      description: Approval and reactivation fail closed unless the latest risk decision allows the service and sanctions screening is clear.
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MerchantServiceDecisionRequest'}
+      responses:
+        '200':
+          description: Updated merchant service.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MerchantService'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+
+  /providers:
+    get:
+      tags: [Providers]
+      operationId: listProviders
+      summary: List upstream providers
+      responses:
+        '200':
+          description: Providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/Provider'}}
+    post:
+      tags: [Providers]
+      operationId: createProvider
+      summary: Create an upstream provider
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderWrite'}
+      responses:
+        '201':
+          description: Provider created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Provider'}
+  /providers/{provider_id}:
+    patch:
+      tags: [Providers]
+      operationId: updateProvider
+      summary: Update provider display data or status
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderPatch'}
+      responses:
+        '200':
+          description: Provider updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Provider'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /providers/{provider_id}/endpoints:
+    get:
+      tags: [Providers]
+      operationId: listProviderEndpoints
+      summary: List endpoints for a provider
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+      responses:
+        '200':
+          description: Provider endpoints.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/ProviderEndpoint'}}
+    post:
+      tags: [Providers]
+      operationId: createProviderEndpoint
+      summary: Create an endpoint and write its credential to the secret store
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderEndpointWrite'}
+      responses:
+        '201':
+          description: Endpoint created. Credentials are never returned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderEndpoint'}
+  /provider_endpoints/{endpoint_id}:
+    patch:
+      tags: [Providers]
+      operationId: updateProviderEndpoint
+      summary: Update routing fields or endpoint status
+      parameters:
+        - $ref: '#/components/parameters/EndpointId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderEndpointPatch'}
+      responses:
+        '200':
+          description: Endpoint updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderEndpoint'}
+  /provider_endpoints/{endpoint_id}/rotate_credential:
+    post:
+      tags: [Providers]
+      operationId: rotateProviderCredential
+      summary: Replace an upstream credential without returning it
+      parameters:
+        - $ref: '#/components/parameters/EndpointId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [credential]
+              properties:
+                credential: {type: string, writeOnly: true, minLength: 1}
+      responses:
+        '204': {description: Credential replaced.}
+
+  /models:
+    get:
+      tags: [Models]
+      operationId: listAdminModels
+      summary: List canonical models
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [active, deprecated, disabled]}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Model page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelPage'}
+    post:
+      tags: [Models]
+      operationId: createModel
+      summary: Create a canonical model
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelWrite'}
+      responses:
+        '201':
+          description: Model created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Model'}
+  /models/{model_id}:
+    patch:
+      tags: [Models]
+      operationId: updateModel
+      summary: Update a canonical model
+      parameters:
+        - $ref: '#/components/parameters/ModelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelPatch'}
+      responses:
+        '200':
+          description: Model updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Model'}
+  /models/{model_id}/variants:
+    get:
+      tags: [Models]
+      operationId: listModelVariants
+      summary: List provider variants of a canonical model
+      parameters:
+        - $ref: '#/components/parameters/ModelId'
+      responses:
+        '200':
+          description: Model variants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/ModelVariant'}}
+    post:
+      tags: [Models]
+      operationId: createModelVariant
+      summary: Attach a provider variant to a canonical model
+      parameters:
+        - $ref: '#/components/parameters/ModelId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelVariantWrite'}
+      responses:
+        '201':
+          description: Variant created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelVariant'}
+  /model_variants/{variant_id}:
+    patch:
+      tags: [Models]
+      operationId: updateModelVariant
+      summary: Update capabilities or serving status of a model variant
+      parameters:
+        - $ref: '#/components/parameters/VariantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelVariantPatch'}
+      responses:
+        '200':
+          description: Variant updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelVariant'}
+  /model_variants/{variant_id}/prices:
+    get:
+      tags: [Pricing]
+      operationId: listModelVariantPrices
+      summary: List current and historical prices
+      parameters:
+        - $ref: '#/components/parameters/VariantId'
+      responses:
+        '200':
+          description: Effective prices.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/ModelPrice'}}
+    post:
+      tags: [Pricing]
+      operationId: publishModelVariantPrice
+      summary: Publish a new baseline and discounted effective price
+      description: Existing and historical price rows cannot be edited or deleted.
+      parameters:
+        - $ref: '#/components/parameters/VariantId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelPriceWrite'}
+      responses:
+        '201':
+          description: Price version published.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelPrice'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+
+  /api_keys:
+    get:
+      tags: [API keys]
+      operationId: listAdminApiKeys
+      summary: Search API key metadata
+      parameters:
+        - name: account_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: key_prefix
+          in: query
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {type: string, enum: [active, revoked, expired]}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: API key metadata page. Secrets and hashes are excluded.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiKeyPage'}
+  /api_keys/{api_key_id}/revoke:
+    post:
+      tags: [API keys]
+      operationId: adminRevokeApiKey
+      summary: Revoke an API key
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReasonRequest'}
+      responses:
+        '204': {description: API key revoked.}
+
+  /gateway_requests:
+    get:
+      tags: [Gateway requests]
+      operationId: listGatewayRequests
+      summary: Search normalized AI requests
+      parameters:
+        - name: account_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: api_key_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: model_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {type: string, enum: [started, succeeded, failed, cancelled]}
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Gateway request page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayRequestPage'}
+  /gateway_requests/{request_id}:
+    get:
+      tags: [Gateway requests]
+      operationId: getGatewayRequest
+      summary: Get normalized usage, routing, latency, and charge detail
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Gateway request detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayRequest'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+
+  /payments:
+    get:
+      tags: [Payments]
+      operationId: listAdminPayments
+      summary: Search financial workflows
+      parameters:
+        - name: type
+          in: query
+          schema: {type: string, enum: [topup, refund, transfer, merchant_payment]}
+        - name: account_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Financial workflow page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentWorkflowPage'}
+
+  /ledger/accounts:
+    get:
+      tags: [Ledger]
+      operationId: listLedgerAccounts
+      summary: List ledger accounts and posted balances
+      parameters:
+        - name: owner_account_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: kind
+          in: query
+          schema: {type: string}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ledger account page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LedgerAccountPage'}
+  /accounts/{account_id}/balance_status:
+    post:
+      tags: [Ledger]
+      operationId: changeAccountBalanceStatus
+      summary: Freeze or unfreeze one account Credit balance
+      description: Posted ledger entries remain immutable and readable.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, reason]
+              properties:
+                status: {type: string, enum: [active, frozen]}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200':
+          description: Current spendability state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account_id, asset_code, status, updated_at]
+                properties:
+                  account_id: {type: string, format: uuid}
+                  asset_code: {type: string, const: GIZ_CREDIT}
+                  status: {type: string, enum: [active, frozen]}
+                  updated_at: {type: string, format: date-time}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /accounts/{account_id}/model_entitlements/{model_id}:
+    put:
+      tags: [Models]
+      operationId: setAccountModelEntitlement
+      summary: Allow or deny one canonical model for an account
+      description: |
+        A deny always wins. Once any allow rule exists for an account, that
+        account enters allow-list mode. Compatible discovery, Account catalog,
+        and provider execution apply this exact policy.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/ModelId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [effect, reason]
+              properties:
+                effect: {type: string, enum: [allow, deny]}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200':
+          description: Current account model policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account_id, model_id, effect, reason, updated_at]
+                properties:
+                  account_id: {type: string, format: uuid}
+                  model_id: {type: string, format: uuid}
+                  effect: {type: string, enum: [allow, deny]}
+                  reason: {type: string}
+                  updated_at: {type: string, format: date-time}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /ledger/transactions:
+    get:
+      tags: [Ledger]
+      operationId: listLedgerTransactions
+      summary: Search immutable ledger transactions and entries
+      parameters:
+        - name: transaction_type
+          in: query
+          schema: {type: string}
+        - name: reference_id
+          in: query
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ledger transaction page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LedgerTransactionPage'}
+  /ledger/adjustments:
+    post:
+      tags: [Ledger]
+      operationId: createLedgerAdjustment
+      summary: Post an explicitly balanced administrative adjustment
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LedgerAdjustmentRequest'}
+      responses:
+        '201':
+          description: Balanced adjustment posted and audited.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LedgerTransaction'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /ledger/transactions/{transaction_id}/reverse:
+    post:
+      tags: [Ledger]
+      operationId: reverseLedgerTransaction
+      summary: Post a compensating reversal transaction
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReasonRequest'}
+      responses:
+        '201':
+          description: Reversal posted. The original transaction remains immutable.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LedgerTransaction'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+
+  /webhook_deliveries:
+    get:
+      tags: [Webhooks]
+      operationId: listWebhookDeliveries
+      summary: Search webhook delivery attempts
+      parameters:
+        - name: merchant_account_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {type: string, enum: [pending, succeeded, failed]}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Delivery page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookDeliveryPage'}
+  /webhook_deliveries/{delivery_id}/retry:
+    post:
+      tags: [Webhooks]
+      operationId: retryWebhookDelivery
+      summary: Queue another signed delivery attempt
+      parameters:
+        - name: delivery_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '202': {description: Retry queued.}
+
+  /audit_events:
+    get:
+      tags: [Audit]
+      operationId: listAuditEvents
+      summary: Search immutable audit events
+      parameters:
+        - name: actor_user_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: action
+          in: query
+          schema: {type: string}
+        - name: resource_type
+          in: query
+          schema: {type: string}
+        - name: resource_id
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Audit event page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditEventPage'}
+
+components:
+  securitySchemes:
+    adminSessionAuth:
+      $ref: './common.yaml#/components/securitySchemes/adminSessionAuth'
+    adminApiKeyAuth:
+      $ref: './common.yaml#/components/securitySchemes/adminApiKeyAuth'
+  parameters:
+    AdministratorId:
+      name: administrator_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    AccountId:
+      name: account_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ProviderId:
+      name: provider_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    EndpointId:
+      name: endpoint_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ModelId:
+      name: model_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    VariantId:
+      name: variant_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ApiKeyId:
+      name: api_key_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    From:
+      name: from
+      in: query
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      schema: {type: string, format: date-time}
+  schemas:
+    Administrator:
+      type: object
+      additionalProperties: false
+      required: [id, email, display_name, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        status: {type: string, enum: [active, suspended, closed]}
+        last_login_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AdministratorPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Administrator'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    CreateAdministratorRequest:
+      type: object
+      additionalProperties: false
+      required: [email, display_name, password]
+      properties:
+        email: {type: string, format: email}
+        display_name: {type: string, maxLength: 120}
+        password: {type: string, format: password, minLength: 12, writeOnly: true}
+    UpdateAdministratorRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        display_name: {type: string, maxLength: 120}
+        status: {type: string, enum: [active, suspended, closed]}
+        password: {type: string, format: password, minLength: 12, writeOnly: true}
+        reason: {type: string, maxLength: 1000}
+    AdminSession:
+      type: object
+      additionalProperties: false
+      required: [administrator, access_token, token_type, expires_at, csrf_protection]
+      properties:
+        administrator: {$ref: '#/components/schemas/Administrator'}
+        access_token: {type: string, writeOnly: true}
+        token_type: {type: string, const: Bearer}
+        expires_at: {type: string, format: date-time}
+        csrf_protection: {type: string, const: not_required_bearer_header}
+    CreateAdminApiKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        expires_at: {type: [string, "null"], format: date-time}
+    AdminApiKey:
+      type: object
+      additionalProperties: false
+      required: [id, administrator_id, name, key_prefix, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        administrator_id: {type: string, format: uuid}
+        name: {type: string}
+        key_prefix: {type: string}
+        status: {type: string, enum: [active, revoked, expired]}
+        expires_at: {type: [string, "null"], format: date-time}
+        last_used_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+    CreatedAdminApiKey:
+      allOf:
+        - $ref: '#/components/schemas/AdminApiKey'
+        - type: object
+          required: [secret]
+          properties:
+            secret: {type: string, writeOnly: true}
+    AdminOverview:
+      type: object
+      required: [users, active_api_keys, gateway_requests, charged, payments, generated_at]
+      properties:
+        users: {type: integer, format: int64, minimum: 0}
+        active_api_keys: {type: integer, format: int64, minimum: 0}
+        gateway_requests: {type: integer, format: int64, minimum: 0}
+        charged: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        payments: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        generated_at: {type: string, format: date-time}
+    User:
+      type: object
+      required: [id, email, display_name, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        status: {type: string, enum: [active, suspended, closed]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    UserDetail:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          required: [accounts]
+          properties:
+            accounts:
+              type: array
+              items: {$ref: '#/components/schemas/OwnedAccount'}
+    OwnedAccount:
+      type: object
+      required: [id, kind, name, status, balance]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [personal, merchant]}
+        name: {type: string}
+        status: {type: string, enum: [active, suspended, closed]}
+        balance: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+    UserPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/User'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    ChangeStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status: {type: string, enum: [active, suspended, closed]}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    Merchant:
+      type: object
+      required: [account_id, legal_name, public_name, status, review_level, created_at]
+      properties:
+        account_id: {type: string, format: uuid}
+        legal_name: {type: string}
+        public_name: {type: string}
+        status: {type: string, enum: [pending, approved, rejected, suspended, closed]}
+        review_level: {type: string, enum: [basic, enhanced]}
+        country_code: {type: [string, "null"]}
+        website_url: {type: [string, "null"], format: uri}
+        created_at: {type: string, format: date-time}
+    MerchantPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Merchant'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    MerchantDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, review_level, reason]
+      properties:
+        decision: {type: string, enum: [approve, reject, suspend, reactivate]}
+        review_level: {type: string, enum: [basic, enhanced]}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    MerchantServiceDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, reason]
+      properties:
+        decision: {type: string, enum: [approve, reject, suspend, reactivate]}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    MerchantService:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_account_id, service_code, name, interface_set, status, max_transaction_microcredits, daily_limit_microcredits, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        merchant_account_id: {type: string, format: uuid}
+        service_code: {type: string}
+        name: {type: string}
+        description: {type: string}
+        interface_set: {type: array, items: {type: string, enum: [checkout, webhook]}}
+        status: {type: string, enum: [pending, approved, rejected, suspended]}
+        max_transaction_microcredits: {type: integer, format: int64, minimum: 1}
+        daily_limit_microcredits: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProviderWrite:
+      type: object
+      additionalProperties: false
+      required: [slug, name]
+      properties:
+        slug: {type: string, pattern: '^[a-z0-9][a-z0-9_-]*$'}
+        name: {type: string, minLength: 1}
+    ProviderPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1}
+        status: {type: string, enum: [active, disabled]}
+    Provider:
+      allOf:
+        - $ref: '#/components/schemas/ProviderWrite'
+        - type: object
+          required: [id, status, created_at, updated_at]
+          properties:
+            id: {type: string, format: uuid}
+            status: {type: string, enum: [active, disabled]}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    ProviderEndpointWrite:
+      type: object
+      additionalProperties: false
+      required: [name, base_url, credential]
+      properties:
+        name: {type: string}
+        base_url: {type: string, format: uri}
+        credential: {type: string, writeOnly: true, minLength: 1}
+        region: {type: [string, "null"]}
+        priority: {type: integer, default: 100}
+        weight: {type: integer, minimum: 1, default: 100}
+    ProviderEndpointPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string}
+        base_url: {type: string, format: uri}
+        region: {type: [string, "null"]}
+        priority: {type: integer}
+        weight: {type: integer, minimum: 1}
+        status: {type: string, enum: [active, draining, disabled]}
+    ProviderEndpoint:
+      type: object
+      required: [id, provider_id, name, base_url, priority, weight, status, credential_configured]
+      properties:
+        id: {type: string, format: uuid}
+        provider_id: {type: string, format: uuid}
+        name: {type: string}
+        base_url: {type: string, format: uri}
+        region: {type: [string, "null"]}
+        priority: {type: integer}
+        weight: {type: integer, minimum: 1}
+        status: {type: string, enum: [active, draining, disabled]}
+        credential_configured: {type: boolean}
+    ModelWrite:
+      type: object
+      additionalProperties: false
+      required: [slug, name, modality]
+      properties:
+        slug: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        name: {type: string}
+        modality: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
+        metadata: {type: object, additionalProperties: true}
+    ModelPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string}
+        modality: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
+        status: {type: string, enum: [active, deprecated, disabled]}
+        metadata: {type: object, additionalProperties: true}
+    Model:
+      allOf:
+        - $ref: '#/components/schemas/ModelWrite'
+        - type: object
+          required: [id, status, created_at, updated_at]
+          properties:
+            id: {type: string, format: uuid}
+            status: {type: string, enum: [active, deprecated, disabled]}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    ModelPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Model'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    ModelVariantWrite:
+      type: object
+      additionalProperties: false
+      required: [provider_endpoint_id, provider_model_name, variant_slug, capabilities]
+      properties:
+        provider_endpoint_id: {type: string, format: uuid}
+        provider_model_name: {type: string}
+        variant_slug: {type: string}
+        capabilities: {type: object, additionalProperties: true}
+        context_window: {type: [integer, "null"], format: int64, minimum: 1}
+        max_output_tokens: {type: [integer, "null"], format: int64, minimum: 1}
+    ModelVariantPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        provider_model_name: {type: string}
+        capabilities: {type: object, additionalProperties: true}
+        context_window: {type: [integer, "null"], format: int64, minimum: 1}
+        max_output_tokens: {type: [integer, "null"], format: int64, minimum: 1}
+        status: {type: string, enum: [active, degraded, disabled]}
+    ModelVariant:
+      allOf:
+        - $ref: '#/components/schemas/ModelVariantWrite'
+        - type: object
+          required: [id, model_id, status, created_at, updated_at]
+          properties:
+            id: {type: string, format: uuid}
+            model_id: {type: string, format: uuid}
+            status: {type: string, enum: [active, degraded, disabled]}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    ModelPriceWrite:
+      type: object
+      additionalProperties: false
+      required: [metric, unit_size, upstream_cost_microcredits, base_customer_price_microcredits, customer_price_microcredits, discount_bps, valid_from]
+      properties:
+        metric:
+          type: string
+          enum: [input_token, output_token, cached_input_token, input_audio_token, output_audio_token, audio_second, image, video_second, request]
+        unit_size: {type: integer, format: int64, minimum: 1}
+        upstream_cost_microcredits: {type: integer, format: int64, minimum: 0}
+        base_customer_price_microcredits:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Comparison price before the configured discount.
+        customer_price_microcredits: {type: integer, format: int64, minimum: 0}
+        discount_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Discount from the baseline in basis points; 1000 means 10%.
+        valid_from: {type: string, format: date-time}
+        valid_until: {type: [string, "null"], format: date-time}
+    ModelPrice:
+      allOf:
+        - $ref: '#/components/schemas/ModelPriceWrite'
+        - type: object
+          required: [id, model_variant_id, created_at]
+          properties:
+            id: {type: string, format: uuid}
+            model_variant_id: {type: string, format: uuid}
+            created_at: {type: string, format: date-time}
+    ApiKeyMetadata:
+      type: object
+      required: [id, account_id, kind, name, key_prefix, scopes, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+        kind: {type: string, enum: [gateway, payment]}
+        name: {type: string}
+        key_prefix: {type: string}
+        scopes: {type: array, items: {type: string}}
+        status: {type: string, enum: [active, revoked, expired]}
+        last_used_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+    ApiKeyPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/ApiKeyMetadata'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    GatewayRequest:
+      type: object
+      required: [id, account_id, api_key_id, protocol, status, usage, charge_breakdown, charged, started_at]
+      properties:
+        id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+        api_key_id: {type: string, format: uuid}
+        requested_model_id: {type: [string, "null"], format: uuid}
+        model_variant_id: {type: [string, "null"], format: uuid}
+        provider_request_id: {type: [string, "null"]}
+        protocol: {type: string, enum: [https, websocket, webrtc]}
+        status: {type: string, enum: [started, succeeded, failed, cancelled]}
+        usage:
+          type: object
+          required: [input_tokens, output_tokens, cached_input_tokens, input_audio_tokens, output_audio_tokens]
+          properties:
+            input_tokens: {type: integer, format: int64, minimum: 0}
+            output_tokens: {type: integer, format: int64, minimum: 0}
+            cached_input_tokens: {type: integer, format: int64, minimum: 0}
+            input_audio_tokens: {type: integer, format: int64, minimum: 0}
+            output_audio_tokens: {type: integer, format: int64, minimum: 0}
+            audio_milliseconds: {type: integer, format: int64, minimum: 0}
+            video_milliseconds: {type: integer, format: int64, minimum: 0}
+            image_count: {type: integer, minimum: 0}
+        upstream_cost: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        charge_breakdown:
+          type: array
+          items: {$ref: '#/components/schemas/GatewayRequestCharge'}
+        charged: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        latency_ms: {type: [integer, "null"], minimum: 0}
+        error_code: {type: [string, "null"]}
+        recovery_status:
+          type: [string, "null"]
+          enum: [pending, completed, reconciliation_required, null]
+          description: Durable automatic-replay state; reconciliation_required retains the reservation for operator investigation.
+        recovery_attempts: {type: integer, format: int64, minimum: 0}
+        recovery_next_attempt_at: {type: [string, "null"], format: date-time}
+        recovery_last_error: {type: [string, "null"]}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+    GatewayRequestCharge:
+      type: object
+      required: [metric, quantity, unit_size, base_price_microcredits, effective_price_microcredits, discount_bps, charged_microcredits]
+      properties:
+        metric:
+          type: string
+          enum: [input_token, output_token, cached_input_token, input_audio_token, output_audio_token, audio_second, image, video_second, request]
+        quantity: {type: integer, format: int64, minimum: 0}
+        unit_size: {type: integer, format: int64, minimum: 1}
+        base_price_microcredits: {type: integer, format: int64, minimum: 0}
+        effective_price_microcredits: {type: integer, format: int64, minimum: 0}
+        discount_bps: {type: integer, minimum: 0, maximum: 10000}
+        charged_microcredits: {type: integer, format: int64, minimum: 0}
+    GatewayRequestPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/GatewayRequest'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    PaymentWorkflow:
+      type: object
+      required: [id, type, account_id, amount, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string, enum: [topup, refund, transfer, merchant_payment]}
+        account_id: {type: string, format: uuid}
+        counterparty_account_id: {type: [string, "null"], format: uuid}
+        amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        topup_rate:
+          oneOf:
+            - $ref: '#/components/schemas/TopupRateSnapshot'
+            - type: 'null'
+        status: {type: string}
+        created_at: {type: string, format: date-time}
+    TopupRate:
+      type: object
+      required: [fiat_minor, credit_microcredits]
+      properties:
+        fiat_minor: {type: integer, format: int64, minimum: 1}
+        credit_microcredits: {type: integer, format: int64, minimum: 1}
+    TopupRateSnapshot:
+      type: object
+      required: [base, effective, discount_bps]
+      properties:
+        base: {$ref: '#/components/schemas/TopupRate'}
+        effective: {$ref: '#/components/schemas/TopupRate'}
+        discount_bps: {type: integer, minimum: 0, maximum: 10000}
+    PaymentWorkflowPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/PaymentWorkflow'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    LedgerAccount:
+      type: object
+      required: [id, code, kind, asset_code, normal_balance, status, posted_balance_microcredits]
+      properties:
+        id: {type: string, format: uuid}
+        owner_account_id: {type: [string, "null"], format: uuid}
+        code: {type: string}
+        kind: {type: string}
+        asset_code: {type: string}
+        normal_balance: {type: string, enum: [debit, credit]}
+        status: {type: string, enum: [active, frozen, closed]}
+        posted_balance_microcredits: {type: integer, format: int64}
+    LedgerAccountPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/LedgerAccount'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    LedgerEntry:
+      type: object
+      required: [ledger_account_id, direction, amount_microcredits]
+      properties:
+        ledger_account_id: {type: string, format: uuid}
+        direction: {type: string, enum: [debit, credit]}
+        amount_microcredits: {type: integer, format: int64, minimum: 1}
+    LedgerTransaction:
+      type: object
+      required: [id, transaction_type, status, description, entries, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        transaction_type: {type: string}
+        status: {type: string, enum: [pending, posted, reversed, failed]}
+        description: {type: string}
+        entries: {type: array, minItems: 2, items: {$ref: '#/components/schemas/LedgerEntry'}}
+        created_at: {type: string, format: date-time}
+        posted_at: {type: [string, "null"], format: date-time}
+    LedgerTransactionPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/LedgerTransaction'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    LedgerAdjustmentRequest:
+      type: object
+      additionalProperties: false
+      required: [description, reason, entries]
+      properties:
+        description: {type: string, minLength: 1, maxLength: 1000}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+        entries:
+          type: array
+          minItems: 2
+          items: {$ref: '#/components/schemas/LedgerEntry'}
+    WebhookDelivery:
+      type: object
+      required: [id, endpoint_id, event_type, attempt, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        endpoint_id: {type: string, format: uuid}
+        event_type: {type: string}
+        attempt: {type: integer, minimum: 1}
+        status: {type: string, enum: [pending, succeeded, failed]}
+        response_status: {type: [integer, "null"]}
+        error: {type: [string, "null"]}
+        created_at: {type: string, format: date-time}
+    WebhookDeliveryPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/WebhookDelivery'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    AuditEvent:
+      type: object
+      required: [id, action, resource_type, resource_id, created_at]
+      properties:
+        id: {type: integer, format: int64}
+        actor_administrator_id: {type: [string, "null"], format: uuid}
+        actor_user_id: {type: [string, "null"], format: uuid}
+        actor_account_id: {type: [string, "null"], format: uuid}
+        action: {type: string}
+        resource_type: {type: string}
+        resource_id: {type: string}
+        metadata: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    AuditEventPage:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/AuditEvent'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 1000}

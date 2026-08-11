@@ -1,0 +1,627 @@
+// Package bifrost owns the lifecycle and protocol boundary to the pinned
+// Bifrost execution engine. It has no access to Gizway identity or ledger data.
+package bifrost
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
+	bf "github.com/maximhq/bifrost/core"
+	"github.com/maximhq/bifrost/core/schemas"
+
+	"github.com/idy/gizway/internal/providerctx"
+	"github.com/idy/gizway/internal/store"
+)
+
+func bifrostContext(ctx context.Context, deadline time.Time) *schemas.BifrostContext {
+	bfctx := schemas.NewBifrostContext(ctx, deadline)
+	if key := providerctx.IdempotencyKey(ctx); key != "" {
+		bfctx.SetValue(schemas.BifrostContextKeyExtraHeaders, map[string][]string{"Idempotency-Key": {key}})
+	}
+	return bfctx
+}
+
+type account struct {
+	providers []schemas.ModelProvider
+	keys      map[schemas.ModelProvider][]schemas.Key
+	configs   map[schemas.ModelProvider]*schemas.ProviderConfig
+}
+
+func (a *Adapter) realtimeProvider(ctx context.Context, target store.ProviderExecutionTarget) (schemas.RealtimeProvider, schemas.Key, *schemas.BifrostContext, func(), error) {
+	client, target, release, err := a.clientFor(ctx, target)
+	if err != nil {
+		return nil, schemas.Key{}, nil, nil, err
+	}
+	bfctx := bifrostContext(ctx, time.Now().Add(2*time.Minute))
+	key, err := client.SelectKeyForProviderRequestType(bfctx, schemas.RealtimeRequest, schemas.OpenAI, target.Model)
+	if err != nil {
+		bfctx.Cancel()
+		release()
+		return nil, schemas.Key{}, nil, nil, fmt.Errorf("select Bifrost Realtime key: %w", err)
+	}
+	provider, ok := client.GetProviderByKey(schemas.OpenAI).(schemas.RealtimeProvider)
+	if !ok || !provider.SupportsRealtimeAPI() {
+		bfctx.Cancel()
+		release()
+		return nil, schemas.Key{}, nil, nil, fmt.Errorf("bifrost OpenAI provider does not support realtime")
+	}
+	return provider, key, bfctx, release, nil
+}
+
+// RealtimeWebSocketRoute resolves the provider-owned WebSocket URL and
+// authorization headers through the pinned Bifrost provider implementation.
+func (a *Adapter) RealtimeWebSocketRoute(ctx context.Context, target store.ProviderExecutionTarget) (string, http.Header, error) {
+	provider, key, bfctx, release, err := a.realtimeProvider(ctx, target)
+	if err != nil {
+		return "", nil, err
+	}
+	defer release()
+	defer bfctx.Cancel()
+	headers, bfErr := provider.RealtimeHeaders(bfctx, key)
+	if bfErr != nil {
+		return "", nil, fmt.Errorf("bifrost realtime headers: %s", bfErr.Error.Message)
+	}
+	httpHeaders := make(http.Header, len(headers))
+	for name, value := range headers {
+		httpHeaders.Set(name, value)
+	}
+	return provider.RealtimeWebSocketURL(key, target.Model), httpHeaders, nil
+}
+
+// RealtimeClientEvent validates and translates one client event with the
+// Bifrost canonical Realtime codec before it reaches the provider.
+func (a *Adapter) RealtimeClientEvent(ctx context.Context, target store.ProviderExecutionTarget, raw []byte) ([]byte, error) {
+	provider, _, bfctx, release, err := a.realtimeProvider(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	defer bfctx.Cancel()
+	event, err := schemas.ParseRealtimeEvent(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse Realtime client event: %w", err)
+	}
+	translated, err := provider.ToProviderRealtimeEvent(event)
+	if err != nil {
+		return nil, fmt.Errorf("translate Realtime client event: %w", err)
+	}
+	return translated, nil
+}
+
+// RealtimeProviderEvent validates a provider event and extracts terminal usage
+// through Bifrost. The original provider-compatible bytes remain public.
+func (a *Adapter) RealtimeProviderEvent(ctx context.Context, target store.ProviderExecutionTarget, raw []byte) ([]byte, *schemas.BifrostLLMUsage, bool, error) {
+	provider, _, bfctx, release, err := a.realtimeProvider(ctx, target)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	defer release()
+	defer bfctx.Cancel()
+	event, err := provider.ToBifrostRealtimeEvent(json.RawMessage(raw))
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("parse Realtime provider event: %w", err)
+	}
+	terminal := event.Type == provider.RealtimeTurnFinalEvent()
+	var usage *schemas.BifrostLLMUsage
+	if terminal {
+		if extractor, ok := provider.(schemas.RealtimeUsageExtractor); ok {
+			usage = extractor.ExtractRealtimeTurnUsage(raw)
+		}
+	}
+	return append([]byte(nil), raw...), usage, terminal, nil
+}
+
+// ExchangeRealtimeWebRTCSDP delegates provider-specific multipart signaling to
+// Bifrost, keeping credentials and upstream wire details out of the API layer.
+func (a *Adapter) ExchangeRealtimeWebRTCSDP(ctx context.Context, target store.ProviderExecutionTarget, sdp string, session json.RawMessage) (string, error) {
+	provider, key, bfctx, release, err := a.realtimeProvider(ctx, target)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	defer bfctx.Cancel()
+	if !provider.SupportsRealtimeWebRTC() {
+		return "", errors.New("provider does not support WebRTC")
+	}
+	answer, bfErr := provider.ExchangeRealtimeWebRTCSDP(bfctx, key, target.Model, sdp, session)
+	if bfErr != nil {
+		return "", fmt.Errorf("bifrost WebRTC SDP exchange: %s", bfErr.Error.Message)
+	}
+	return answer, nil
+}
+
+func (a *account) GetConfiguredProviders() ([]schemas.ModelProvider, error) {
+	return append([]schemas.ModelProvider(nil), a.providers...), nil
+}
+
+func (a *account) GetKeysForProvider(_ context.Context, provider schemas.ModelProvider) ([]schemas.Key, error) {
+	keys, ok := a.keys[provider]
+	if !ok {
+		return nil, fmt.Errorf("unsupported provider %q", provider)
+	}
+	return append([]schemas.Key(nil), keys...), nil
+}
+
+func (a *account) GetConfigForProvider(provider schemas.ModelProvider) (*schemas.ProviderConfig, error) {
+	config, ok := a.configs[provider]
+	if !ok {
+		return nil, fmt.Errorf("unsupported provider %q", provider)
+	}
+	copy := *config
+	return &copy, nil
+}
+
+// Adapter executes already-authorized requests through Bifrost. Clients are
+// cached per endpoint+credential pair so database catalog changes drive real
+// routing without rebuilding Bifrost on every request.
+type Adapter struct {
+	mu            sync.Mutex
+	defaultTarget store.ProviderExecutionTarget
+	clients       map[string]cachedClient
+	clientClock   uint64
+}
+
+type cachedClient struct {
+	client   *bf.Bifrost
+	lastUsed uint64
+	pinned   bool
+	active   int
+}
+
+const maxCachedBifrostClients = 32
+
+// NewOpenAI constructs the pinned OpenAI execution slice.
+func NewOpenAI(ctx context.Context, baseURL, credential string) (*Adapter, error) {
+	target := store.ProviderExecutionTarget{Endpoint: baseURL, Credential: credential}
+	client, err := newOpenAIClient(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	return &Adapter{defaultTarget: target, clientClock: 1, clients: map[string]cachedClient{targetKey(target): {client: client, lastUsed: 1, pinned: true}}}, nil
+}
+
+// NewLazy creates an execution engine with no process-global provider. The
+// first authorized database candidate initializes its own cached Bifrost
+// client, making provider_endpoints and encrypted credentials the production
+// source of truth.
+func NewLazy() *Adapter {
+	return &Adapter{clients: make(map[string]cachedClient)}
+}
+
+func newOpenAIClient(ctx context.Context, target store.ProviderExecutionTarget) (*bf.Bifrost, error) {
+	enabled := true
+	config := &schemas.ProviderConfig{NetworkConfig: schemas.NetworkConfig{
+		BaseURL: target.Endpoint, DefaultRequestTimeoutInSeconds: 10,
+		MaxRetries: 1, AllowPrivateNetwork: true,
+	}}
+	client, err := bf.Init(ctx, schemas.BifrostConfig{
+		Account: &account{providers: []schemas.ModelProvider{schemas.OpenAI}, keys: map[schemas.ModelProvider][]schemas.Key{schemas.OpenAI: {{
+			ID: "gizway-openai", Name: "Gizway OpenAI endpoint",
+			Value: *schemas.NewSecretVar(target.Credential), Models: schemas.WhiteList{"*"},
+			Weight: 1, Enabled: &enabled,
+		}}}, configs: map[schemas.ModelProvider]*schemas.ProviderConfig{schemas.OpenAI: config}},
+		Logger: bf.NewNoOpLogger(), InitialPoolSize: 8,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize Bifrost: %w", err)
+	}
+	return client, nil
+}
+
+func normalizeTarget(target, fallback store.ProviderExecutionTarget) store.ProviderExecutionTarget {
+	if target.Credential == "" {
+		target.Endpoint, target.Credential = fallback.Endpoint, fallback.Credential
+	} else if target.Endpoint == "" {
+		target.Endpoint = fallback.Endpoint
+	}
+	return target
+}
+
+func providerKey(target store.ProviderExecutionTarget, index int) schemas.ModelProvider {
+	if target.RouteKey != "" {
+		return schemas.ModelProvider("gizway-" + target.RouteKey)
+	}
+	return schemas.ModelProvider(fmt.Sprintf("gizway-candidate-%d", index))
+}
+
+// newCandidateClient represents every database-authorized candidate as a
+// separate Bifrost custom OpenAI provider. This is what permits native Bifrost
+// fallback across distinct base URLs and credentials without flattening or
+// leaking provider configuration into the API layer.
+func newCandidateClient(ctx context.Context, targets []store.ProviderExecutionTarget) (*bf.Bifrost, []store.ProviderExecutionTarget, error) {
+	providers := make([]schemas.ModelProvider, 0, len(targets))
+	keys := make(map[schemas.ModelProvider][]schemas.Key, len(targets))
+	configs := make(map[schemas.ModelProvider]*schemas.ProviderConfig, len(targets))
+	enabled := true
+	for index, target := range targets {
+		provider := providerKey(target, index)
+		providers = append(providers, provider)
+		keys[provider] = []schemas.Key{{
+			ID: string(provider) + "-key", Name: "Gizway database candidate",
+			Value: *schemas.NewSecretVar(target.Credential), Models: schemas.WhiteList{"*"},
+			Weight: 1, Enabled: &enabled,
+		}}
+		configs[provider] = &schemas.ProviderConfig{
+			NetworkConfig: schemas.NetworkConfig{
+				BaseURL: target.Endpoint, DefaultRequestTimeoutInSeconds: 10,
+				MaxRetries: 1, AllowPrivateNetwork: true,
+			},
+			CustomProviderConfig: &schemas.CustomProviderConfig{BaseProviderType: schemas.OpenAI},
+		}
+	}
+	client, err := bf.Init(ctx, schemas.BifrostConfig{
+		Account: &account{providers: providers, keys: keys, configs: configs},
+		Logger:  bf.NewNoOpLogger(), InitialPoolSize: 8,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("initialize Bifrost candidates: %w", err)
+	}
+	return client, targets, nil
+}
+
+func targetKey(target store.ProviderExecutionTarget) string {
+	hash := sha256.Sum256([]byte(target.Credential))
+	return target.Endpoint + "\x00" + hex.EncodeToString(hash[:])
+}
+
+func targetsKey(targets []store.ProviderExecutionTarget) string {
+	hash := sha256.New()
+	for _, target := range targets {
+		_, _ = hash.Write([]byte(target.Endpoint))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(target.Credential))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(target.Model))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(target.RouteKey))
+		_, _ = hash.Write([]byte{0})
+	}
+	return "candidates:" + hex.EncodeToString(hash.Sum(nil))
+}
+
+func (a *Adapter) clientFor(ctx context.Context, target store.ProviderExecutionTarget) (*bf.Bifrost, store.ProviderExecutionTarget, func(), error) {
+	target = normalizeTarget(target, a.defaultTarget)
+	if target.Endpoint == "" || target.Credential == "" {
+		return nil, target, nil, errors.New("database provider endpoint and credential are required")
+	}
+	key := targetKey(target)
+	a.mu.Lock()
+	if entry, ok := a.clients[key]; ok {
+		a.clientClock++
+		entry.lastUsed = a.clientClock
+		entry.active++
+		a.clients[key] = entry
+		a.mu.Unlock()
+		return entry.client, target, a.releaseClient(key, entry.client), nil
+	}
+	client, err := newOpenAIClient(ctx, target)
+	if err != nil {
+		a.mu.Unlock()
+		return nil, target, nil, err
+	}
+	victim := a.cacheClientLocked(key, client, false, 1)
+	a.mu.Unlock()
+	shutdownClient(victim)
+	return client, target, a.releaseClient(key, client), nil
+}
+
+func (a *Adapter) clientForCandidates(ctx context.Context, targets []store.ProviderExecutionTarget) (*bf.Bifrost, []store.ProviderExecutionTarget, func(), error) {
+	if len(targets) == 0 {
+		return nil, nil, nil, errors.New("no provider execution candidates")
+	}
+	normalized := make([]store.ProviderExecutionTarget, len(targets))
+	for index, target := range targets {
+		normalized[index] = normalizeTarget(target, a.defaultTarget)
+		if normalized[index].Endpoint == "" || normalized[index].Credential == "" {
+			return nil, nil, nil, errors.New("database provider endpoint and credential are required")
+		}
+	}
+	key := targetsKey(normalized)
+	a.mu.Lock()
+	if entry, ok := a.clients[key]; ok {
+		a.clientClock++
+		entry.lastUsed = a.clientClock
+		entry.active++
+		a.clients[key] = entry
+		a.mu.Unlock()
+		return entry.client, normalized, a.releaseClient(key, entry.client), nil
+	}
+	client, normalized, err := newCandidateClient(ctx, normalized)
+	if err != nil {
+		a.mu.Unlock()
+		return nil, nil, nil, err
+	}
+	victim := a.cacheClientLocked(key, client, false, 1)
+	a.mu.Unlock()
+	shutdownClient(victim)
+	return client, normalized, a.releaseClient(key, client), nil
+}
+
+// cacheClientLocked bounds both connection pools and decrypted credential
+// lifetime. Catalog rotations generate new cache keys; least-recently-used
+// non-default clients are shut down immediately instead of surviving until
+// process exit. The optional process default remains pinned for legacy rows.
+func (a *Adapter) cacheClientLocked(key string, client *bf.Bifrost, pinned bool, active int) *bf.Bifrost {
+	var evicted *bf.Bifrost
+	if len(a.clients) >= maxCachedBifrostClients {
+		victimKey := ""
+		var victim cachedClient
+		for candidateKey, candidate := range a.clients {
+			if candidate.pinned || candidate.active != 0 || (victimKey != "" && candidate.lastUsed >= victim.lastUsed) {
+				continue
+			}
+			victimKey, victim = candidateKey, candidate
+		}
+		if victimKey != "" {
+			delete(a.clients, victimKey)
+			evicted = victim.client
+		}
+	}
+	a.clientClock++
+	a.clients[key] = cachedClient{client: client, lastUsed: a.clientClock, pinned: pinned, active: active}
+	return evicted
+}
+
+// releaseClient keeps eviction from shutting down a Bifrost worker pool while
+// an HTTP/Realtime call still owns it. Temporary overflow is intentional when
+// every cached client is active; the first release trims one idle LRU entry.
+func (a *Adapter) releaseClient(key string, client *bf.Bifrost) func() {
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			a.mu.Lock()
+			entry, ok := a.clients[key]
+			if ok && entry.client == client && entry.active > 0 {
+				entry.active--
+				a.clients[key] = entry
+			}
+			var victim *bf.Bifrost
+			if len(a.clients) > maxCachedBifrostClients {
+				victim = a.evictIdleClientLocked()
+			}
+			a.mu.Unlock()
+			shutdownClient(victim)
+		})
+	}
+}
+
+func (a *Adapter) evictIdleClientLocked() *bf.Bifrost {
+	victimKey := ""
+	var victim cachedClient
+	for key, candidate := range a.clients {
+		if candidate.pinned || candidate.active != 0 || (victimKey != "" && candidate.lastUsed >= victim.lastUsed) {
+			continue
+		}
+		victimKey, victim = key, candidate
+	}
+	if victimKey == "" {
+		return nil
+	}
+	delete(a.clients, victimKey)
+	return victim.client
+}
+
+func shutdownClient(client *bf.Bifrost) {
+	if client != nil {
+		client.Shutdown()
+	}
+}
+
+// ChatCompletionCandidates gives Bifrost the ordered database-authorized
+// models as native fallbacks. Each candidate becomes its own custom provider,
+// so candidates may use different database-selected endpoints and credentials.
+func (a *Adapter) ChatCompletionCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, messages []schemas.ChatMessage, params *schemas.ChatParameters) (*schemas.BifrostChatResponse, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfctx.Cancel()
+	request := &schemas.BifrostChatRequest{
+		Provider: providerKey(targets[0], 0), Model: targets[0].Model, Input: messages, Params: params,
+	}
+	for index, fallback := range targets[1:] {
+		request.Fallbacks = append(request.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	response, bfErr := client.ChatCompletionRequest(bfctx, request)
+	if bfErr != nil {
+		return nil, fmt.Errorf("bifrost chat completion: %s", bfErr.Error.Message)
+	}
+	return response, nil
+}
+
+// ChatCompletionStreamCandidates is the streaming equivalent of
+// ChatCompletionCandidates. Bifrost performs retry/fallback before emitting a
+// successful stream; each chunk retains the winning private routing identity.
+func (a *Adapter) ChatCompletionStreamCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, messages []schemas.ChatMessage, params *schemas.ChatParameters) (<-chan *schemas.BifrostStreamChunk, context.CancelFunc, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, nil, err
+	}
+	request := &schemas.BifrostChatRequest{
+		Provider: providerKey(targets[0], 0), Model: targets[0].Model, Input: messages, Params: params,
+	}
+	for index, fallback := range targets[1:] {
+		request.Fallbacks = append(request.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	bfctx := bifrostContext(streamCtx, time.Now().Add(30*time.Second))
+	chunks, bfErr := client.ChatCompletionStreamRequest(bfctx, request)
+	if bfErr != nil {
+		cancel()
+		bfctx.Cancel()
+		release()
+		return nil, nil, fmt.Errorf("bifrost chat completion stream: %s", bfErr.Error.Message)
+	}
+	return chunks, func() {
+		cancel()
+		bfctx.Cancel()
+		release()
+	}, nil
+}
+
+// ResponsesCandidates executes canonical Responses with the complete ordered
+// database candidate set. Anthropic and Gemini compatibility routes translate
+// through this same method, so their fallback semantics cannot drift.
+func (a *Adapter) ResponsesCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, request *schemas.BifrostResponsesRequest) (*schemas.BifrostResponsesResponse, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	requestCopy := *request
+	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	// Caller-provided fallbacks are untrusted protocol input. Only the ordered
+	// candidates resolved from Gizway's database may reach Bifrost.
+	requestCopy.Fallbacks = nil
+	for index, fallback := range targets[1:] {
+		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfctx.Cancel()
+	response, bfErr := client.ResponsesRequest(bfctx, &requestCopy)
+	if bfErr != nil {
+		return nil, fmt.Errorf("bifrost responses: %s", bfErr.Error.Message)
+	}
+	return response, nil
+}
+
+// ResponsesStreamCandidates applies the same candidate contract to OpenAI,
+// Anthropic and Gemini streaming compatibility routes.
+func (a *Adapter) ResponsesStreamCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, request *schemas.BifrostResponsesRequest) (<-chan *schemas.BifrostStreamChunk, context.CancelFunc, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, nil, err
+	}
+	requestCopy := *request
+	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Fallbacks = nil
+	for index, fallback := range targets[1:] {
+		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	bfctx := bifrostContext(streamCtx, time.Now().Add(30*time.Second))
+	chunks, bfErr := client.ResponsesStreamRequest(bfctx, &requestCopy)
+	if bfErr != nil {
+		cancel()
+		bfctx.Cancel()
+		release()
+		return nil, nil, fmt.Errorf("bifrost responses stream: %s", bfErr.Error.Message)
+	}
+	return chunks, func() {
+		cancel()
+		bfctx.Cancel()
+		release()
+	}, nil
+}
+
+// EmbeddingCandidates delegates retry and cross-endpoint fallback to Bifrost.
+// The winning custom-provider identity is retained in response ExtraFields so
+// Gizway can settle against the exact database variant that served the call.
+func (a *Adapter) EmbeddingCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, request *schemas.BifrostEmbeddingRequest) (*schemas.BifrostEmbeddingResponse, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	requestCopy := *request
+	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Fallbacks = nil
+	for index, fallback := range targets[1:] {
+		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfctx.Cancel()
+	response, bfErr := client.EmbeddingRequest(bfctx, &requestCopy)
+	if bfErr != nil {
+		return nil, fmt.Errorf("bifrost embedding: %s", bfErr.Error.Message)
+	}
+	return response, nil
+}
+
+// SpeechCandidates keeps text-to-speech retries and fallback policy inside
+// Bifrost, including candidates with different endpoints and credentials.
+func (a *Adapter) SpeechCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, request *schemas.BifrostSpeechRequest) (*schemas.BifrostSpeechResponse, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	requestCopy := *request
+	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Fallbacks = nil
+	for index, fallback := range targets[1:] {
+		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfctx.Cancel()
+	response, bfErr := client.SpeechRequest(bfctx, &requestCopy)
+	if bfErr != nil {
+		return nil, fmt.Errorf("bifrost speech: %s", bfErr.Error.Message)
+	}
+	return response, nil
+}
+
+// TranscriptionCandidates executes one Bifrost-owned fallback chain for the
+// uploaded audio rather than duplicating provider retry logic in Gizway.
+func (a *Adapter) TranscriptionCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, request *schemas.BifrostTranscriptionRequest) (*schemas.BifrostTranscriptionResponse, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	requestCopy := *request
+	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Fallbacks = nil
+	for index, fallback := range targets[1:] {
+		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfctx.Cancel()
+	response, bfErr := client.TranscriptionRequest(bfctx, &requestCopy)
+	if bfErr != nil {
+		return nil, fmt.Errorf("bifrost transcription: %s", bfErr.Error.Message)
+	}
+	return response, nil
+}
+
+// ImageGenerationCandidates gives Bifrost the complete ordered database
+// candidate set and preserves its resolved winner for exact price settlement.
+func (a *Adapter) ImageGenerationCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, request *schemas.BifrostImageGenerationRequest) (*schemas.BifrostImageGenerationResponse, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	requestCopy := *request
+	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Fallbacks = nil
+	for index, fallback := range targets[1:] {
+		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+	}
+	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfctx.Cancel()
+	response, bfErr := client.ImageGenerationRequest(bfctx, &requestCopy)
+	if bfErr != nil {
+		return nil, fmt.Errorf("bifrost image generation: %s", bfErr.Error.Message)
+	}
+	return response, nil
+}
+
+// Shutdown releases every cached Bifrost client exactly once.
+func (a *Adapter) Shutdown() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for key, entry := range a.clients {
+		entry.client.Shutdown()
+		delete(a.clients, key)
+	}
+}

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full:
+    name: Full Go and API gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      GIZWAY_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/gizway_test?sslmode=disable
+    services:
+      postgres:
+        image: postgres:17.10-bookworm
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gizway_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gizway_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install pinned Hurl
+        shell: bash
+        run: |
+          set -euo pipefail
+          hurl_asset="hurl_8.0.1_amd64.deb"
+          hurl_checksum="${hurl_asset}.sha256"
+          hurl_release="https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/$hurl_asset" "$hurl_release/$hurl_asset"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/$hurl_checksum" "$hurl_release/$hurl_checksum"
+          expected_hurl_sha256="$(cat "$RUNNER_TEMP/$hurl_checksum")"
+          printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
+            (cd "$RUNNER_TEMP" && sha256sum --check --strict)
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client "$RUNNER_TEMP/$hurl_asset"
+          hurl --version
+
+      - name: Install pinned actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          actionlint -version
+
+      - name: Verify Go modules
+        run: make verify-modules
+
+      - name: Check formatting
+        run: make fmt
+
+      - name: Run linters
+        run: make lint
+
+      - name: Build Go packages and commands
+        run: make build
+
+      - name: Run Go unit tests and coverage
+        run: make test-unit-go
+
+      - name: Run Go race tests
+        run: make test-unit-go-race
+
+      - name: Run fake-provider API tests
+        run: make test-unit-api
+
+      - name: Run PostgreSQL unit tests
+        run: make test-unit-postgresql
