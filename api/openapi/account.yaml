@@ -1,0 +1,842 @@
+openapi: 3.1.0
+info:
+  title: Gizway Account API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: Gizway-owned command and query API for first-party web, desktop, and mobile apps.
+servers:
+  - url: https://api.gizway.com/account/v1
+security:
+  - userSessionAuth: []
+tags:
+  - name: Profile
+    description: Read and update the authenticated user profile.
+  - name: Accounts
+    description: Access personal and merchant accounts owned by the user.
+  - name: API keys
+    description: Create, list, and revoke scoped Gizway API keys.
+  - name: Credits
+    description: Manage balances, purchases, refunds, transfers, and history.
+  - name: Usage
+    description: Query AI consumption attributed to an account or API key.
+  - name: Merchants
+    description: Create and inspect reviewed merchant identities.
+paths:
+  /auth/login:
+    post:
+      tags: [Profile]
+      operationId: loginUser
+      summary: Issue a database-backed User bearer session
+      description: Sessions are sent only in Authorization headers; no cookie CSRF token is used.
+      security: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, format: password, writeOnly: true}
+      responses:
+        '200':
+          description: User session issued.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserSession'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /auth/refresh:
+    post:
+      tags: [Profile]
+      operationId: refreshUserSession
+      summary: Atomically rotate a User session
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Replacement session; the predecessor is revoked.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserSession'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /auth/logout:
+    post:
+      tags: [Profile]
+      operationId: logoutUser
+      summary: Revoke the current User session
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '204': {description: Session revoked.}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /powersync/credentials:
+    post:
+      tags: [Accounts]
+      operationId: createPowerSyncCredentials
+      summary: Issue a short-lived PowerSync JWT for the authenticated user
+      description: The token contains only the signed user subject. Sync rules derive active account membership from the source accounts table and never trust a client-supplied account ID.
+      responses:
+        '200':
+          description: Short-lived PowerSync connection credentials.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PowerSyncCredentials'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '503': {$ref: './common.yaml#/components/responses/ServiceUnavailable'}
+  /me:
+    get:
+      tags: [Profile]
+      operationId: getCurrentUser
+      summary: Get the authenticated user
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+    patch:
+      tags: [Profile]
+      operationId: updateCurrentUser
+      summary: Update the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                display_name: {type: string, maxLength: 120}
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /accounts:
+    get:
+      tags: [Accounts]
+      operationId: listAccounts
+      summary: List personal and merchant accounts owned by the user
+      responses:
+        '200':
+          description: Owned accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/Account'}}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /accounts/{account_id}/balance:
+    get:
+      tags: [Credits]
+      operationId: getAccountBalance
+      summary: Get the current Credit balance
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Current posted balance.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Balance'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /accounts/{account_id}/models:
+    get:
+      tags: [Accounts]
+      operationId: listAccountModels
+      summary: List executable models with variants and customer prices
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Account-authorized rich model catalog.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountModelList'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /accounts/{account_id}/api_keys:
+    get:
+      tags: [API keys]
+      operationId: listApiKeys
+      summary: List API keys without returning their secrets
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: API keys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/ApiKey'}}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+    post:
+      tags: [API keys]
+      operationId: createApiKey
+      summary: Create an API key
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateApiKeyRequest'}
+      responses:
+        '201':
+          description: API key created. The secret is returned only once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiKey'
+                  - type: object
+                    required: [secret]
+                    properties:
+                      secret: {type: string}
+        '200':
+          description: Idempotent replay. Returns the original key metadata without replaying its one-time secret.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiKey'}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /accounts/{account_id}/api_keys/{api_key_id}:
+    delete:
+      tags: [API keys]
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: api_key_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '204': {description: API key revoked.}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /accounts/{account_id}/topups:
+    get:
+      tags: [Credits]
+      operationId: listTopups
+      summary: List Credit purchases
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Top-up page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TopupList'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+    post:
+      tags: [Credits]
+      operationId: createTopup
+      summary: Start a Credit purchase through a configured fiat payment provider
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateTopupRequest'}
+      responses:
+        '201':
+          description: Top-up created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Topup'}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /accounts/{account_id}/topups/{topup_id}/refunds:
+    post:
+      tags: [Credits]
+      operationId: refundUnusedTopup
+      summary: Refund unused purchased Credit to the original payment method
+      description: Transferred, earned, or consumed Credit cannot be withdrawn through this endpoint.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: topup_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amount]
+              properties:
+                amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+      responses:
+        '202':
+          description: Original-route refund accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Refund'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /accounts/{account_id}/invoices:
+    get:
+      tags: [Credits]
+      operationId: listInvoices
+      summary: List immutable Credit purchase invoices
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Invoice page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InvoiceList'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /accounts/{account_id}/invoices/{invoice_id}:
+    get:
+      tags: [Credits]
+      operationId: getInvoice
+      summary: Retrieve one owned immutable invoice
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: invoice_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Invoice.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Invoice'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /accounts/{account_id}/transfers:
+    get:
+      tags: [Credits]
+      operationId: listCreditTransfers
+      summary: List sent and received Credit transfers
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transfer page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TransferList'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+    post:
+      tags: [Credits]
+      operationId: createCreditTransfer
+      summary: Transfer Credit to another Gizway account
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateTransferRequest'}
+      responses:
+        '201':
+          description: Transfer created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Transfer'}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /accounts/{account_id}/usage:
+    get:
+      tags: [Usage]
+      operationId: listGatewayUsage
+      summary: Query AI usage attributed to the account and its API keys
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: api_key_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: from
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Usage page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UsageList'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /accounts/{account_id}/transactions:
+    get:
+      tags: [Credits]
+      operationId: listAccountTransactions
+      summary: List account-visible ledger transactions
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transaction page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountTransactionList'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /merchant_accounts:
+    post:
+      tags: [Merchants]
+      operationId: createMerchantAccount
+      summary: Create a merchant account for review
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateMerchantAccountRequest'}
+      responses:
+        '201':
+          description: Merchant account created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MerchantAccount'}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+  /merchant_accounts/{account_id}/services:
+    get:
+      tags: [Merchants]
+      operationId: listMerchantServices
+      summary: List the merchant services owned by the authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Merchant services and their approval state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/MerchantService'}
+                  page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+    post:
+      tags: [Merchants]
+      operationId: createMerchantService
+      summary: Register a merchant service and run mandatory risk screening
+      description: The service remains pending until an administrator approves an allow-listed risk decision.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateMerchantServiceRequest'}
+      responses:
+        '201':
+          description: Service registered and screened.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MerchantServiceScreening'}
+        '200':
+          description: Idempotent replay of the original registration.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MerchantServiceScreening'}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    userSessionAuth:
+      $ref: './common.yaml#/components/securitySchemes/userSessionAuth'
+  parameters:
+    AccountId:
+      name: account_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    UserSession:
+      type: object
+      additionalProperties: false
+      required: [user, access_token, token_type, expires_at, csrf_protection]
+      properties:
+        user: {$ref: '#/components/schemas/User'}
+        access_token: {type: string, writeOnly: true}
+        token_type: {type: string, const: Bearer}
+        expires_at: {type: string, format: date-time}
+        csrf_protection: {type: string, const: not_required_bearer_header}
+    PowerSyncCredentials:
+      type: object
+      additionalProperties: false
+      required: [endpoint, token, expires_at]
+      properties:
+        endpoint: {type: string, format: uri}
+        token: {type: string, writeOnly: true}
+        expires_at: {type: string, format: date-time}
+    User:
+      type: object
+      required: [id, email, display_name, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        status: {type: string, enum: [active, suspended, closed]}
+        created_at: {type: string, format: date-time}
+    Account:
+      type: object
+      required: [id, kind, name, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [personal, merchant]}
+        name: {type: string}
+        status: {type: string, enum: [active, suspended, closed]}
+        created_at: {type: string, format: date-time}
+    Balance:
+      allOf:
+        - $ref: './common.yaml#/components/schemas/CreditAmount'
+        - type: object
+          required: [account_id, updated_at]
+          properties:
+            account_id: {type: string, format: uuid}
+            updated_at: {type: [string, "null"], format: date-time}
+    AccountModelPrice:
+      type: object
+      additionalProperties: false
+      required: [metric, unit_size, base_price_microcredits, effective_price_microcredits, discount_bps]
+      properties:
+        metric: {type: string}
+        unit_size: {type: integer, format: int64, minimum: 1}
+        base_price_microcredits: {type: integer, format: int64, minimum: 0}
+        effective_price_microcredits: {type: integer, format: int64, minimum: 0}
+        discount_bps: {type: integer, minimum: 0, maximum: 10000}
+    AccountModelVariant:
+      type: object
+      additionalProperties: false
+      required: [id, slug, capabilities, context_window, max_output_tokens, prices]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        capabilities: {type: object, additionalProperties: {type: boolean}}
+        context_window: {type: integer, format: int64, minimum: 1}
+        max_output_tokens: {type: integer, format: int64, minimum: 1}
+        prices: {type: array, items: {$ref: '#/components/schemas/AccountModelPrice'}}
+    AccountModel:
+      type: object
+      additionalProperties: false
+      required: [id, name, capabilities, variants, created_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        capabilities: {type: array, items: {type: string}}
+        variants: {type: array, items: {$ref: '#/components/schemas/AccountModelVariant'}}
+        created_at: {type: string, format: date-time}
+    AccountModelList:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/AccountModel'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    CreateApiKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name, kind, scopes]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        kind: {type: string, enum: [gateway, payment]}
+        scopes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - 'gateway:invoke'
+              - 'gateway:usage:read'
+              - 'pay:intents:write'
+              - 'pay:transactions:read'
+              - 'pay:webhooks:write'
+              - 'account:self'
+        expires_at: {type: [string, "null"], format: date-time}
+    ApiKey:
+      type: object
+      required: [id, account_id, name, kind, key_prefix, scopes, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [gateway, payment]}
+        key_prefix: {type: string}
+        scopes: {type: array, items: {type: string}}
+        status: {type: string, enum: [active, revoked, expired]}
+        expires_at: {type: [string, "null"], format: date-time}
+        last_used_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+    CreateTopupRequest:
+      type: object
+      additionalProperties: false
+      required: [fiat_currency, fiat_amount_minor]
+      properties:
+        fiat_currency: {type: string, pattern: '^[A-Z]{3}$'}
+        fiat_amount_minor: {type: integer, format: int64, minimum: 1}
+        return_url: {type: string, format: uri}
+    Topup:
+      type: object
+      required: [id, account_id, fiat_currency, fiat_amount_minor, rate, credit_amount, refundable_amount, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+        fiat_currency: {type: string}
+        fiat_amount_minor: {type: integer, format: int64}
+        rate: {$ref: '#/components/schemas/TopupRateSnapshot'}
+        credit_amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        refundable_amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        status: {type: string, enum: [pending, succeeded, partially_refunded, refunded, failed]}
+        checkout_url: {type: [string, "null"], format: uri}
+        created_at: {type: string, format: date-time}
+    TopupRate:
+      type: object
+      additionalProperties: false
+      required: [fiat_minor, credit_microcredits]
+      properties:
+        fiat_minor: {type: integer, format: int64, minimum: 1}
+        credit_microcredits: {type: integer, format: int64, minimum: 1}
+    TopupRateSnapshot:
+      type: object
+      additionalProperties: false
+      required: [base, effective, discount_bps]
+      properties:
+        base: {$ref: '#/components/schemas/TopupRate'}
+        effective: {$ref: '#/components/schemas/TopupRate'}
+        discount_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Discount against the baseline rate; 1000 means 10%.
+    TopupList:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Topup'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    Refund:
+      type: object
+      required: [id, topup_id, credit_amount, fiat_amount_minor, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        topup_id: {type: string, format: uuid}
+        credit_amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        fiat_amount_minor: {type: integer, format: int64}
+        status: {type: string, enum: [pending, succeeded, failed]}
+        created_at: {type: string, format: date-time}
+    CreateTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [recipient_account_id, amount]
+      properties:
+        recipient_account_id: {type: string, format: uuid}
+        amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        note: {type: string, maxLength: 500}
+    Transfer:
+      type: object
+      required: [id, sender_account_id, recipient_account_id, amount, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        sender_account_id: {type: string, format: uuid}
+        recipient_account_id: {type: string, format: uuid}
+        amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        status: {type: string, enum: [pending, succeeded, failed, cancelled]}
+        note: {type: string}
+        created_at: {type: string, format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+    Invoice:
+      type: object
+      additionalProperties: false
+      required: [id, account_id, topup_id, invoice_number, fiat_currency, fiat_amount_minor, issued_at]
+      properties:
+        id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+        topup_id: {type: string, format: uuid}
+        invoice_number: {type: string}
+        fiat_currency: {type: string, minLength: 3, maxLength: 3}
+        fiat_amount_minor: {type: integer, format: int64, minimum: 1}
+        issued_at: {type: string, format: date-time}
+    InvoiceList:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Invoice'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    TransferList:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Transfer'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    UsageRecord:
+      type: object
+      required: [id, api_key_id, protocol, status, input_tokens, output_tokens, input_audio_tokens, output_audio_tokens, charges, charged_amount, started_at]
+      properties:
+        id: {type: string, format: uuid}
+        api_key_id: {type: string, format: uuid}
+        model: {type: [string, "null"]}
+        variant: {type: [string, "null"]}
+        protocol: {type: string, enum: [https, websocket, webrtc]}
+        status: {type: string, enum: [started, succeeded, failed, cancelled]}
+        input_tokens: {type: integer, format: int64, minimum: 0}
+        output_tokens: {type: integer, format: int64, minimum: 0}
+        cached_input_tokens: {type: integer, format: int64, minimum: 0}
+        input_audio_tokens: {type: integer, format: int64, minimum: 0}
+        output_audio_tokens: {type: integer, format: int64, minimum: 0}
+        charges:
+          type: array
+          items: {$ref: '#/components/schemas/UsageCharge'}
+        charged_amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+    UsageCharge:
+      type: object
+      additionalProperties: false
+      required: [metric, quantity, unit_size, base_price_microcredits, effective_price_microcredits, discount_bps, charged_microcredits]
+      properties:
+        metric:
+          type: string
+          enum: [input_token, output_token, cached_input_token, audio_second, image, video_second, request]
+        quantity: {type: integer, format: int64, minimum: 0}
+        unit_size: {type: integer, format: int64, minimum: 1}
+        base_price_microcredits: {type: integer, format: int64, minimum: 0}
+        effective_price_microcredits: {type: integer, format: int64, minimum: 0}
+        discount_bps: {type: integer, minimum: 0, maximum: 10000}
+        charged_microcredits: {type: integer, format: int64, minimum: 0}
+    UsageList:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/UsageRecord'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    AccountTransaction:
+      type: object
+      required: [id, type, direction, amount, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string, enum: [topup, refund, gateway_usage, transfer, merchant_payment, merchant_fee, adjustment, reversal]}
+        direction: {type: string, enum: [incoming, outgoing]}
+        amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        status: {type: string, enum: [pending, posted, reversed, failed]}
+        description: {type: string}
+        created_at: {type: string, format: date-time}
+    AccountTransactionList:
+      type: object
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/AccountTransaction'}}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    CreateMerchantAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [name, legal_name, public_name, country_code]
+      properties:
+        name: {type: string, maxLength: 120}
+        legal_name: {type: string, maxLength: 255}
+        public_name: {type: string, maxLength: 120}
+        country_code: {type: string, pattern: '^[A-Z]{2}$'}
+        website_url: {type: [string, "null"], format: uri}
+    MerchantAccount:
+      type: object
+      required: [account, legal_name, public_name, review_level, merchant_status]
+      properties:
+        account: {$ref: '#/components/schemas/Account'}
+        legal_name: {type: string}
+        public_name: {type: string}
+        review_level: {type: string, enum: [basic, enhanced]}
+        merchant_status: {type: string, enum: [pending, approved, rejected, suspended, closed]}
+        country_code: {type: [string, "null"]}
+        website_url: {type: [string, "null"], format: uri}
+    CreateMerchantServiceRequest:
+      type: object
+      additionalProperties: false
+      required: [service_code, name, interface_set]
+      properties:
+        service_code: {type: string, minLength: 1, maxLength: 120, pattern: '^[a-z0-9][a-z0-9_-]*$'}
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: string, maxLength: 1000}
+        interface_set:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, enum: [checkout, webhook]}
+    MerchantService:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_account_id, service_code, name, interface_set, status, max_transaction_microcredits, daily_limit_microcredits, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        merchant_account_id: {type: string, format: uuid}
+        service_code: {type: string}
+        name: {type: string}
+        description: {type: string}
+        interface_set: {type: array, items: {type: string, enum: [checkout, webhook]}}
+        status: {type: string, enum: [pending, approved, rejected, suspended]}
+        max_transaction_microcredits: {type: integer, format: int64, minimum: 1}
+        daily_limit_microcredits: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RiskDecision:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_account_id, service_id, decision, kyc_status, kyb_status, sanctions_status, anomaly_score, reason, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        merchant_account_id: {type: string, format: uuid}
+        service_id: {type: string, format: uuid}
+        decision: {type: string, enum: [allow, deny, review]}
+        kyc_status: {type: string, enum: [verified, failed, pending]}
+        kyb_status: {type: string, enum: [verified, failed, pending]}
+        sanctions_status: {type: string, enum: [clear, match, pending]}
+        anomaly_score: {type: integer, minimum: 0, maximum: 100}
+        reason: {type: string}
+        created_at: {type: string, format: date-time}
+    MerchantServiceScreening:
+      type: object
+      additionalProperties: false
+      required: [service, risk_decision]
+      properties:
+        service: {$ref: '#/components/schemas/MerchantService'}
+        risk_decision: {$ref: '#/components/schemas/RiskDecision'}
