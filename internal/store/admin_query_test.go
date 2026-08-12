@@ -9,7 +9,7 @@ import (
 )
 
 func TestAdminPagesAreBoundedFilteredAndCursorAddressable(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 
@@ -29,10 +29,6 @@ func TestAdminPagesAreBoundedFilteredAndCursorAddressable(t *testing.T) {
 	if err != nil || len(administrators.Items) != 1 || administrators.Items[0].Status != "active" {
 		t.Fatalf("administrator page=%+v err=%v", administrators, err)
 	}
-	models, err := repository.ListModelsPage(t.Context(), store.AdminListQuery{Status: "active", Limit: 100})
-	if err != nil || len(models.Items) == 0 {
-		t.Fatalf("model page=%+v err=%v", models, err)
-	}
 	keys, err := repository.AdminListAPIKeysPage(t.Context(), store.AdminListQuery{AccountID: accountOneID, Status: "active", KeyPrefix: "giz_story"})
 	if err != nil || len(keys.Items) == 0 {
 		t.Fatalf("API key page=%+v err=%v", keys, err)
@@ -43,16 +39,6 @@ func TestAdminPagesAreBoundedFilteredAndCursorAddressable(t *testing.T) {
 	}
 
 	now := "2026-08-10T03:00:00.000000000Z"
-	command := store.GatewayCommand{
-		ID: "admin-page-gateway", AccountID: accountOneID,
-		APIKeyID: "31000000-0000-4000-8000-000000000001",
-		ModelID:  "81000000-0000-4000-8000-000000000001", VariantID: "91000000-0000-4000-8000-000000000001",
-		Operation: "chat.completions", IdempotencyKey: "admin-page-gateway", PayloadHash: []byte("page"),
-		ReserveAmount: 1, Protocol: "https", StartedAt: now, ExecutionSnapshot: []byte(`{"plan":"page"}`),
-	}
-	if _, err := repository.BeginGatewayCommand(t.Context(), command); err != nil {
-		t.Fatal(err)
-	}
 	payload := sha256.Sum256([]byte("admin page transfer"))
 	transfer := store.CreditTransfer{ID: "admin-page-transfer", SenderAccountID: accountOneID, RecipientAccountID: accountTwoID, Amount: store.CreditAmount{Asset: "GIZ_CREDIT", Microcredits: 1}, Status: "succeeded", CreatedAt: now, CompletedAt: &now}
 	if _, _, err := repository.CreateCreditTransfer(t.Context(), userOneID, "admin-page-transfer", payload[:], transfer); err != nil {
@@ -63,7 +49,6 @@ func TestAdminPagesAreBoundedFilteredAndCursorAddressable(t *testing.T) {
 		kind  string
 		query store.AdminListQuery
 	}{
-		{"gateway_requests", store.AdminListQuery{AccountID: accountOneID, APIKeyID: command.APIKeyID, ModelID: command.ModelID, Status: "started", From: now, To: "2026-08-10T04:00:00.000000000Z"}},
 		{"payments", store.AdminListQuery{Type: "transfer", AccountID: accountOneID, Status: "succeeded", From: now, To: "2026-08-10T04:00:00.000000000Z"}},
 		{"ledger_accounts", store.AdminListQuery{OwnerAccountID: accountOneID, Kind: "user_credit"}},
 		{"ledger_transactions", store.AdminListQuery{TransactionType: "transfer", ReferenceID: transfer.ID, From: now, To: "2026-08-10T04:00:00.000000000Z"}},

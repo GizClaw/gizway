@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: Regional GizWay Admin API
+  version: 1.0.0
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+  description: Region-owned Catalog, Provider, pricing, and local execution operations.
+servers: [{url: https://global.gizway.com/admin/v1}]
+security:
+  - adminSessionAuth: []
+  - adminApiKeyAuth: []
+paths:
+  /auth/login: {$ref: './admin.yaml#/paths/~1auth~1login'}
+  /auth/refresh: {$ref: './admin.yaml#/paths/~1auth~1refresh'}
+  /auth/logout: {$ref: './admin.yaml#/paths/~1auth~1logout'}
+  /me: {$ref: './admin.yaml#/paths/~1me'}
+  /administrators: {$ref: './admin.yaml#/paths/~1administrators'}
+  /administrators/{administrator_id}: {$ref: './admin.yaml#/paths/~1administrators~1{administrator_id}'}
+  /administrators/{administrator_id}/api_keys: {$ref: './admin.yaml#/paths/~1administrators~1{administrator_id}~1api_keys'}
+  /administrators/{administrator_id}/api_keys/{admin_api_key_id}/revoke: {$ref: './admin.yaml#/paths/~1administrators~1{administrator_id}~1api_keys~1{admin_api_key_id}~1revoke'}
+  /providers: {$ref: './admin.yaml#/paths/~1providers'}
+  /providers/{provider_id}: {$ref: './admin.yaml#/paths/~1providers~1{provider_id}'}
+  /providers/{provider_id}/endpoints: {$ref: './admin.yaml#/paths/~1providers~1{provider_id}~1endpoints'}
+  /provider_endpoints/{endpoint_id}: {$ref: './admin.yaml#/paths/~1provider_endpoints~1{endpoint_id}'}
+  /provider_endpoints/{endpoint_id}/rotate_credential: {$ref: './admin.yaml#/paths/~1provider_endpoints~1{endpoint_id}~1rotate_credential'}
+  /models: {$ref: './admin.yaml#/paths/~1models'}
+  /models/{model_id}: {$ref: './admin.yaml#/paths/~1models~1{model_id}'}
+  /models/{model_id}/variants: {$ref: './admin.yaml#/paths/~1models~1{model_id}~1variants'}
+  /model_variants/{variant_id}: {$ref: './admin.yaml#/paths/~1model_variants~1{variant_id}'}
+  /model_variants/{variant_id}/prices: {$ref: './admin.yaml#/paths/~1model_variants~1{variant_id}~1prices'}
+  /rate_publications: {$ref: './admin.yaml#/paths/~1rate_publications'}
+  /usage_outbox: {$ref: './admin.yaml#/paths/~1usage_outbox'}
+  /gateway_executions: {$ref: './admin.yaml#/paths/~1gateway_executions'}
+  /gateway_executions/{execution_id}: {$ref: './admin.yaml#/paths/~1gateway_executions~1{execution_id}'}
+components:
+  securitySchemes:
+    adminSessionAuth: {$ref: './common.yaml#/components/securitySchemes/adminSessionAuth'}
+    adminApiKeyAuth: {$ref: './common.yaml#/components/securitySchemes/adminApiKeyAuth'}

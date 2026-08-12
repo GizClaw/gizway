@@ -280,10 +280,11 @@ func (s *Store) completeTopupEvent(ctx context.Context, eventID, providerReferen
 		return Topup{}, false, err
 	}
 	if row.Status == "pending" {
-		if err := postTopup(ctx, tx, row, eventID, receivedAt); err != nil {
+		refundable, err := postTopup(ctx, tx, row, eventID, receivedAt)
+		if err != nil {
 			return Topup{}, false, err
 		}
-		row.Status, row.Refundable, row.CompletedAt = "succeeded", row.Credit, &receivedAt
+		row.Status, row.Refundable, row.CompletedAt = "succeeded", refundable, &receivedAt
 		metadata, marshalErr := json.Marshal(map[string]string{"provider_event_id": eventID})
 		if marshalErr != nil {
 			return Topup{}, false, marshalErr
@@ -298,29 +299,44 @@ func (s *Store) completeTopupEvent(ctx context.Context, eventID, providerReferen
 	return row.public(), false, nil
 }
 
-func postTopup(ctx context.Context, tx *boundTx, row topupRow, eventID, at string) error {
+func postTopup(ctx context.Context, tx *boundTx, row topupRow, eventID, at string) (int64, error) {
 	var userLedger, systemLedger string
 	if err := tx.GetContext(ctx, &userLedger, `SELECT id FROM ledger_accounts WHERE owner_account_id=? AND asset_code='GIZ_CREDIT'`, row.AccountID); err != nil {
-		return err
+		return 0, err
 	}
 	if err := tx.GetContext(ctx, &systemLedger, `SELECT id FROM ledger_accounts WHERE code='SYSTEM:CREDIT_LIABILITY'`); err != nil {
-		return err
+		return 0, err
+	}
+	var postedBefore int64
+	if err := tx.GetContext(ctx, &postedBefore, `SELECT balance_microcredits FROM account_balances WHERE account_id=? AND asset_code='GIZ_CREDIT'`, row.AccountID); err != nil {
+		return 0, err
+	}
+	// A top-up always posts its full face value, but only the part left after
+	// repaying already-known debt becomes a refundable purchased-Credit lot.
+	// Example: -8 Credit + 100 Credit posts +100 and creates a 92-Credit lot.
+	refundable := row.Credit
+	if postedBefore < 0 {
+		if postedBefore <= -row.Credit {
+			refundable = 0
+		} else {
+			refundable = row.Credit + postedBefore
+		}
 	}
 	ledgerID := uuid.NewString()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO ledger_transactions(id,transaction_type,status,idempotency_key,initiated_by_account_id,reference_type,reference_id,description,created_at,posted_at) VALUES (?,'topup','posted',?,?,'topup',?,'Fiat top-up',?,?)`, ledgerID, "provider:"+eventID, row.AccountID, row.ID, at, at); err != nil {
-		return err
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO ledger_entries(id,transaction_id,ledger_account_id,sequence,direction,amount_microcredits,created_at) VALUES (?,?,?,1,'credit',?,?),(?,?,?,2,'debit',?,?)`, uuid.NewString(), ledgerID, userLedger, row.Credit, at, uuid.NewString(), ledgerID, systemLedger, row.Credit, at); err != nil {
-		return err
+		return 0, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO credit_lots(id,account_id,topup_id,original_microcredits,remaining_microcredits,created_at) VALUES (?,?,?,?,?,?)`, uuid.NewString(), row.AccountID, row.ID, row.Credit, row.Credit, at); err != nil {
-		return err
+	if _, err := tx.ExecContext(ctx, `INSERT INTO credit_lots(id,account_id,topup_id,original_microcredits,remaining_microcredits,created_at) VALUES (?,?,?,?,?,?)`, uuid.NewString(), row.AccountID, row.ID, row.Credit, refundable, at); err != nil {
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO invoices(id,account_id,topup_id,invoice_number,fiat_currency,fiat_amount_minor,issued_at) VALUES (?,?,?,?,?,?,?)`, uuid.NewString(), row.AccountID, row.ID, "INV-"+eventID, row.FiatCurrency, row.FiatAmountMinor, at); err != nil {
-		return err
+		return 0, err
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE topups SET status='succeeded',refundable_microcredits=?,completed_at=? WHERE id=? AND status='pending'`, row.Credit, at, row.ID)
-	return err
+	_, err := tx.ExecContext(ctx, `UPDATE topups SET status='succeeded',refundable_microcredits=?,completed_at=? WHERE id=? AND status='pending'`, refundable, at, row.ID)
+	return refundable, err
 }
 
 type RefundRecord struct {
@@ -650,9 +666,9 @@ func getRefund(ctx context.Context, q sqlx.QueryerContext, id string) (refundRow
 }
 
 // availableCredit is the single spendability definition used by every
-// outgoing-credit command. A posted balance is not spendable while it backs
-// either an active AI reservation or a provider refund that has been created
-// but not yet committed to the ledger.
+// outgoing-credit command. Refactor 01 has no central AI reservation: Gateway
+// admission is a cached Quota observation, while completed Usage may take the
+// posted balance negative. Only a pending provider refund is a central hold.
 func availableCredit(ctx context.Context, tx *boundTx, accountID string) (int64, error) {
 	var spendable int
 	if err := tx.GetContext(ctx, &spendable, `SELECT COUNT(*) FROM accounts a JOIN ledger_accounts l ON l.owner_account_id=a.id AND l.asset_code='GIZ_CREDIT' WHERE a.id=? AND a.status='active' AND l.status='active'`, accountID); err != nil {
@@ -664,15 +680,12 @@ func availableCredit(ctx context.Context, tx *boundTx, accountID string) (int64,
 	var available int64
 	err := tx.GetContext(ctx, &available, `
 		SELECT b.balance_microcredits
-		     - COALESCE((SELECT SUM(r.amount_microcredits)
-		                 FROM credit_reservations r
-		                 WHERE r.account_id=? AND r.status='active'),0)
 		     - COALESCE((SELECT SUM(f.credit_microcredits)
 		                 FROM refunds f
 		                 WHERE f.account_id=? AND f.status='pending'),0)
 		FROM account_balances b
 		WHERE b.account_id=? AND b.asset_code='GIZ_CREDIT'
-	`, accountID, accountID, accountID)
+	`, accountID, accountID)
 	return available, err
 }
 

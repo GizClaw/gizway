@@ -12,7 +12,7 @@
 # Fixture: story-base; a fresh PostgreSQL database is created for this file.
 # protocol-case: openai.chat.zero-price executable-usage-no-debit
 
-POST {{base_url}}/admin/v1/models
+POST {{way_url}}/admin/v1/models
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-free-model
 Content-Type: application/json
@@ -28,7 +28,7 @@ HTTP 201
 free_model_id: jsonpath "$.id"
 
 
-POST {{base_url}}/admin/v1/models/{{free_model_id}}/variants
+POST {{way_url}}/admin/v1/models/{{free_model_id}}/variants
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-free-variant
 Content-Type: application/json
@@ -48,7 +48,7 @@ free_variant_id: jsonpath "$.id"
 
 # All required Chat metrics exist. Baseline price records the normal price,
 # while effective price zero and discount_bps 10000 make the model truly free.
-POST {{base_url}}/admin/v1/model_variants/{{free_variant_id}}/prices
+POST {{way_url}}/admin/v1/model_variants/{{free_variant_id}}/prices
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-free-input-price
 Content-Type: application/json
@@ -66,7 +66,7 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{base_url}}/admin/v1/model_variants/{{free_variant_id}}/prices
+POST {{way_url}}/admin/v1/model_variants/{{free_variant_id}}/prices
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-free-cached-price
 Content-Type: application/json
@@ -84,7 +84,7 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{base_url}}/admin/v1/model_variants/{{free_variant_id}}/prices
+POST {{way_url}}/admin/v1/model_variants/{{free_variant_id}}/prices
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-free-output-price
 Content-Type: application/json
@@ -102,8 +102,22 @@ Content-Type: application/json
 HTTP 201
 
 
+# Mutable regional prices are not executable until GizPay accepts the exact
+# immutable snapshot and GizWay activates the returned publication identity.
+POST {{way_url}}/admin/v1/rate_publications
+Authorization: Bearer {{admin_api_key}}
+Idempotency-Key: story-08-free-publication
+Content-Type: application/json
+{
+  "source_publication_id": "story-08-free-source",
+  "effective_at": "2026-08-12T00:00:00Z"
+}
+
+HTTP 201
+
+
 # Visibility uses required metric presence, not “price greater than zero”.
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 Authorization: Bearer {{gateway_api_key}}
 
 HTTP 200
@@ -114,7 +128,7 @@ jsonpath "$.data[?(@.id == 'story-free-text')].id" == "story-free-text"
 # Protocol discovery is capability-specific. The new variant declares only
 # Chat, so Gemini and Anthropic must not advertise generation/messages support
 # for it merely because the canonical model is globally executable somewhere.
-GET {{base_url}}/v1beta/models
+GET {{way_url}}/v1beta/models
 Authorization: Bearer {{gateway_api_key}}
 
 HTTP 200
@@ -123,7 +137,7 @@ jsonpath "$.models" count == 1
 jsonpath "$.models[0].name" == "models/story-text"
 
 
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 x-api-key: {{gateway_api_key}}
 anthropic-version: 2023-06-01
 
@@ -133,7 +147,7 @@ jsonpath "$.data" count == 1
 jsonpath "$.data[0].id" == "story-text"
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -141,7 +155,7 @@ HTTP 200
 balance_before: jsonpath "$.microcredits"
 
 
-POST {{base_url}}/v1/chat/completions
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{gateway_api_key}}
 Idempotency-Key: story-08-free-chat
 Content-Type: application/json
@@ -158,8 +172,10 @@ jsonpath "$.usage.prompt_tokens" == 10
 jsonpath "$.usage.completion_tokens" == 5
 
 
-# The provider result replays even though there was no positive reservation.
-POST {{base_url}}/v1/chat/completions
+# Refactor 01 has no response-replay store. Reusing a transport idempotency key
+# creates a second zero-cost execution and a second independently reported
+# Usage record, while the balance remains unchanged.
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{gateway_api_key}}
 Idempotency-Key: story-08-free-chat
 Content-Type: application/json
@@ -174,7 +190,22 @@ HTTP 200
 jsonpath "$.model" == "story-free-text"
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+POST {{way_url}}/test/v1/clock/advance
+Content-Type: application/json
+{
+  "by": "5m"
+}
+
+HTTP 200
+
+
+GET {{way_url}}/v1/models
+Authorization: Bearer {{gateway_api_key}}
+
+HTTP 200
+
+
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -182,12 +213,12 @@ HTTP 200
 jsonpath "$.microcredits" == {{balance_before}}
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/usage?from=2026-08-11T00%3A00%3A00Z&to=2026-08-12T00%3A00%3A00Z
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/usage?from=2026-08-12T00%3A00%3A00Z&to=2026-08-13T00%3A00%3A00Z
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data" count == 1
+jsonpath "$.data" count == 2
 jsonpath "$.data[0].charged_microcredits" == 0
 jsonpath "$.data[0].charges" count == 2
 jsonpath "$.data[0].charges[0].effective_price_microcredits" == 0
@@ -198,4 +229,4 @@ GET {{fake_url}}/events
 
 HTTP 200
 [Asserts]
-jsonpath "$.chat_calls" == 1
+jsonpath "$.chat_calls" == 2

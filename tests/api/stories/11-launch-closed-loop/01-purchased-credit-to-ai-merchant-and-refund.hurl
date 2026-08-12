@@ -23,16 +23,16 @@
 #
 # Isolation: fresh story-base PostgreSQL and separate AI/payment/webhook fakes.
 # protocol-case: launch.openai.chat purchased-and-earned-credit closed-loop
-# covers: createProvider createProviderEndpoint createModel createModelVariant
-# covers: publishModelVariantPrice createMerchantAccount decideMerchantReview
-# covers: createTopup listTopups createApiKey createWebhookEndpoint
-# covers: createMerchantService listMerchantServices decideMerchantService
-# covers: createPaymentIntent getCheckoutPaymentIntent confirmPaymentIntent
-# covers: listMerchantTransactions refundUnusedTopup getAccountBalance
-# covers: listAdminPayments
+# covers: gizway-admin.yaml#createProvider gizway-admin.yaml#createProviderEndpoint gizway-admin.yaml#createModel gizway-admin.yaml#createModelVariant
+# covers: gizway-admin.yaml#publishModelVariantPrice account.yaml#createMerchantAccount gizpay-admin.yaml#decideMerchantReview
+# covers: account.yaml#createTopup account.yaml#listTopups account.yaml#createApiKey payment.yaml#createWebhookEndpoint
+# covers: account.yaml#createMerchantService account.yaml#listMerchantServices gizpay-admin.yaml#decideMerchantService
+# covers: payment.yaml#createPaymentIntent payment.yaml#getCheckoutPaymentIntent payment.yaml#confirmPaymentIntent
+# covers: payment.yaml#listMerchantTransactions account.yaml#refundUnusedTopup account.yaml#getAccountBalance
+# covers: gizpay-admin.yaml#listAdminPayments
 # protocol covers: OpenAI non-streaming POST /v1/chat/completions
 
-POST {{base_url}}/admin/v1/providers
+POST {{way_url}}/admin/v1/providers
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-provider
 Content-Type: application/json
@@ -46,7 +46,7 @@ HTTP 201
 provider_id: jsonpath "$.id"
 
 
-POST {{base_url}}/admin/v1/providers/{{provider_id}}/endpoints
+POST {{way_url}}/admin/v1/providers/{{provider_id}}/endpoints
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-endpoint
 Content-Type: application/json
@@ -63,7 +63,7 @@ HTTP 201
 endpoint_id: jsonpath "$.id"
 
 
-POST {{base_url}}/admin/v1/models
+POST {{way_url}}/admin/v1/models
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-model
 Content-Type: application/json
@@ -79,7 +79,7 @@ HTTP 201
 model_id: jsonpath "$.id"
 
 
-POST {{base_url}}/admin/v1/models/{{model_id}}/variants
+POST {{way_url}}/admin/v1/models/{{model_id}}/variants
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-variant
 Content-Type: application/json
@@ -97,7 +97,7 @@ HTTP 201
 variant_id: jsonpath "$.id"
 
 
-POST {{base_url}}/admin/v1/model_variants/{{variant_id}}/prices
+POST {{way_url}}/admin/v1/model_variants/{{variant_id}}/prices
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-input-price
 Content-Type: application/json
@@ -113,7 +113,7 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{base_url}}/admin/v1/model_variants/{{variant_id}}/prices
+POST {{way_url}}/admin/v1/model_variants/{{variant_id}}/prices
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-output-price
 Content-Type: application/json
@@ -129,7 +129,7 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{base_url}}/admin/v1/model_variants/{{variant_id}}/prices
+POST {{way_url}}/admin/v1/model_variants/{{variant_id}}/prices
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-cached-input-price
 Content-Type: application/json
@@ -145,7 +145,21 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{base_url}}/account/v1/merchant_accounts
+# Region-local Catalog mutations become executable only after the immutable
+# price snapshot has been accepted by GizPay and activated in GizWay.
+POST {{way_url}}/admin/v1/rate_publications
+Authorization: Bearer {{admin_api_key}}
+Idempotency-Key: story-11-rate-publication
+Content-Type: application/json
+{
+  "source_publication_id": "story-11-launch-source",
+  "effective_at": "2026-08-12T00:00:00Z"
+}
+
+HTTP 201
+
+
+POST {{pay_url}}/account/v1/merchant_accounts
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-11-merchant
 Content-Type: application/json
@@ -165,7 +179,7 @@ merchant_account_id: jsonpath "$.account.id"
 # Registration calls the external mandatory risk boundary before either the
 # merchant or service can be approved. The response exposes reproducible
 # KYC/KYB/sanctions outcomes and limits, never the provider reference.
-POST {{base_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
+POST {{pay_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-11-vpn-service
 Content-Type: application/json
@@ -191,7 +205,7 @@ jsonpath "$.service.max_transaction_microcredits" == 10000000
 
 # Provider idempotency and database idempotency compose: replay returns the
 # same service and does not run a second assessment.
-POST {{base_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
+POST {{pay_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-11-vpn-service
 Content-Type: application/json
@@ -209,7 +223,7 @@ jsonpath "$.service.id" == "{{merchant_service_id}}"
 
 # A deterministic sanctions match stays unapprovable even if an administrator
 # attempts to override it.
-POST {{base_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
+POST {{pay_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-11-blocked-service
 Content-Type: application/json
@@ -228,7 +242,7 @@ jsonpath "$.risk_decision.decision" == "deny"
 jsonpath "$.risk_decision.sanctions_status" == "match"
 
 
-POST {{base_url}}/admin/v1/merchants/{{merchant_account_id}}/decision
+POST {{pay_url}}/admin/v1/merchants/{{merchant_account_id}}/decision
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-merchant-approval
 Content-Type: application/json
@@ -243,7 +257,7 @@ HTTP 200
 jsonpath "$.status" == "approved"
 
 
-POST {{base_url}}/admin/v1/merchant_services/{{merchant_service_id}}/decision
+POST {{pay_url}}/admin/v1/merchant_services/{{merchant_service_id}}/decision
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-service-approval
 Content-Type: application/json
@@ -257,7 +271,7 @@ HTTP 200
 jsonpath "$.status" == "approved"
 
 
-POST {{base_url}}/admin/v1/merchant_services/{{blocked_service_id}}/decision
+POST {{pay_url}}/admin/v1/merchant_services/{{blocked_service_id}}/decision
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-11-blocked-service-override
 Content-Type: application/json
@@ -271,7 +285,7 @@ HTTP 409
 jsonpath "$.error.code" == "risk_denied"
 
 
-GET {{base_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
+GET {{pay_url}}/account/v1/merchant_accounts/{{merchant_account_id}}/services
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -281,7 +295,7 @@ jsonpath "$.data[0].status" == "approved"
 jsonpath "$.data[1].status" == "pending"
 
 
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/topups
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/topups
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-11-payer-topup
 Content-Type: application/json
@@ -299,7 +313,7 @@ provider_reference: jsonpath "$.provider_reference"
 POST {{payment_url}}/v1/test/confirm
 Content-Type: application/json
 {
-  "callback_url": "{{base_url}}/callbacks/v1/payment_events",
+  "callback_url": "{{pay_url}}/callbacks/v1/payment_events",
   "event_id": "storypay-event-11-topup",
   "provider_reference": "{{provider_reference}}",
   "currency": "USD",
@@ -309,7 +323,7 @@ Content-Type: application/json
 HTTP 200
 
 
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/api_keys
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-11-payer-gateway-key
 Content-Type: application/json
@@ -324,7 +338,7 @@ HTTP 201
 payer_gateway_key: jsonpath "$.secret"
 
 
-POST {{base_url}}/v1/chat/completions
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{payer_gateway_key}}
 Idempotency-Key: story-11-payer-ai
 Content-Type: application/json
@@ -339,7 +353,7 @@ HTTP 200
 jsonpath "$.model" == "story-launch"
 
 
-POST {{base_url}}/account/v1/accounts/{{merchant_account_id}}/api_keys
+POST {{pay_url}}/account/v1/accounts/{{merchant_account_id}}/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-11-merchant-payment-key
 Content-Type: application/json
@@ -354,7 +368,7 @@ HTTP 201
 merchant_payment_key: jsonpath "$.secret"
 
 
-POST {{base_url}}/account/v1/accounts/{{merchant_account_id}}/api_keys
+POST {{pay_url}}/account/v1/accounts/{{merchant_account_id}}/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-11-merchant-gateway-key
 Content-Type: application/json
@@ -369,7 +383,7 @@ HTTP 201
 merchant_gateway_key: jsonpath "$.secret"
 
 
-POST {{base_url}}/pay/v1/webhook_endpoints
+POST {{pay_url}}/pay/v1/webhook_endpoints
 Authorization: Bearer {{merchant_payment_key}}
 Idempotency-Key: story-11-create-merchant-webhook
 Content-Type: application/json
@@ -381,7 +395,7 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{merchant_payment_key}}
 Idempotency-Key: story-11-order
 Content-Type: application/json
@@ -404,7 +418,7 @@ jsonpath "$.service_id" == "{{merchant_service_id}}"
 jsonpath "$.service_code" == "vpn"
 
 
-GET {{base_url}}/pay/v1/checkout/payment_intents/{{payment_intent_id}}
+GET {{pay_url}}/pay/v1/checkout/payment_intents/{{payment_intent_id}}
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -413,7 +427,7 @@ jsonpath "$.description" == "Reviewed launch VPN subscription"
 jsonpath "$.service_name" == "Launch VPN Subscription"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{payment_intent_id}}/confirm
+POST {{pay_url}}/pay/v1/payment_intents/{{payment_intent_id}}/confirm
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-11-confirm
 
@@ -422,7 +436,7 @@ HTTP 200
 jsonpath "$.status" == "succeeded"
 
 
-POST {{base_url}}/v1/chat/completions
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{merchant_gateway_key}}
 Idempotency-Key: story-11-merchant-ai
 Content-Type: application/json
@@ -435,7 +449,30 @@ Content-Type: application/json
 HTTP 200
 
 
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/topups/{{topup_id}}/refunds
+# Both regional Usage records are queued locally. A quota refresh for each raw
+# key reports its own pending Usage before refund and balance assertions.
+POST {{way_url}}/test/v1/clock/advance
+Content-Type: application/json
+{
+  "by": "5m"
+}
+
+HTTP 200
+
+
+GET {{way_url}}/v1/models
+Authorization: Bearer {{payer_gateway_key}}
+
+HTTP 200
+
+
+GET {{way_url}}/v1/models
+Authorization: Bearer {{merchant_gateway_key}}
+
+HTTP 200
+
+
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-11-refund
 Content-Type: application/json
@@ -449,7 +486,7 @@ jsonpath "$.status" == "succeeded"
 jsonpath "$.fiat_amount_minor" == 450
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -457,7 +494,7 @@ HTTP 200
 jsonpath "$.microcredits" == 54899963
 
 
-GET {{base_url}}/account/v1/accounts/{{merchant_account_id}}/balance
+GET {{pay_url}}/account/v1/accounts/{{merchant_account_id}}/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -465,7 +502,7 @@ HTTP 200
 jsonpath "$.microcredits" == 97464
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/topups
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/topups
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -473,7 +510,7 @@ HTTP 200
 jsonpath "$.data[0].refundable_amount.microcredits" == 4899963
 
 
-GET {{base_url}}/pay/v1/transactions
+GET {{pay_url}}/pay/v1/transactions
 Authorization: Bearer {{merchant_payment_key}}
 
 HTTP 200
@@ -519,7 +556,7 @@ jsonpath "$.assessments" == 2
 jsonpath "$.requests" == 2
 
 
-GET {{base_url}}/admin/v1/payments
+GET {{pay_url}}/admin/v1/payments
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
@@ -527,7 +564,7 @@ HTTP 200
 jsonpath "$.data" count == 3
 
 
-GET {{base_url}}/admin/v1/gateway_requests
+GET {{way_url}}/admin/v1/gateway_executions
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200

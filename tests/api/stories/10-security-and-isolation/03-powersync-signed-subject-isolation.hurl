@@ -17,9 +17,9 @@
 #
 # Fixture: story-base
 # Isolation: fresh PostgreSQL database and process for this file.
-# covers: createPowerSyncCredentials
+# covers: account.yaml#createPowerSyncCredentials
 
-POST {{base_url}}/account/v1/powersync/credentials
+POST {{pay_url}}/account/v1/powersync/credentials
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -28,11 +28,11 @@ powersync_token: jsonpath "$.token"
 [Asserts]
 jsonpath "$.endpoint" == "https://sync.gizway.test"
 jsonpath "$.token" matches "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
-jsonpath "$.expires_at" == "2026-08-11T12:05:00.000000000Z"
+jsonpath "$.expires_at" == "2026-08-12T12:05:00.000000000Z"
 
 
 # The signed subject can observe its own account-keyed projections.
-POST {{base_url}}/test/v1/powersync/authorize
+POST {{pay_url}}/test/v1/powersync/authorize
 Authorization: Bearer {{powersync_token}}
 Content-Type: application/json
 {
@@ -47,7 +47,7 @@ jsonpath "$.projection_counts.powersync_gateway_usage" == 0
 
 
 # Changing only account_id cannot widen the signed subject's buckets.
-POST {{base_url}}/test/v1/powersync/authorize
+POST {{pay_url}}/test/v1/powersync/authorize
 Authorization: Bearer {{powersync_token}}
 Content-Type: application/json
 {
@@ -60,7 +60,7 @@ jsonpath "$.error.code" == "forbidden"
 
 
 # JWT integrity is checked before any projection lookup.
-POST {{base_url}}/test/v1/powersync/authorize
+POST {{pay_url}}/test/v1/powersync/authorize
 Authorization: Bearer {{powersync_token}}tampered
 Content-Type: application/json
 {

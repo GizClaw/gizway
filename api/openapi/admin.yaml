@@ -1,47 +1,6 @@
-openapi: 3.1.0
-info:
-  title: Gizway Admin API
-  version: 1.0.0
-  license:
-    name: Proprietary
-    identifier: LicenseRef-Proprietary
-  description: |
-    Internal operations API for Gizway. Administrative actions are audited.
-    Immutable financial records and historical prices are never edited in place.
-servers:
-  - url: https://api.gizway.com/admin/v1
-security:
-  - adminSessionAuth: []
-  - adminApiKeyAuth: []
-tags:
-  - name: Admin authentication
-    description: Authenticate administrators and manage their own credentials.
-  - name: Administrators
-    description: Manage the flat list of equally privileged administrator accounts.
-  - name: Overview
-    description: Operational metrics for the administration dashboard.
-  - name: Users
-    description: Search users and manage access status.
-  - name: Merchants
-    description: Review and manage merchant accounts.
-  - name: Providers
-    description: Configure upstream AI providers and endpoints.
-  - name: Models
-    description: Manage the canonical model catalog and provider variants.
-  - name: Pricing
-    description: Publish append-only effective prices.
-  - name: API keys
-    description: Inspect metadata and revoke compromised keys.
-  - name: Gateway requests
-    description: Diagnose AI calls, routing, usage, and charges.
-  - name: Payments
-    description: Inspect top-ups, refunds, transfers, and merchant payments.
-  - name: Ledger
-    description: Inspect balances and issue controlled adjustments or reversals.
-  - name: Webhooks
-    description: Inspect and retry merchant webhook deliveries.
-  - name: Audit
-    description: Query immutable administrative audit events.
+# Shared path/schema fragment. The executable roots are gizpay-admin.yaml and
+# gizway-admin.yaml; keeping common shapes here avoids duplicated contracts
+# while operation ownership remains explicit in those two roots.
 paths:
   /auth/login:
     post:
@@ -688,50 +647,240 @@ paths:
       responses:
         '204': {description: API key revoked.}
 
-  /gateway_requests:
+  /gateway_executions:
     get:
-      tags: [Gateway requests]
-      operationId: listGatewayRequests
-      summary: Search normalized AI requests
+      tags: [Regional executions]
+      operationId: listGatewayExecutions
+      summary: Search identity-free executions persisted by this GizWay region
       parameters:
-        - name: account_id
-          in: query
-          schema: {type: string, format: uuid}
-        - name: api_key_id
-          in: query
-          schema: {type: string, format: uuid}
         - name: model_id
           in: query
-          schema: {type: string, format: uuid}
+          description: Public model name on the regional surface.
+          schema: {type: string}
         - name: status
           in: query
-          schema: {type: string, enum: [started, succeeded, failed, cancelled]}
+          schema: {type: string, enum: [admitted, running, completed, failed]}
         - $ref: '#/components/parameters/From'
         - $ref: '#/components/parameters/To'
         - $ref: './common.yaml#/components/parameters/Cursor'
         - $ref: './common.yaml#/components/parameters/Limit'
       responses:
         '200':
-          description: Gateway request page.
+          description: Regional execution page without Account or API-key identity.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/GatewayRequestPage'}
-  /gateway_requests/{request_id}:
+              schema: {$ref: '#/components/schemas/GatewayExecutionPage'}
+  /rate_publications:
     get:
-      tags: [Gateway requests]
-      operationId: getGatewayRequest
-      summary: Get normalized usage, routing, latency, and charge detail
+      tags: [Rate publications]
+      operationId: listRatePublications
+      summary: List this binary's publication records without exposing payload hashes
       parameters:
-        - name: request_id
-          in: path
-          required: true
-          schema: {type: string, format: uuid}
+        - name: node_id
+          in: query
+          schema: {type: string}
+        - name: region
+          in: query
+          schema: {type: string, enum: [cn, global]}
+        - name: status
+          in: query
+          schema: {type: string}
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
       responses:
         '200':
-          description: Gateway request detail.
+          description: Publication diagnostic page.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/GatewayRequest'}
+              schema: {$ref: '#/components/schemas/AdminDiagnosticPage'}
+    post:
+      tags: [Regional pricing]
+      operationId: publishRegionalRatePublication
+      summary: Freeze the regional price set and activate it only after GizPay confirms the same snapshot
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source_publication_id, effective_at]
+              properties:
+                source_publication_id: {type: string, minLength: 1, maxLength: 255}
+                effective_at: {type: string, format: date-time}
+      responses:
+        '201':
+          description: Publication is active locally and at GizPay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RegionalRatePublication'}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '502': {description: GizPay rejected the publication, content: {application/json: {schema: {$ref: './common.yaml#/components/schemas/Error'}}}}
+        '503': {$ref: './common.yaml#/components/responses/ServiceUnavailable'}
+  /rate_publications/{publication_id}/disable:
+    post:
+      tags: [Rate publications]
+      operationId: disableRatePublication
+      summary: Stop accepting future Usage against one GizPay publication
+      parameters:
+        - name: publication_id
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '204': {description: Publication disabled.}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /received_usage:
+    get:
+      tags: [Received usage]
+      operationId: listReceivedUsage
+      summary: List only UCGID Usage already accepted and posted by GizPay
+      parameters:
+        - name: account_id
+          in: query
+          schema: {type: string}
+        - name: node_id
+          in: query
+          schema: {type: string}
+        - name: region
+          in: query
+          schema: {type: string, enum: [cn, global]}
+        - name: model_id
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Received Usage diagnostic page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminDiagnosticPage'}
+  /usage_outbox:
+    get:
+      tags: [Regional usage]
+      operationId: listUsageOutbox
+      summary: List identity-free current-process delivery state without runtime key tokens or payloads
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [pending, sending, reported, abandoned]}
+        - name: model_id
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: './common.yaml#/components/parameters/Cursor'
+        - $ref: './common.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Usage outbox diagnostic page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminDiagnosticPage'}
+  /gateway_executions/{execution_id}:
+    get:
+      tags: [Regional executions]
+      operationId: getGatewayExecution
+      summary: Get one identity-free regional execution
+      parameters:
+        - name: execution_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Regional execution detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayExecution'}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+
+  /gateway_nodes:
+    post:
+      tags: [Gateway node identity]
+      operationId: createGatewayNode
+      summary: Register one stable Gateway node and its fixed region
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, region, name]
+              properties:
+                id: {type: string, minLength: 1, maxLength: 255}
+                region: {type: string, enum: [cn, global]}
+                name: {type: string, minLength: 1, maxLength: 255}
+      responses:
+        '200': {description: Exact node registration replay, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNode'}}}}
+        '201': {description: Node registered, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNode'}}}}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /gateway_nodes/{node_id}:
+    get:
+      tags: [Gateway node identity]
+      operationId: getGatewayNode
+      summary: Read one node and its certificate allow-list
+      parameters: [{$ref: '#/components/parameters/NodeId'}]
+      responses:
+        '200': {description: Node identity, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNode'}}}}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /gateway_nodes/{node_id}/certificates:
+    post:
+      tags: [Gateway node identity]
+      operationId: registerGatewayNodeCertificate
+      summary: Register an inactive certificate fingerprint for rotation
+      parameters: [{$ref: '#/components/parameters/NodeId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterGatewayNodeCertificate'}
+      responses:
+        '200': {description: Exact fingerprint replay, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNodeCertificate'}}}}
+        '201': {description: Pending certificate registered, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNodeCertificate'}}}}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /gateway_nodes/{node_id}/certificates/{certificate_id}/activate:
+    post:
+      tags: [Gateway node identity]
+      operationId: activateGatewayNodeCertificate
+      summary: Activate a currently valid registered certificate
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/CertificateId'
+      responses:
+        '200': {description: Active certificate, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNodeCertificate'}}}}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /gateway_nodes/{node_id}/certificates/{certificate_id}/revoke:
+    post:
+      tags: [Gateway node identity]
+      operationId: revokeGatewayNodeCertificate
+      summary: Revoke one certificate without disabling the node
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/CertificateId'
+      responses:
+        '200': {description: Revoked certificate, content: {application/json: {schema: {$ref: '#/components/schemas/GatewayNodeCertificate'}}}}
         '404': {$ref: './common.yaml#/components/responses/NotFound'}
 
   /payments:
@@ -812,47 +961,6 @@ paths:
                   account_id: {type: string, format: uuid}
                   asset_code: {type: string, const: GIZ_CREDIT}
                   status: {type: string, enum: [active, frozen]}
-                  updated_at: {type: string, format: date-time}
-        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
-        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
-        '404': {$ref: './common.yaml#/components/responses/NotFound'}
-  /accounts/{account_id}/model_entitlements/{model_id}:
-    put:
-      tags: [Models]
-      operationId: setAccountModelEntitlement
-      summary: Allow or deny one canonical model for an account
-      description: |
-        A deny always wins. Once any allow rule exists for an account, that
-        account enters allow-list mode. Compatible discovery, Account catalog,
-        and provider execution apply this exact policy.
-      parameters:
-        - $ref: '#/components/parameters/AccountId'
-        - $ref: '#/components/parameters/ModelId'
-        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [effect, reason]
-              properties:
-                effect: {type: string, enum: [allow, deny]}
-                reason: {type: string, minLength: 1, maxLength: 500}
-      responses:
-        '200':
-          description: Current account model policy.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [account_id, model_id, effect, reason, updated_at]
-                properties:
-                  account_id: {type: string, format: uuid}
-                  model_id: {type: string, format: uuid}
-                  effect: {type: string, enum: [allow, deny]}
-                  reason: {type: string}
                   updated_at: {type: string, format: date-time}
         '400': {$ref: './common.yaml#/components/responses/BadRequest'}
         '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
@@ -992,6 +1100,16 @@ components:
     adminApiKeyAuth:
       $ref: './common.yaml#/components/securitySchemes/adminApiKeyAuth'
   parameters:
+    NodeId:
+      name: node_id
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 255}
+    CertificateId:
+      name: certificate_id
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 255}
     AdministratorId:
       name: administrator_id
       in: path
@@ -1115,11 +1233,11 @@ components:
             secret: {type: string, writeOnly: true}
     AdminOverview:
       type: object
-      required: [users, active_api_keys, gateway_requests, charged, payments, generated_at]
+      required: [users, active_api_keys, received_usage, charged, payments, generated_at]
       properties:
         users: {type: integer, format: int64, minimum: 0}
         active_api_keys: {type: integer, format: int64, minimum: 0}
-        gateway_requests: {type: integer, format: int64, minimum: 0}
+        received_usage: {type: integer, format: int64, minimum: 0}
         charged: {$ref: './common.yaml#/components/schemas/CreditAmount'}
         payments: {$ref: './common.yaml#/components/schemas/CreditAmount'}
         generated_at: {type: string, format: date-time}
@@ -1389,65 +1507,88 @@ components:
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ApiKeyMetadata'}}
         page: {$ref: './common.yaml#/components/schemas/PageInfo'}
-    GatewayRequest:
+    GatewayExecution:
       type: object
-      required: [id, account_id, api_key_id, protocol, status, usage, charge_breakdown, charged, started_at]
+      additionalProperties: false
+      required: [id, public_model, model_variant_id, protocol, stream_mode, rate_publication_id, status, estimated_microcredits, started_at]
       properties:
-        id: {type: string, format: uuid}
-        account_id: {type: string, format: uuid}
-        api_key_id: {type: string, format: uuid}
-        requested_model_id: {type: [string, "null"], format: uuid}
-        model_variant_id: {type: [string, "null"], format: uuid}
+        id: {type: string}
+        public_model: {type: string}
+        model_variant_id: {type: string}
         provider_request_id: {type: [string, "null"]}
-        protocol: {type: string, enum: [https, websocket, webrtc]}
-        status: {type: string, enum: [started, succeeded, failed, cancelled]}
-        usage:
-          type: object
-          required: [input_tokens, output_tokens, cached_input_tokens, input_audio_tokens, output_audio_tokens]
-          properties:
-            input_tokens: {type: integer, format: int64, minimum: 0}
-            output_tokens: {type: integer, format: int64, minimum: 0}
-            cached_input_tokens: {type: integer, format: int64, minimum: 0}
-            input_audio_tokens: {type: integer, format: int64, minimum: 0}
-            output_audio_tokens: {type: integer, format: int64, minimum: 0}
-            audio_milliseconds: {type: integer, format: int64, minimum: 0}
-            video_milliseconds: {type: integer, format: int64, minimum: 0}
-            image_count: {type: integer, minimum: 0}
-        upstream_cost: {$ref: './common.yaml#/components/schemas/CreditAmount'}
-        charge_breakdown:
-          type: array
-          items: {$ref: '#/components/schemas/GatewayRequestCharge'}
-        charged: {$ref: './common.yaml#/components/schemas/CreditAmount'}
-        latency_ms: {type: [integer, "null"], minimum: 0}
-        error_code: {type: [string, "null"]}
-        recovery_status:
-          type: [string, "null"]
-          enum: [pending, completed, reconciliation_required, null]
-          description: Durable automatic-replay state; reconciliation_required retains the reservation for operator investigation.
-        recovery_attempts: {type: integer, format: int64, minimum: 0}
-        recovery_next_attempt_at: {type: [string, "null"], format: date-time}
-        recovery_last_error: {type: [string, "null"]}
+        protocol: {type: string, enum: [https, sse, websocket, webrtc]}
+        stream_mode: {type: string}
+        rate_publication_id: {type: string}
+        status: {type: string, enum: [admitted, running, completed, failed]}
+        estimated_microcredits: {type: integer, format: int64, minimum: 0}
+        actual_microcredits: {type: [integer, "null"], format: int64, minimum: 0}
         started_at: {type: string, format: date-time}
         completed_at: {type: [string, "null"], format: date-time}
-    GatewayRequestCharge:
+    RegionalRatePublication:
       type: object
-      required: [metric, quantity, unit_size, base_price_microcredits, effective_price_microcredits, discount_bps, charged_microcredits]
+      additionalProperties: false
+      required: [id, region, revision, status, gizpay_publication_id, effective_at, created_at, updated_at]
       properties:
-        metric:
-          type: string
-          enum: [input_token, output_token, cached_input_token, input_audio_token, output_audio_token, audio_second, image, video_second, request]
-        quantity: {type: integer, format: int64, minimum: 0}
-        unit_size: {type: integer, format: int64, minimum: 1}
-        base_price_microcredits: {type: integer, format: int64, minimum: 0}
-        effective_price_microcredits: {type: integer, format: int64, minimum: 0}
-        discount_bps: {type: integer, minimum: 0, maximum: 10000}
-        charged_microcredits: {type: integer, format: int64, minimum: 0}
-    GatewayRequestPage:
+        id: {type: string}
+        region: {type: string, enum: [cn, global]}
+        revision: {type: integer, format: int64, minimum: 1}
+        status: {type: string, const: active}
+        gizpay_publication_id: {type: string}
+        effective_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    GatewayExecutionPage:
       type: object
       required: [data, page]
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/GatewayRequest'}}
+        data: {type: array, items: {$ref: '#/components/schemas/GatewayExecution'}}
         page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    AdminDiagnosticPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items: {type: object, additionalProperties: true}
+        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+    RegisterGatewayNodeCertificate:
+      type: object
+      additionalProperties: false
+      required: [fingerprint_sha256, serial_number, subject_dn, san_uri, not_before, not_after]
+      properties:
+        fingerprint_sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        serial_number: {type: string, minLength: 1, maxLength: 255}
+        subject_dn: {type: string, minLength: 1, maxLength: 1000}
+        san_uri: {type: string, format: uri, minLength: 1, maxLength: 1000}
+        not_before: {type: string, format: date-time}
+        not_after: {type: string, format: date-time}
+    GatewayNodeCertificate:
+      type: object
+      additionalProperties: false
+      required: [id, node_id, fingerprint_sha256, serial_number, subject_dn, san_uri, status, not_before, not_after, created_at]
+      properties:
+        id: {type: string}
+        node_id: {type: string}
+        fingerprint_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        serial_number: {type: string}
+        subject_dn: {type: string}
+        san_uri: {type: string, format: uri}
+        status: {type: string, enum: [pending, active, revoked, expired]}
+        not_before: {type: string, format: date-time}
+        not_after: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        revoked_at: {type: [string, "null"], format: date-time}
+    GatewayNode:
+      type: object
+      additionalProperties: false
+      required: [id, region, name, created_at, updated_at, certificates]
+      properties:
+        id: {type: string}
+        region: {type: string, enum: [cn, global]}
+        name: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        certificates: {type: array, items: {$ref: '#/components/schemas/GatewayNodeCertificate'}}
     PaymentWorkflow:
       type: object
       required: [id, type, account_id, amount, status, created_at]

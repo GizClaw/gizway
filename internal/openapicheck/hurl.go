@@ -12,16 +12,83 @@ import (
 )
 
 type operationRoute struct {
-	ID, Method, Path string
-	matcher          *regexp.Regexp
+	Document, ID, Method, Path string
+	matcher                    *regexp.Regexp
 }
 
-var hurlRequestPattern = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\{\{base_url\}\}([^[:space:]]+)`)
+// InventoryEntry is the reviewable source-to-test ownership record for one
+// retained OpenAPI operation. Document remains part of the identity because
+// GizPay and GizWay intentionally reuse several administrator operation IDs.
+type InventoryEntry struct {
+	Document, Method, Path, OperationID, Service string
+	HurlFiles                                    []string
+}
+
+// Inventory returns every retained operation and the Hurl files that declare
+// coverage for it. Callers should run CheckHurlCoverage first so an empty file
+// list can never be mistaken for an accepted gap.
+func Inventory(openAPIDirectory, hurlDirectory string) ([]InventoryEntry, error) {
+	operations, err := openAPIOperationRoutes(openAPIDirectory)
+	if err != nil {
+		return nil, err
+	}
+	coveredBy := make(map[string][]string, len(operations))
+	err = filepath.WalkDir(hurlDirectory, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".hurl") {
+			return nil
+		}
+		declared, _, readErr := readHurlContract(path)
+		if readErr != nil {
+			return readErr
+		}
+		relative, relErr := filepath.Rel(".", path)
+		if relErr != nil {
+			relative = path
+		}
+		for _, key := range declared {
+			coveredBy[key] = append(coveredBy[key], filepath.ToSlash(relative))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]InventoryEntry, 0, len(operations))
+	for key, operation := range operations {
+		service := "GizPay"
+		if operation.Document == "gizway-admin.yaml" {
+			service = "GizWay"
+		}
+		files := append([]string(nil), coveredBy[key]...)
+		sort.Strings(files)
+		entries = append(entries, InventoryEntry{
+			Document: operation.Document, Method: operation.Method, Path: operation.Path,
+			OperationID: operation.ID, Service: service, HurlFiles: files,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		left, right := entries[i], entries[j]
+		if left.Document != right.Document {
+			return left.Document < right.Document
+		}
+		if left.Path != right.Path {
+			return left.Path < right.Path
+		}
+		return left.Method < right.Method
+	})
+	return entries, nil
+}
+
+var hurlRequestPattern = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\{\{(base_url|pay_url|way_url)\}\}([^[:space:]]+)`)
 
 // CheckHurlCoverage binds every `# covers:` declaration to an actual request
 // in the same Hurl file. A comment can no longer make CI green unless the file
-// really exercises the documented method/path. It also rejects every Gizway
-// base_url request that has no OpenAPI operation.
+// really exercises the documented method/path. It also rejects every request
+// aimed at one of the separated service URL variables when no operation owns
+// that route.
 func CheckHurlCoverage(openAPIDirectory, hurlDirectory string) error {
 	operations, err := openAPIOperationRoutes(openAPIDirectory)
 	if err != nil {
@@ -57,44 +124,58 @@ func CheckHurlCoverage(openAPIDirectory, hurlDirectory string) error {
 		for _, request := range requests {
 			matched := false
 			for _, operation := range operations {
-				if operation.Method == request.Method && operation.matcher.MatchString(request.Path) {
+				if requestTargetsDocument(request.Variable, operation.Document) && operation.Method == request.Method && operation.matcher.MatchString(request.Path) {
 					matched = true
 					break
 				}
 			}
-			if !matched && request.Path != "/healthz" && !strings.HasPrefix(request.Path, "/test/") && !hurlOnlyProtocolPath(request.Path) {
+			if !matched && !operationalPath(request.Path) && !strings.HasPrefix(request.Path, "/test/") && !hurlOnlyProtocolPath(request.Path) {
 				return fmt.Errorf("%s: Hurl request %s %s has no OpenAPI operation", path, request.Method, request.Path)
 			}
 		}
-		for _, id := range declared {
-			operation, ok := operations[id]
+		for _, key := range declared {
+			operation, ok := operations[key]
 			if !ok {
-				return fmt.Errorf("%s: stale Hurl coverage declaration %s", path, id)
+				return fmt.Errorf("%s: stale Hurl coverage declaration %s; use document.yaml#operationId", path, key)
 			}
 			matched := false
 			for _, request := range requests {
-				if operation.Method == request.Method && operation.matcher.MatchString(request.Path) {
+				if requestTargetsDocument(request.Variable, operation.Document) && operation.Method == request.Method && operation.matcher.MatchString(request.Path) {
 					matched = true
 					break
 				}
 			}
 			if !matched {
-				return fmt.Errorf("%s: coverage declaration %s has no matching %s %s request", path, id, operation.Method, operation.Path)
+				return fmt.Errorf("%s: coverage declaration %s has no matching %s %s request", path, key, operation.Method, operation.Path)
 			}
-			covered[id] = true
+			covered[key] = true
 		}
 	}
-	missing := make([]string, 0)
-	for id := range operations {
-		if !covered[id] {
-			missing = append(missing, id)
+	var missing []string
+	for key := range operations {
+		if !covered[key] {
+			missing = append(missing, key)
 		}
 	}
 	if len(missing) != 0 {
 		sort.Strings(missing)
-		return fmt.Errorf("OpenAPI operations missing executable Hurl coverage: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("OpenAPI operations missing Hurl coverage:\n%s", strings.Join(missing, "\n"))
 	}
 	return nil
+}
+
+// Hurl must name the concrete deployment it contacts. Central contracts use
+// pay_url and the regional contract uses way_url; base_url is intentionally
+// not accepted for OpenAPI ownership because the two Admin surfaces share
+// paths and operation IDs while remaining independent services.
+func requestTargetsDocument(variable, document string) bool {
+	if variable == "way_url" {
+		return document == "gizway-admin.yaml"
+	}
+	if variable == "pay_url" {
+		return document != "gizway-admin.yaml"
+	}
+	return false
 }
 
 func hurlOnlyProtocolPath(path string) bool {
@@ -103,7 +184,7 @@ func hurlOnlyProtocolPath(path string) bool {
 		strings.HasPrefix(path, "/callbacks/")
 }
 
-type hurlRequest struct{ Method, Path string }
+type hurlRequest struct{ Variable, Method, Path string }
 
 func readHurlContract(path string) ([]string, []hurlRequest, error) {
 	file, err := os.Open(path)
@@ -120,8 +201,8 @@ func readHurlContract(path string) ([]string, []hurlRequest, error) {
 			declared = append(declared, strings.Fields(strings.TrimSpace(after))...)
 		}
 		if match := hurlRequestPattern.FindStringSubmatch(line); match != nil {
-			path, _, _ := strings.Cut(match[2], "?")
-			requests = append(requests, hurlRequest{Method: match[1], Path: path})
+			path, _, _ := strings.Cut(match[3], "?")
+			requests = append(requests, hurlRequest{Method: match[1], Variable: match[2], Path: path})
 		}
 	}
 	return declared, requests, scanner.Err()
@@ -134,9 +215,14 @@ func openAPIOperationRoutes(directory string) (map[string]operationRoute, error)
 	}
 	operations := map[string]operationRoute{}
 	for name, document := range docs {
-		if name == "common.yaml" {
+		if _, isRoot := document["openapi"]; !isRoot || name == "common.yaml" {
 			continue
 		}
+		resolved, err := bundleValue(docs, name, document, map[string]bool{})
+		if err != nil {
+			return nil, err
+		}
+		document = resolved.(map[string]any)
 		base, err := serverBasePath(document)
 		if err != nil {
 			return nil, err
@@ -155,7 +241,8 @@ func openAPIOperationRoutes(directory string) (map[string]operationRoute, error)
 				pattern := regexp.QuoteMeta(fullPath)
 				placeholder := regexp.MustCompile(`\\\{[^}]+\\\}`)
 				pattern = placeholder.ReplaceAllString(pattern, `[^/?]+`)
-				operations[id] = operationRoute{ID: id, Method: upper, Path: fullPath, matcher: regexp.MustCompile("^" + pattern + "$")}
+				key := name + "#" + id
+				operations[key] = operationRoute{Document: name, ID: id, Method: upper, Path: fullPath, matcher: regexp.MustCompile("^" + pattern + "$")}
 			}
 		}
 	}

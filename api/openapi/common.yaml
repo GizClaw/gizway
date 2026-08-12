@@ -30,6 +30,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: Gizway Realtime client secret
+    gatewayNodeMtls:
+      type: mutualTLS
+      description: >-
+        Identifies the GizWay node and region from its client certificate. The
+        request body is never trusted to self-declare either identity.
   parameters:
     IdempotencyKey:
       name: Idempotency-Key

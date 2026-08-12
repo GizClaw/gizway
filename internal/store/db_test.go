@@ -88,7 +88,7 @@ func TestSecretReferenceAndDatabaseTextBoundaries(t *testing.T) {
 // behavior remains covered through Store and Hurl; this test proves every
 // wrapper method rebinding queries delegates to the owned sqlx DB/Tx.
 func TestBoundDBSurface(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	db := &boundDB{DB: database.SQL}
 	ctx := t.Context()

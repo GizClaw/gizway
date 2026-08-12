@@ -96,10 +96,6 @@ func (r paymentIntentRow) public() PaymentIntent {
 
 const paymentIntentColumns = `id,merchant_account_id,service_id,(SELECT service_code FROM merchant_services WHERE id=payment_intents.service_id) AS service_code,(SELECT name FROM merchant_services WHERE id=payment_intents.service_id) AS service_name,payer_account_id,external_order_id,amount_microcredits,platform_fee_microcredits,net_microcredits,fee_bps,status,description,metadata,checkout_url,expires_at,created_at,completed_at`
 
-func (s *Store) CreatePaymentIntent(ctx context.Context, merchantAccountID, idempotencyKey string, payloadHash []byte, intent PaymentIntent) (PaymentIntent, bool, error) {
-	return s.CreatePaymentIntentForKey(ctx, merchantAccountID, "", idempotencyKey, payloadHash, intent)
-}
-
 // CreatePaymentIntentForKey retains the authenticated credential identity so
 // the serializable command can close the authenticate-then-revoke race.
 func (s *Store) CreatePaymentIntentForKey(ctx context.Context, merchantAccountID, apiKeyID, idempotencyKey string, payloadHash []byte, intent PaymentIntent) (PaymentIntent, bool, error) {

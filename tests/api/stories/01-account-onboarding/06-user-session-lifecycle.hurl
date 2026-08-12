@@ -11,9 +11,9 @@
 # - Logout revokes immediately; neither old nor logged-out token authenticates.
 #
 # Isolation: a fresh PostgreSQL database is created for this Hurl file.
-# covers: loginUser refreshUserSession logoutUser getCurrentUser
+# covers: account.yaml#loginUser account.yaml#refreshUserSession account.yaml#logoutUser account.yaml#getCurrentUser
 
-POST {{base_url}}/account/v1/auth/login
+POST {{pay_url}}/account/v1/auth/login
 Idempotency-Key: story-01-shared-login-key
 Content-Type: application/json
 {
@@ -32,7 +32,7 @@ jsonpath "$.csrf_protection" == "not_required_bearer_header"
 
 # Exact login replay returns the encrypted-at-rest command response and cannot
 # create a second database session.
-POST {{base_url}}/account/v1/auth/login
+POST {{pay_url}}/account/v1/auth/login
 Idempotency-Key: story-01-shared-login-key
 Content-Type: application/json
 {
@@ -47,7 +47,7 @@ jsonpath "$.access_token" == "{{user_session_one}}"
 
 # The same transport key belongs to a separate normalized login scope for a
 # different identity; it must not collide with user one's command.
-POST {{base_url}}/account/v1/auth/login
+POST {{pay_url}}/account/v1/auth/login
 Idempotency-Key: story-01-shared-login-key
 Content-Type: application/json
 {
@@ -64,7 +64,7 @@ jsonpath "$.access_token" != "{{user_session_one}}"
 
 
 # A correct password cannot bypass lifecycle status.
-POST {{base_url}}/account/v1/auth/login
+POST {{pay_url}}/account/v1/auth/login
 Idempotency-Key: story-01-suspended-login
 Content-Type: application/json
 {
@@ -75,7 +75,7 @@ Content-Type: application/json
 HTTP 401
 
 
-POST {{base_url}}/account/v1/auth/refresh
+POST {{pay_url}}/account/v1/auth/refresh
 Authorization: Bearer {{user_session_one}}
 Idempotency-Key: story-01-refresh
 
@@ -88,7 +88,7 @@ jsonpath "$.access_token" != "{{user_session_one}}"
 
 
 # The old bearer was revoked in the same transaction as replacement issuance.
-GET {{base_url}}/account/v1/me
+GET {{pay_url}}/account/v1/me
 Authorization: Bearer {{user_session_one}}
 
 HTTP 401
@@ -97,7 +97,7 @@ HTTP 401
 # The generic command journal resolves exact refresh replay before invoking
 # authentication again, so the caller recovers the same one-time result even
 # though the predecessor token is now revoked.
-POST {{base_url}}/account/v1/auth/refresh
+POST {{pay_url}}/account/v1/auth/refresh
 Authorization: Bearer {{user_session_one}}
 Idempotency-Key: story-01-refresh
 
@@ -106,7 +106,7 @@ HTTP 200
 jsonpath "$.access_token" == "{{refreshed_user_session}}"
 
 
-GET {{base_url}}/account/v1/me
+GET {{pay_url}}/account/v1/me
 Authorization: Bearer {{refreshed_user_session}}
 
 HTTP 200
@@ -114,21 +114,21 @@ HTTP 200
 jsonpath "$.email" == "active-one@gizway.test"
 
 
-POST {{base_url}}/account/v1/auth/logout
+POST {{pay_url}}/account/v1/auth/logout
 Authorization: Bearer {{refreshed_user_session}}
 Idempotency-Key: story-01-logout
 
 HTTP 204
 
 
-GET {{base_url}}/account/v1/me
+GET {{pay_url}}/account/v1/me
 Authorization: Bearer {{refreshed_user_session}}
 
 HTTP 401
 
 
 # Clean up the independently scoped second user session as a real revocation.
-POST {{base_url}}/account/v1/auth/logout
+POST {{pay_url}}/account/v1/auth/logout
 Authorization: Bearer {{user_session_two}}
 Idempotency-Key: story-01-logout-user-two
 

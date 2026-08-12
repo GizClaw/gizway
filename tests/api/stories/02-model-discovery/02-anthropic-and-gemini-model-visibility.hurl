@@ -17,7 +17,7 @@
 # protocol covers: Anthropic GET /v1/models
 # protocol covers: Gemini GET /v1beta/models
 
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 x-api-key: {{gateway_api_key}}
 anthropic-version: 2023-06-01
 
@@ -34,7 +34,7 @@ jsonpath "$.data[0].provider_model_name" not exists
 jsonpath "$.data[0].credential_ref" not exists
 
 
-GET {{base_url}}/v1beta/models
+GET {{way_url}}/v1beta/models
 x-goog-api-key: {{gateway_api_key}}
 
 HTTP 200
@@ -50,9 +50,9 @@ jsonpath "$.models[0].credential_ref" not exists
 
 # A user-session credential is not a Gateway credential and cannot enumerate
 # compatible inference models even when placed in a native Gemini header.
-GET {{base_url}}/v1beta/models
+GET {{way_url}}/v1beta/models
 x-goog-api-key: {{active_user_one_key}}
 
 HTTP 401
 [Asserts]
-jsonpath "$.error.code" == "unauthorized"
+jsonpath "$.error.code" == "invalid_api_key"

@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -10,16 +13,32 @@ import (
 	"testing"
 	"time"
 
+	paymentadapter "github.com/idy/gizway/internal/adapter/payment"
 	gatewayservice "github.com/idy/gizway/internal/service/gateway"
+	merchantservice "github.com/idy/gizway/internal/service/merchant"
+	paymentservice "github.com/idy/gizway/internal/service/payment"
 	"github.com/idy/gizway/internal/store"
 	"github.com/idy/gizway/internal/testdb"
 )
 
+type failingRequestBody struct{}
+
+func (failingRequestBody) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+func (failingRequestBody) Close() error             { return nil }
+
+func testGizPayServer(repository *store.Store) *Server {
+	return NewWithServicesAndClockSurface(repository, nil, nil, merchantservice.NewConfigured(repository, nil, false, "https://pay.gizway.test"), time.Now, nil, SurfaceGizPay)
+}
+
+func testGizWayServer(repository *store.Store, gateway *gatewayservice.Service) *Server {
+	return NewWithServicesAndClockSurface(repository, gateway, nil, nil, time.Now, nil, SurfaceGizWay)
+}
+
 func TestCompatibleProtocolValidationAndErrorMapping(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizWayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
-	server := NewWithGateway(repository, gatewayservice.New(repository, nil))
+	server := testGizWayServer(repository, gatewayservice.NewWithRealtimeProviderCallback(repository, nil, "", ""))
 	handler := server.Handler()
 	tests := []struct {
 		name, path, body, contentType string
@@ -54,8 +73,8 @@ func TestCompatibleProtocolValidationAndErrorMapping(t *testing.T) {
 	missingKey.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, missingKey)
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("missing idempotency status=%d", recorder.Code)
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("provider failure without obsolete idempotency header status=%d", recorder.Code)
 	}
 
 	for _, test := range []struct {
@@ -63,10 +82,7 @@ func TestCompatibleProtocolValidationAndErrorMapping(t *testing.T) {
 		want int
 	}{
 		{store.ErrNotFound, http.StatusNotFound},
-		{store.ErrInsufficientBalance, http.StatusPaymentRequired},
-		{store.ErrAccountFrozen, http.StatusLocked},
-		{store.ErrIdempotencyConflict, http.StatusConflict},
-		{store.ErrCommandInProgress, http.StatusConflict},
+		{gatewayservice.ErrQuotaDenied, http.StatusPaymentRequired},
 		{errors.New("provider"), http.StatusBadGateway},
 		{gatewayservice.ErrInvalidRequest, http.StatusBadRequest},
 	} {
@@ -77,22 +93,268 @@ func TestCompatibleProtocolValidationAndErrorMapping(t *testing.T) {
 		}
 	}
 
-	unavailable := New(repository).Handler()
+	unavailable := testGizPayServer(repository).Handler()
 	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"story-text","input":"x"}`))
 	request.Header.Set("Authorization", "Bearer giz_story_user_active_1")
 	request.Header.Set("Idempotency-Key", "unavailable")
 	request.Header.Set("Content-Type", "application/json")
 	recorder = httptest.NewRecorder()
 	unavailable.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusServiceUnavailable {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("unavailable status=%d", recorder.Code)
 	}
 }
 
-func TestMutationHandlersRejectInvalidCommands(t *testing.T) {
-	database := testdb.OpenStory(t)
+func TestRetainedUnsupportedProtocolsAndRealtimeCallbackFailures(t *testing.T) {
+	database := testdb.OpenGizWayStory(t)
 	defer database.Close()
-	server := New(store.New(database.SQL))
+	repository := store.New(database.SQL)
+	gateway := gatewayservice.NewWithRealtimeProviderCallback(repository, nil, "", "callback-secret")
+	server := testGizWayServer(repository, gateway)
+	handler := server.Handler()
+
+	for _, test := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/v1/images/edits"},
+		{http.MethodPost, "/v1/messages/batches"},
+		{http.MethodGet, "/v1/messages/batches"},
+		{http.MethodGet, "/v1/messages/batches/batch"},
+		{http.MethodPost, "/v1/messages/batches/batch/cancel"},
+		{http.MethodDelete, "/v1/messages/batches/batch"},
+		{http.MethodGet, "/v1/messages/batches/batch/results"},
+		{http.MethodPost, "/v1/files"},
+		{http.MethodGet, "/v1/files"},
+		{http.MethodGet, "/v1/files/file"},
+		{http.MethodDelete, "/v1/files/file"},
+		{http.MethodGet, "/v1/files/file/content"},
+		{http.MethodPost, "/upload/v1beta/files"},
+		{http.MethodGet, "/v1beta/files"},
+		{http.MethodGet, "/v1beta/files/file"},
+		{http.MethodDelete, "/v1beta/files/file"},
+	} {
+		request := httptest.NewRequest(test.method, test.path, strings.NewReader(`{}`))
+		request.Header.Set("Authorization", "Bearer giz_story_user_active_1")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNotImplemented {
+			t.Fatalf("%s %s status=%d body=%s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+
+	for _, test := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{name: "invalid signature", body: `{}`, want: http.StatusUnauthorized},
+		{name: "oversized", body: strings.Repeat("x", (1<<20)+1), want: http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/callbacks/v1/realtime_events", strings.NewReader(test.body))
+			request.Header.Set("X-Gizway-Signature", "v1=invalid")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.want {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+
+	unavailable := testGizWayServer(repository, nil).Handler()
+	response := httptest.NewRecorder()
+	unavailable.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/callbacks/v1/realtime_events", strings.NewReader(`{}`)))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured callback status=%d", response.Code)
+	}
+}
+
+func TestHTTPTransportBoundaryFailureBranches(t *testing.T) {
+	database := testdb.OpenGizPayStory(t)
+	defer database.Close()
+	repository := store.New(database.SQL)
+	server := testGizPayServer(repository)
+
+	writer := &bufferedResponseWriter{header: make(http.Header)}
+	if _, err := writer.Write([]byte("body")); err != nil || writer.status != http.StatusOK {
+		t.Fatalf("buffered writer status=%d err=%v", writer.status, err)
+	}
+
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	for _, test := range []struct {
+		name    string
+		request *http.Request
+		want    int
+	}{
+		{name: "missing idempotency key", request: httptest.NewRequest(http.MethodPatch, "/account/v1/me", nil), want: http.StatusBadRequest},
+		{name: "unreadable body", request: func() *http.Request {
+			r := httptest.NewRequest(http.MethodPatch, "/account/v1/me?mode=test", nil)
+			r.Header.Set("Idempotency-Key", "unreadable")
+			r.Body = failingRequestBody{}
+			return r
+		}(), want: http.StatusBadRequest},
+		{name: "read-only bypass", request: httptest.NewRequest(http.MethodHead, "/account/v1/me", nil), want: http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			server.idempotencyMiddleware(next).ServeHTTP(response, test.request)
+			if response.Code != test.want {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		method, path string
+		want         bool
+	}{
+		{http.MethodGet, "/admin/v1/users", false},
+		{http.MethodPut, "/callbacks/v1/payment_events", false},
+		{http.MethodPost, "/v1/files", false},
+		{http.MethodPost, "/upload/v1beta/files", false},
+		{http.MethodPost, "/v1beta/files", false},
+		{http.MethodPost, "/admin/v1/webhook_deliveries/id/retry", false},
+		{http.MethodPost, "/admin/v1/administrators/id/api_keys", false},
+		{http.MethodPost, "/admin/v1/users/id/status", true},
+		{http.MethodPost, "/account/v1/powersync/credentials", false},
+		{http.MethodPost, "/account/v1/accounts/id/topups", false},
+		{http.MethodPost, "/account/v1/accounts/id/services", false},
+		{http.MethodPost, "/account/v1/accounts/id/transfers", false},
+		{http.MethodPost, "/account/v1/accounts/id/api_keys", false},
+		{http.MethodPatch, "/account/v1/me", true},
+		{http.MethodPost, "/pay/v1/webhook_endpoints", false},
+		{http.MethodPost, "/pay/v1/payment_intents", false},
+		{http.MethodPost, "/pay/v1/payment_intents/id/cancel", true},
+		{http.MethodPost, "/admin/v1/auth/login", true},
+		{http.MethodPost, "/unknown", false},
+	} {
+		if got := journaledMutationPath(test.method, test.path); got != test.want {
+			t.Fatalf("journaledMutationPath(%s, %s)=%v want=%v", test.method, test.path, got, test.want)
+		}
+	}
+
+	for _, test := range []struct {
+		name    string
+		handler http.Handler
+	}{
+		{name: "user session", handler: server.requireUserSession(next)},
+		{name: "payment key", handler: server.requirePaymentKey("scope", next)},
+		{name: "user or Gateway", handler: server.requireUserOrGatewayScope("account:self", next)},
+	} {
+		response := httptest.NewRecorder()
+		test.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("%s status=%d", test.name, response.Code)
+		}
+	}
+}
+
+func TestPowerSyncTokenRejectsMalformedSecurityComponents(t *testing.T) {
+	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	config := powerSyncConfig{Endpoint: "https://sync.invalid", Audience: "audience", KeyID: "key", Key: []byte("0123456789abcdef0123456789abcdef")}
+	valid, err := signPowerSyncToken(config, powerSyncClaims{Subject: "user", Audience: "audience", IssuedAt: now.Unix(), Expires: now.Add(time.Minute).Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(valid, ".")
+	badHeader := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","kid":"key"}`)) + "." + parts[1] + "." + parts[2]
+	badPayload := parts[0] + ".!." + parts[2]
+	badSignature := parts[0] + "." + parts[1] + ".!"
+	wrongClaims, err := signPowerSyncToken(config, powerSyncClaims{Subject: "", Audience: "other", IssuedAt: now.Add(time.Minute).Unix(), Expires: now.Add(2 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{"one-part", "!.payload.signature", badHeader, badPayload, badSignature, wrongClaims} {
+		if _, err := verifyPowerSyncToken(config, token, now); err == nil {
+			t.Fatalf("malformed PowerSync token accepted: %q", token)
+		}
+	}
+}
+
+func TestUnconfiguredAndOversizedProviderBoundaries(t *testing.T) {
+	database := testdb.OpenGizPayStory(t)
+	defer database.Close()
+	repository := store.New(database.SQL)
+	server := testGizPayServer(repository)
+
+	for _, test := range []struct {
+		name, method, path, body string
+		handler                  http.HandlerFunc
+	}{
+		{name: "Realtime secret", method: http.MethodPost, path: "/", body: `{}`, handler: server.createRealtimeClientSecret},
+		{name: "Realtime websocket", method: http.MethodGet, path: "/", handler: server.realtimeWebSocket},
+		{name: "Realtime SDP", method: http.MethodPost, path: "/", body: "v=0", handler: server.realtimeWebRTCSDP},
+		{name: "payment callback", method: http.MethodPost, path: "/", body: `{}`, handler: server.paymentProviderCallback},
+		{name: "topup", method: http.MethodPost, path: "/", body: `{}`, handler: server.createTopup},
+		{name: "refund", method: http.MethodPost, path: "/", body: `{}`, handler: server.refundTopup},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			request.Header.Set("Idempotency-Key", "unconfigured-"+strings.ReplaceAll(test.name, " ", "-"))
+			response := httptest.NewRecorder()
+			test.handler(response, request)
+			if response.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+
+	gateway := gatewayservice.NewWithRealtimeProviderCallback(repository, nil, "", "callback-secret")
+	regional := testGizWayServer(repository, gateway)
+	for _, test := range []struct {
+		name    string
+		handler http.HandlerFunc
+		headers map[string]string
+		body    io.Reader
+		want    int
+	}{
+		{name: "missing websocket secret", handler: regional.realtimeWebSocket, want: http.StatusUnauthorized},
+		{name: "oversized SDP", handler: regional.realtimeWebRTCSDP, headers: map[string]string{"Authorization": "Bearer secret"}, body: bytes.NewReader(bytes.Repeat([]byte("x"), (1<<20)+1)), want: http.StatusRequestEntityTooLarge},
+		{name: "invalid SDP secret", handler: regional.realtimeWebRTCSDP, headers: map[string]string{"Authorization": "Bearer invalid"}, body: strings.NewReader("v=0"), want: http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", test.body)
+			for key, value := range test.headers {
+				request.Header.Set(key, value)
+			}
+			response := httptest.NewRecorder()
+			test.handler(response, request)
+			if response.Code != test.want {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+
+	payment := paymentservice.New(repository, paymentadapter.New("http://127.0.0.1:1", "provider-key"), "callback-secret")
+	configured := NewWithServicesAndClockSurface(repository, nil, payment, nil, time.Now, nil, SurfaceGizPay)
+	for _, test := range []struct {
+		name, body, signature string
+		want                  int
+	}{
+		{name: "oversized", body: string(bytes.Repeat([]byte("x"), (1<<20)+1)), want: http.StatusRequestEntityTooLarge},
+		{name: "invalid signature", body: `{}`, signature: "v1=invalid", want: http.StatusUnauthorized},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+		request.Header.Set("X-Gizway-Signature", test.signature)
+		response := httptest.NewRecorder()
+		configured.paymentProviderCallback(response, request)
+		if response.Code != test.want {
+			t.Fatalf("%s status=%d body=%s", test.name, response.Code, response.Body.String())
+		}
+	}
+
+	response := httptest.NewRecorder()
+	server.advanceStoryClock(response, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"by":"1s"}`)))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("clock without driver status=%d", response.Code)
+	}
+}
+
+func TestMutationHandlersRejectInvalidCommands(t *testing.T) {
+	database := testdb.OpenGizPayStory(t)
+	defer database.Close()
+	server := testGizPayServer(store.New(database.SQL))
 	tests := []struct {
 		name, body string
 		handler    http.HandlerFunc
@@ -263,9 +525,9 @@ func TestErrorWritersAndRecovery(t *testing.T) {
 // directly keeps this a transport-quality test; business behavior stays in
 // the Hurl stories.
 func TestHandlersTranslateDatabaseFailures(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	repository := store.New(database.SQL)
-	server := New(repository)
+	server := testGizPayServer(repository)
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -305,8 +567,7 @@ func TestHandlersTranslateDatabaseFailures(t *testing.T) {
 		{name: "providers", method: http.MethodGet, handler: server.listProviders},
 		{name: "provider endpoints", method: http.MethodGet, handler: server.listProviderEndpoints, paths: map[string]string{"provider_id": "provider"}},
 		{name: "admin api keys", method: http.MethodGet, handler: server.adminListAPIKeys},
-		{name: "gateway rows", method: http.MethodGet, handler: server.adminListGatewayRequests},
-		{name: "gateway row", method: http.MethodGet, handler: server.adminGetGatewayRequest, paths: map[string]string{"request_id": "request"}},
+		{name: "received usage", method: http.MethodGet, handler: server.adminListReceivedUsage},
 		{name: "payment rows", method: http.MethodGet, handler: server.adminListPayments},
 		{name: "ledger accounts", method: http.MethodGet, handler: server.adminListLedgerAccounts},
 		{name: "ledger transactions", method: http.MethodGet, handler: server.adminListLedgerTransactions},
@@ -350,28 +611,35 @@ func TestHandlersTranslateDatabaseFailures(t *testing.T) {
 }
 
 func TestAuthenticationDatabaseFailuresFailClosed(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	repository := store.New(database.SQL)
-	server := NewWithGateway(repository, nil)
+	server := testGizPayServer(repository)
 	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	regionalDatabase := testdb.OpenGizWayStory(t)
+	regionalServer := testGizWayServer(store.New(regionalDatabase.SQL), nil)
+	if err := regionalDatabase.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, test := range []struct {
 		name, path string
+		server     *Server
+		want       int
 	}{
-		{name: "user", path: "/account/v1/me"},
-		{name: "gateway", path: "/v1/models"},
-		{name: "payment", path: "/pay/v1/payment_intents/missing"},
-		{name: "administrator", path: "/admin/v1/models"},
+		{name: "user", path: "/account/v1/me", server: server, want: http.StatusInternalServerError},
+		{name: "gateway", path: "/v1/models", server: regionalServer, want: http.StatusServiceUnavailable},
+		{name: "payment", path: "/pay/v1/payment_intents/missing", server: server, want: http.StatusInternalServerError},
+		{name: "administrator", path: "/admin/v1/users", server: server, want: http.StatusInternalServerError},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			recorder := httptest.NewRecorder()
-			server.Handler().ServeHTTP(recorder, request)
-			if recorder.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, want 500", recorder.Code)
+			test.server.Handler().ServeHTTP(recorder, request)
+			if recorder.Code != test.want {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.want)
 			}
 		})
 	}
@@ -386,7 +654,7 @@ func TestAuthenticationDatabaseFailuresFailClosed(t *testing.T) {
 }
 
 func TestAdminListQueryValidationAndPageEnvelope(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/admin/v1/gateway_requests?cursor=2&limit=3&query=alice&status=succeeded&account_id=a&api_key_id=k&model_id=m&key_prefix=giz&type=topup&kind=user_credit&owner_account_id=o&transaction_type=transfer&reference_id=r&merchant_account_id=merchant&actor_user_id=actor&action=created&resource_type=model&resource_id=resource&from=2026-08-10T00:00:00Z&to=2026-08-11T00:00:00Z", nil)
+	request := httptest.NewRequest(http.MethodGet, "/admin/v1/received_usage?cursor=2&limit=3&query=alice&status=succeeded&account_id=a&api_key_id=k&model_id=m&key_prefix=giz&type=topup&kind=user_credit&owner_account_id=o&transaction_type=transfer&reference_id=r&merchant_account_id=merchant&actor_user_id=actor&action=created&resource_type=model&resource_id=resource&from=2026-08-10T00:00:00Z&to=2026-08-11T00:00:00Z", nil)
 	query, err := parseAdminListQuery(request)
 	if err != nil {
 		t.Fatal(err)
@@ -407,10 +675,47 @@ func TestAdminListQueryValidationAndPageEnvelope(t *testing.T) {
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"next_cursor":"3"`) || !strings.Contains(recorder.Body.String(), `"has_more":true`) {
 		t.Fatalf("page response status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	if !journaledMutationPath(http.MethodPut, "/admin/v1/accounts/a/model_entitlements/m") {
-		t.Fatal("Admin PUT mutation is not journaled")
-	}
 	if journaledMutationPath(http.MethodPost, "/account/v1/powersync/credentials") {
 		t.Fatal("short-lived PowerSync credential issuance must not replay an old journaled JWT")
 	}
+}
+
+func TestStoryClockAndGatewayScopeHelpers(t *testing.T) {
+	database := testdb.OpenGizPayStory(t)
+	defer database.Close()
+	current := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	now := func() time.Time { return current }
+	advance := func(duration time.Duration) time.Time {
+		current = current.Add(duration)
+		return current
+	}
+	repository := store.New(database.SQL)
+	repository.ConfigureClock(now)
+	server := NewWithServicesAndClockSurface(repository, nil, nil, nil, now, advance, SurfaceGizPay)
+	for _, test := range []struct {
+		body string
+		want int
+	}{
+		{`{"by":"1m"}`, http.StatusOK},
+		{`{"by":"0s"}`, http.StatusBadRequest},
+		{`{"by":"bad"}`, http.StatusBadRequest},
+		{`{"by":"9000h"}`, http.StatusBadRequest},
+		{`{"unknown":true}`, http.StatusBadRequest},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/test/v1/clock/advance", strings.NewReader(test.body))
+		response := httptest.NewRecorder()
+		server.advanceStoryClock(response, request)
+		if response.Code != test.want {
+			t.Fatalf("clock body=%s status=%d body=%s", test.body, response.Code, response.Body.String())
+		}
+	}
+
+	if !gatewayPrincipalHasScope(store.GatewayKeyPrincipal{Scopes: store.JSON(`["account:self","gateway:usage:read"]`)}, "gateway:invoke|gateway:usage:read") {
+		t.Fatal("alternative Gateway scope was not accepted")
+	}
+	if gatewayPrincipalHasScope(store.GatewayKeyPrincipal{Scopes: store.JSON(`not-json`)}, "account:self") {
+		t.Fatal("malformed Gateway scopes were accepted")
+	}
+	writer := &bufferedResponseWriter{header: make(http.Header)}
+	writer.Flush()
 }

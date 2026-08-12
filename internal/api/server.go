@@ -23,7 +23,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
 
-	"github.com/idy/gizway/internal/providerctx"
 	gatewayservice "github.com/idy/gizway/internal/service/gateway"
 	merchantservice "github.com/idy/gizway/internal/service/merchant"
 	paymentservice "github.com/idy/gizway/internal/service/payment"
@@ -38,19 +37,35 @@ const (
 	accountIDKey
 	administratorIDKey
 	apiKeyIDKey
-	gatewayRecoveryPrincipalKey
+	gatewayNodeIDKey
+	gatewayRegionKey
+	rawGatewayAPIKeyKey
+)
+
+// Surface constrains which service-owned handlers are externally reachable.
+type Surface uint8
+
+const (
+	SurfaceGizPay Surface = iota
+	SurfaceGizWay
 )
 
 // Server serves Gizway-owned APIs.
 type Server struct {
-	store     *store.Store
-	gateway   *gatewayservice.Service
-	payment   *paymentservice.Service
-	merchant  *merchantservice.Service
-	handler   http.Handler
-	now       func() time.Time
-	advance   func(time.Duration) time.Time
-	powerSync powerSyncConfig
+	store                *store.Store
+	gateway              *gatewayservice.Service
+	payment              *paymentservice.Service
+	merchant             *merchantservice.Service
+	handler              http.Handler
+	now                  func() time.Time
+	advance              func(time.Duration) time.Time
+	powerSync            powerSyncConfig
+	surface              Surface
+	readiness            func(context.Context, bool) (map[string]any, error)
+	publishRegionalRates func(context.Context, string, int64, string, []store.PublishedPrice) (string, string, error)
+	region               string
+	quotaRecheckSeconds  int
+	deniedRecheckSeconds int
 
 	realtimeMu      sync.Mutex
 	realtimeClosing bool
@@ -58,38 +73,26 @@ type Server struct {
 	realtimeDone    sync.WaitGroup
 }
 
-// New registers the implemented API operations.
-func New(repository *store.Store) *Server {
-	return NewWithServices(repository, nil, nil, merchantservice.New(repository))
-}
-
-// NewWithGateway registers APIs with an owned AI orchestration service.
-func NewWithGateway(repository *store.Store, gateway *gatewayservice.Service) *Server {
-	return NewWithServices(repository, gateway, nil, merchantservice.New(repository))
-}
-
-// NewWithServices wires optional external orchestration services while all
-// database-backed Account and Admin operations remain available.
-func NewWithServices(repository *store.Store, gateway *gatewayservice.Service, payment *paymentservice.Service, merchant *merchantservice.Service) *Server {
-	return NewWithServicesAndClock(repository, gateway, payment, merchant, time.Now, nil)
-}
-
-// NewWithServicesAndClock is the application composition seam for the
-// controllable story clock. advance is nil in production, so the fixture-only
-// clock route cannot accidentally be exposed by a normal deployment.
-func NewWithServicesAndClock(repository *store.Store, gateway *gatewayservice.Service, payment *paymentservice.Service, merchant *merchantservice.Service, now func() time.Time, advance func(time.Duration) time.Time) *Server {
+// NewWithServicesAndClockSurface composes one explicit service-owned HTTP
+// surface. Route ownership is enforced before auth/body parsing, so a regional
+// binary cannot accidentally expose Account or Payment behavior.
+func NewWithServicesAndClockSurface(repository *store.Store, gateway *gatewayservice.Service, payment *paymentservice.Service, merchant *merchantservice.Service, now func() time.Time, advance func(time.Duration) time.Time, surface Surface) *Server {
 	if now == nil {
 		now = time.Now
 	}
-	server := &Server{store: repository, gateway: gateway, payment: payment, merchant: merchant, now: now, advance: advance, realtimeConns: make(map[*websocket.Conn]struct{})}
+	server := &Server{store: repository, gateway: gateway, payment: payment, merchant: merchant, now: now, advance: advance, surface: surface,
+		quotaRecheckSeconds: 300, deniedRecheckSeconds: 300, realtimeConns: make(map[*websocket.Conn]struct{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /livez", server.liveness)
+	mux.HandleFunc("GET /readyz", server.publicReadiness)
+	mux.Handle("GET /internal/v1/readyz", server.requireGatewayNode(http.HandlerFunc(server.internalReadiness)))
+	mux.Handle("GET /admin/v1/bootstrap_status", server.requireAdmin(http.HandlerFunc(server.bootstrapStatus)))
 	if advance != nil {
 		mux.HandleFunc("POST /test/v1/clock/advance", server.advanceStoryClock)
 		mux.HandleFunc("POST /test/v1/powersync/authorize", server.authorizePowerSyncFixture)
-		mux.HandleFunc("POST /test/v1/gateway-recovery/poison", server.createGatewayRecoveryPoisonFixture)
 	}
 
 	mux.HandleFunc("POST /account/v1/auth/login", server.loginUser)
@@ -100,7 +103,6 @@ func NewWithServicesAndClock(repository *store.Store, gateway *gatewayservice.Se
 	mux.Handle("PATCH /account/v1/me", server.requireUserSession(http.HandlerFunc(server.updateCurrentUser)))
 	mux.Handle("GET /account/v1/accounts", server.requireUserSession(http.HandlerFunc(server.listAccounts)))
 	mux.Handle("GET /account/v1/accounts/{account_id}/balance", server.requireUserOrGatewayScope("account:self", http.HandlerFunc(server.getBalance)))
-	mux.Handle("GET /account/v1/accounts/{account_id}/models", server.requireUserOrGatewayScope("account:self", http.HandlerFunc(server.listAccountCatalog)))
 	mux.Handle("GET /account/v1/accounts/{account_id}/api_keys", server.requireUserSession(http.HandlerFunc(server.listAPIKeys)))
 	mux.Handle("POST /account/v1/accounts/{account_id}/api_keys", server.requireUserSession(http.HandlerFunc(server.createAPIKey)))
 	mux.Handle("DELETE /account/v1/accounts/{account_id}/api_keys/{api_key_id}", server.requireUserSession(http.HandlerFunc(server.revokeAPIKey)))
@@ -113,6 +115,12 @@ func NewWithServicesAndClock(repository *store.Store, gateway *gatewayservice.Se
 	mux.Handle("GET /account/v1/accounts/{account_id}/topups", server.requireUserSession(http.HandlerFunc(server.listTopups)))
 	mux.Handle("POST /account/v1/accounts/{account_id}/topups", server.requireUserSession(http.HandlerFunc(server.createTopup)))
 	mux.Handle("POST /account/v1/accounts/{account_id}/topups/{topup_id}/refunds", server.requireUserSession(http.HandlerFunc(server.refundTopup)))
+	// Quota Exchange is one atomic report-and-query operation. It accepts no
+	// Exchange idempotency key, lease identity, Account ID, or API Key ID; the
+	// raw customer key is verified inside GizPay and each UCGID owns retry safety.
+	mux.Handle("POST /internal/v1/quota/exchanges", server.requireGatewayNode(http.HandlerFunc(server.exchangeQuota)))
+	mux.Handle("POST /internal/v1/rate-publications", server.requireGatewayNode(http.HandlerFunc(server.publishRatePublication)))
+	mux.Handle("GET /internal/v1/rate-publications/{source_publication_id}", server.requireGatewayNode(http.HandlerFunc(server.getRatePublication)))
 	mux.Handle("POST /account/v1/merchant_accounts", server.requireUserSession(http.HandlerFunc(server.createMerchantAccount)))
 	mux.Handle("GET /account/v1/merchant_accounts/{account_id}/services", server.requireUserSession(http.HandlerFunc(server.listMerchantServices)))
 	mux.Handle("POST /account/v1/merchant_accounts/{account_id}/services", server.requireUserSession(http.HandlerFunc(server.createMerchantService)))
@@ -129,38 +137,39 @@ func NewWithServicesAndClock(repository *store.Store, gateway *gatewayservice.Se
 	mux.Handle("PATCH /pay/v1/webhook_endpoints/{endpoint_id}", server.requirePaymentKey("pay:webhooks:write", http.HandlerFunc(server.updateWebhookEndpoint)))
 	mux.Handle("DELETE /pay/v1/webhook_endpoints/{endpoint_id}", server.requirePaymentKey("pay:webhooks:write", http.HandlerFunc(server.deleteWebhookEndpoint)))
 	mux.Handle("POST /pay/v1/webhook_endpoints/{endpoint_id}/rotate_secret", server.requirePaymentKey("pay:webhooks:write", http.HandlerFunc(server.rotateWebhookEndpointSecret)))
-	mux.Handle("GET /v1/models", server.requireGatewayKey("account:self|gateway:invoke", http.HandlerFunc(server.listPublicModels)))
-	mux.Handle("GET /v1beta/models", server.requireGatewayKey("account:self|gateway:invoke", http.HandlerFunc(server.listGeminiModels)))
-	mux.Handle("POST /v1/chat/completions", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.chatCompletions)))
-	mux.Handle("POST /v1/responses", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.openAIResponses)))
-	mux.Handle("POST /v1/embeddings", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.openAIEmbeddings)))
-	mux.Handle("POST /v1/audio/speech", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.openAISpeech)))
-	mux.Handle("POST /v1/audio/transcriptions", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.openAITranscription)))
-	mux.Handle("POST /v1/images/generations", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.openAIImageGeneration)))
-	mux.Handle("POST /v1/images/edits", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("POST /v1/messages", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.anthropicMessages)))
-	mux.Handle("POST /v1/messages/batches", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("GET /v1/messages/batches", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("GET /v1/messages/batches/{batch_id}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("POST /v1/messages/batches/{batch_id}/cancel", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("DELETE /v1/messages/batches/{batch_id}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("GET /v1/messages/batches/{batch_id}/results", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("POST /v1/files", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("GET /v1/files", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("GET /v1/files/{file_id}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("DELETE /v1/files/{file_id}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("GET /v1/files/{file_id}/content", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("POST /upload/v1beta/files", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("GET /v1beta/files", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("GET /v1beta/files/{file_id}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAIRead)))
-	mux.Handle("DELETE /v1beta/files/{file_id}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.unsupportedAICommand)))
-	mux.Handle("POST /v1beta/models/{operation}", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.geminiGenerateContent)))
-	mux.Handle("POST /v1/realtime/client_secrets", server.requireGatewayKey("gateway:invoke", http.HandlerFunc(server.createRealtimeClientSecret)))
+	mux.Handle("GET /v1/models", server.requireGatewayKey(http.HandlerFunc(server.listPublicModels)))
+	mux.Handle("GET /v1beta/models", server.requireGatewayKey(http.HandlerFunc(server.listGeminiModels)))
+	mux.Handle("POST /v1/chat/completions", server.requireGatewayKey(http.HandlerFunc(server.chatCompletions)))
+	mux.Handle("POST /v1/responses", server.requireGatewayKey(http.HandlerFunc(server.openAIResponses)))
+	mux.Handle("POST /v1/embeddings", server.requireGatewayKey(http.HandlerFunc(server.openAIEmbeddings)))
+	mux.Handle("POST /v1/audio/speech", server.requireGatewayKey(http.HandlerFunc(server.openAISpeech)))
+	mux.Handle("POST /v1/audio/transcriptions", server.requireGatewayKey(http.HandlerFunc(server.openAITranscription)))
+	mux.Handle("POST /v1/images/generations", server.requireGatewayKey(http.HandlerFunc(server.openAIImageGeneration)))
+	mux.Handle("POST /v1/images/edits", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("POST /v1/messages", server.requireGatewayKey(http.HandlerFunc(server.anthropicMessages)))
+	mux.Handle("POST /v1/messages/batches", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("GET /v1/messages/batches", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("GET /v1/messages/batches/{batch_id}", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("POST /v1/messages/batches/{batch_id}/cancel", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("DELETE /v1/messages/batches/{batch_id}", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("GET /v1/messages/batches/{batch_id}/results", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("POST /v1/files", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("GET /v1/files", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("GET /v1/files/{file_id}", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("DELETE /v1/files/{file_id}", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("GET /v1/files/{file_id}/content", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("POST /upload/v1beta/files", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("GET /v1beta/files", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("GET /v1beta/files/{file_id}", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAIRead)))
+	mux.Handle("DELETE /v1beta/files/{file_id}", server.requireGatewayKey(http.HandlerFunc(server.unsupportedAICommand)))
+	mux.Handle("POST /v1beta/models/{operation}", server.requireGatewayKey(http.HandlerFunc(server.geminiGenerateContent)))
+	mux.Handle("POST /v1/realtime/client_secrets", server.requireGatewayKey(http.HandlerFunc(server.createRealtimeClientSecret)))
 	mux.HandleFunc("GET /v1/realtime", server.realtimeWebSocket)
 	mux.HandleFunc("POST /v1/realtime/calls", server.realtimeWebRTCSDP)
 	mux.HandleFunc("POST /callbacks/v1/realtime_events", server.realtimeProviderCallback)
 
 	mux.Handle("GET /admin/v1/models", server.requireAdmin(http.HandlerFunc(server.listModels)))
+	mux.Handle("POST /admin/v1/rate_publications", server.requireAdmin(http.HandlerFunc(server.publishRegionalRatePublication)))
 	mux.Handle("POST /admin/v1/models", server.requireAdmin(http.HandlerFunc(server.createModel)))
 	mux.Handle("PATCH /admin/v1/models/{model_id}", server.requireAdmin(http.HandlerFunc(server.updateModel)))
 	mux.Handle("GET /admin/v1/models/{model_id}/variants", server.requireAdmin(http.HandlerFunc(server.listModelVariants)))
@@ -170,7 +179,11 @@ func NewWithServicesAndClock(repository *store.Store, gateway *gatewayservice.Se
 	mux.Handle("POST /admin/v1/model_variants/{variant_id}/prices", server.requireAdmin(http.HandlerFunc(server.createModelPrice)))
 	server.registerAdminRoutes(mux)
 
-	handler := recoverMiddleware(server.requestIDMiddleware(server.idempotencyMiddleware(mux)))
+	// Ownership filtering runs before idempotency/auth/body handling. A request
+	// for the other binary receives a plain 404 without touching this service's
+	// command journal or any business table.
+	var routed http.Handler = surfaceHandler(surface, server.idempotencyMiddleware(mux))
+	handler := recoverMiddleware(server.requestIDMiddleware(routed))
 	if advance != nil {
 		handler = server.storyClockTick(handler)
 	}
@@ -178,13 +191,130 @@ func NewWithServicesAndClock(repository *store.Store, gateway *gatewayservice.Se
 	return server
 }
 
-func (s *Server) createGatewayRecoveryPoisonFixture(w http.ResponseWriter, r *http.Request) {
-	requestID, err := s.store.CreateCorruptGatewayRecoveryFixture(r.Context(), timetext.Format(s.now()))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "recovery fault fixture could not be created")
-		return
+// ConfigureReadiness installs composition-root checks after storage, mTLS and
+// the regional quota client have been constructed. The API owns only response
+// semantics; each binary owns the dependencies it can actually inspect.
+func (s *Server) ConfigureReadiness(check func(context.Context, bool) (map[string]any, error)) {
+	s.readiness = check
+}
+
+// ConfigureQuotaRecheckPolicy controls only the signal returned by GizPay.
+// It never creates a persisted window or lease; each Gateway caches the
+// independent response for the supplied interval.
+func (s *Server) ConfigureQuotaRecheckPolicy(allowed, denied time.Duration) {
+	if allowed >= time.Second {
+		s.quotaRecheckSeconds = int(allowed / time.Second)
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"gateway_request_id": requestID})
+	if denied >= time.Second {
+		s.deniedRecheckSeconds = int(denied / time.Second)
+	}
+}
+
+func (s *Server) ConfigureRegionalRatePublication(region string, publish func(context.Context, string, int64, string, []store.PublishedPrice) (string, string, error)) {
+	s.region = region
+	s.publishRegionalRates = publish
+}
+
+func (s *Server) liveness(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) publicReadiness(w http.ResponseWriter, r *http.Request) {
+	s.writeReadiness(w, r, false)
+}
+
+func (s *Server) internalReadiness(w http.ResponseWriter, r *http.Request) {
+	s.writeReadiness(w, r, true)
+}
+
+func (s *Server) bootstrapStatus(w http.ResponseWriter, r *http.Request) {
+	s.writeReadiness(w, r, false)
+}
+
+func (s *Server) writeReadiness(w http.ResponseWriter, r *http.Request, internal bool) {
+	var result map[string]any
+	if s.readiness == nil {
+		result = map[string]any{"status": "ready", "checks": map[string]string{"database": "ready"}}
+	} else {
+		var err error
+		result, err = s.readiness(r.Context(), internal)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "checks": map[string]string{"database": "failed"}})
+			return
+		}
+	}
+	if internal {
+		// requireGatewayNode populated these values from the registered client
+		// certificate. Returning them lets GizWay detect a valid-but-wrong
+		// certificate mounted into a regional deployment.
+		result["node_id"] = contextString(r.Context(), gatewayNodeIDKey)
+		result["region"] = contextString(r.Context(), gatewayRegionKey)
+	}
+	status := http.StatusOK
+	if result["status"] != "ready" {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, result)
+}
+
+func surfaceHandler(surface Surface, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		allowed := path == "/healthz" || path == "/livez" || path == "/readyz" || strings.HasPrefix(path, "/test/")
+		switch surface {
+		case SurfaceGizPay:
+			allowed = allowed || strings.HasPrefix(path, "/account/") || strings.HasPrefix(path, "/pay/") ||
+				strings.HasPrefix(path, "/internal/") || path == "/callbacks/v1/payment_events" || gizPayAdminPath(path)
+			if path == "/admin/v1/rate_publications" && r.Method == http.MethodPost {
+				allowed = false
+			}
+		case SurfaceGizWay:
+			allowed = allowed || strings.HasPrefix(path, "/v1/") || path == "/v1/models" ||
+				strings.HasPrefix(path, "/v1beta/") || strings.HasPrefix(path, "/upload/v1beta/") ||
+				path == "/callbacks/v1/realtime_events" || gizWayAdminPath(path)
+			if strings.HasSuffix(path, "/disable") {
+				allowed = false
+			}
+		}
+		if !allowed {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func gizWayAdminPath(path string) bool {
+	return sharedAdminPath(path) || regionalOperatorPath(path) || regionalAdminPath(path)
+}
+
+// regionalOperatorPath is deliberately separate from regionalAdminPath.
+// Both binaries own administrator identities in their own databases, while
+// only GizWay owns the Catalog paths classified by regionalAdminPath. Keeping
+// the predicates separate prevents adding local operator management from
+// accidentally hiding the same administrator routes on GizPay.
+func regionalOperatorPath(path string) bool {
+	return strings.HasPrefix(path, "/admin/v1/administrators")
+}
+
+func regionalAdminPath(path string) bool {
+	return strings.HasPrefix(path, "/admin/v1/models") || strings.HasPrefix(path, "/admin/v1/model_variants") ||
+		strings.HasPrefix(path, "/admin/v1/providers") || strings.HasPrefix(path, "/admin/v1/provider_endpoints") ||
+		strings.HasPrefix(path, "/admin/v1/gateway_executions") || strings.HasPrefix(path, "/admin/v1/rate_publications") ||
+		strings.HasPrefix(path, "/admin/v1/usage_outbox") ||
+		path == "/admin/v1/bootstrap_status"
+}
+
+func sharedAdminPath(path string) bool {
+	return strings.HasPrefix(path, "/admin/v1/auth/") || path == "/admin/v1/me"
+}
+
+func gizPayAdminPath(path string) bool {
+	// Rate publication paths are intentionally present on both Admin surfaces:
+	// GizWay exposes its local publication state, while GizPay exposes/controls
+	// the immutable center receipt. The selected binary determines the query.
+	return sharedAdminPath(path) || strings.HasPrefix(path, "/admin/v1/rate_publications") ||
+		(strings.HasPrefix(path, "/admin/") && !regionalAdminPath(path))
 }
 
 // storyClockTick gives every HTTP interaction a stable total ordering while
@@ -305,14 +435,14 @@ func journaledMutationPath(method, path string) bool {
 		return false
 	}
 	// Signed callbacks carry their provider event ID as the intrinsic command
-	// identity. AI/Realtime and top-up/refund flows own provider idempotency and
-	// durable domain command tables; wrapping them in an outer HTTP transaction
-	// would hide the reservation before the network call and reopen crash gaps.
+	// identity. AI/Realtime do not persist HTTP idempotency, while top-up/refund
+	// flows own provider idempotency and durable domain command tables. None of
+	// them belong in the generic HTTP mutation journal.
 	if strings.HasPrefix(path, "/callbacks/") || strings.HasPrefix(path, "/v1/") || strings.HasPrefix(path, "/upload/") || strings.HasPrefix(path, "/v1beta/") {
 		return false
 	}
 	if strings.HasPrefix(path, "/admin/v1/") {
-		if strings.Contains(path, "/webhook_deliveries/") || strings.HasSuffix(path, "/api_keys") {
+		if strings.Contains(path, "/webhook_deliveries/") || strings.HasSuffix(path, "/api_keys") || path == "/admin/v1/rate_publications" {
 			return false
 		}
 		return true
@@ -340,9 +470,6 @@ func journaledMutationPath(method, path string) bool {
 }
 
 func (s *Server) createRealtimeClientSecret(w http.ResponseWriter, r *http.Request) {
-	if !requireIdempotencyKey(w, r) {
-		return
-	}
 	if s.gateway == nil {
 		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "AI execution is not configured")
 		return
@@ -352,17 +479,11 @@ func (s *Server) createRealtimeClientSecret(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	created, err := s.gateway.CreateRealtimeSession(r.Context(), store.GatewayPrincipal{UserID: contextString(r.Context(), userIDKey), AccountID: contextString(r.Context(), accountIDKey), APIKeyID: contextString(r.Context(), apiKeyIDKey)}, r.Header.Get("Idempotency-Key"), request)
+	created, err := s.gateway.CreateRealtimeSession(r.Context(), customerCredential(r), request)
 	if err != nil {
 		switch {
-		case errors.Is(err, store.ErrInsufficientBalance):
-			writeError(w, http.StatusPaymentRequired, "insufficient_balance", "available balance is insufficient")
-		case errors.Is(err, store.ErrAccountFrozen):
-			writeError(w, http.StatusLocked, "account_frozen", "account balance is frozen")
-		case errors.Is(err, store.ErrIdempotencyConflict), errors.Is(err, store.ErrCredentialConsumed):
-			writeError(w, http.StatusConflict, "idempotency_conflict", "Realtime credential was already issued")
-		case errors.Is(err, store.ErrRealtimeSessionLimit):
-			writeError(w, http.StatusTooManyRequests, "session_limit", "Realtime concurrent session limit reached")
+		case errors.Is(err, gatewayservice.ErrQuotaDenied):
+			writeError(w, http.StatusPaymentRequired, "quota_denied", "current quota does not allow this request")
 		default:
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		}
@@ -387,18 +508,18 @@ func (s *Server) realtimeWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requested := r.URL.Query().Get("session_id"); requested != "" && requested != session.ID {
-		_ = s.store.ReleaseGatewayCommand(context.WithoutCancel(r.Context()), session.GatewayRequestID, "session_mismatch")
+		s.gateway.ReleaseExecution(context.WithoutCancel(r.Context()), session.GatewayRequestID, "session_mismatch")
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Realtime session mismatch")
 		return
 	}
 	client, err := websocket.Accept(w, r, nil)
 	if err != nil {
-		_ = s.store.ReleaseGatewayCommand(context.WithoutCancel(r.Context()), session.GatewayRequestID, "upgrade_error")
+		s.gateway.ReleaseExecution(context.WithoutCancel(r.Context()), session.GatewayRequestID, "upgrade_error")
 		return
 	}
 	if !s.trackRealtimeConnection(client) {
 		_ = client.CloseNow()
-		_ = s.store.ReleaseGatewayCommand(context.WithoutCancel(r.Context()), session.GatewayRequestID, "server_shutdown")
+		s.gateway.ReleaseExecution(context.WithoutCancel(r.Context()), session.GatewayRequestID, "server_shutdown")
 		return
 	}
 	defer s.untrackRealtimeConnection(client)
@@ -498,7 +619,7 @@ func (s *Server) realtimeWebRTCSDP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requested := r.URL.Query().Get("session_id"); requested == "" || requested != session.ID {
-		_ = s.store.ReleaseGatewayCommand(context.WithoutCancel(r.Context()), session.GatewayRequestID, "session_mismatch")
+		s.gateway.ReleaseExecution(context.WithoutCancel(r.Context()), session.GatewayRequestID, "session_mismatch")
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Realtime session mismatch")
 		return
 	}
@@ -963,9 +1084,14 @@ func (s *Server) advanceStoryClock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.advance(duration)
-	if _, err := s.store.ExpirePaymentIntents(r.Context(), timetext.Format(now), 1024); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "clock-dependent state could not be advanced")
-		return
+	// Payment intents belong only to GizPay. The regional test clock also
+	// drives Quota cache expiry and Gateway timeouts, but its database correctly
+	// has no payment tables to expire.
+	if s.surface == SurfaceGizPay {
+		if _, err := s.store.ExpirePaymentIntents(r.Context(), timetext.Format(now), 1024); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "clock-dependent state could not be advanced")
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"now": timetext.Format(now)})
 }
@@ -995,160 +1121,19 @@ func (s *Server) requireUserSession(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) requireGatewayKey(requiredScope string, next http.Handler) http.Handler {
+func (s *Server) requireGatewayKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if principal, ok := r.Context().Value(gatewayRecoveryPrincipalKey).(store.GatewayPrincipal); ok {
-			ctx := context.WithValue(r.Context(), userIDKey, principal.UserID)
-			ctx = context.WithValue(ctx, accountIDKey, principal.AccountID)
-			ctx = context.WithValue(ctx, apiKeyIDKey, principal.APIKeyID)
-			ctx = store.WithAuditActor(ctx, "api_key", principal.APIKeyID)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
 		secret, ok := gatewayToken(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
 			return
 		}
-		hash := sha256.Sum256([]byte(secret))
-		principal, err := s.store.AuthenticateGatewayKey(r.Context(), hash[:], timetext.Format(s.now()))
-		if err != nil {
-			if !errors.Is(err, store.ErrNotFound) {
-				writeError(w, http.StatusInternalServerError, "internal_error", "authentication failed")
-				return
-			}
-			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid bearer token")
-			return
-		}
-		if !gatewayPrincipalHasScope(principal, requiredScope) {
-			writeError(w, http.StatusForbidden, "forbidden", "Gateway key lacks "+requiredScope+" scope")
-			return
-		}
-		if requiredScope == "gateway:invoke" && !s.consumeRateLimit(w, r, "api-key:"+principal.APIKeyID, "gateway.invoke", 600, 10) {
-			return
-		}
-		ctx := context.WithValue(r.Context(), userIDKey, principal.UserID)
-		ctx = context.WithValue(ctx, accountIDKey, principal.AccountID)
-		ctx = context.WithValue(ctx, apiKeyIDKey, principal.APIKeyID)
-		ctx = store.WithAuditActor(ctx, "api_key", principal.APIKeyID)
-		if requiredScope == "gateway:invoke" && r.Method == http.MethodPost {
-			const maximumRecoverableGatewayBody = 17 << 20
-			body, readErr := io.ReadAll(io.LimitReader(r.Body, maximumRecoverableGatewayBody+1))
-			if readErr != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "request body could not be read")
-				return
-			}
-			if len(body) > maximumRecoverableGatewayBody {
-				writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "Gateway request exceeds the recoverable transport limit")
-				return
-			}
-			r.Body = io.NopCloser(bytes.NewReader(body))
-			requestURI := *r.URL
-			query := requestURI.Query()
-			query.Del("key") // Gemini query authentication is never persisted.
-			requestURI.RawQuery = query.Encode()
-			ctx = providerctx.WithRecoveryRequest(ctx, providerctx.RecoveryRequest{
-				Method: r.Method, RequestURI: requestURI.RequestURI(),
-				ContentType: r.Header.Get("Content-Type"), Body: body,
-			})
-		}
+		// GizWay deliberately does not resolve the customer, API Key ID, Account,
+		// or scopes. It forwards the raw credential only when it needs GizPay to
+		// report Usage and return the customer's current quota.
+		ctx := context.WithValue(r.Context(), rawGatewayAPIKeyKey, secret)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// RecoverGatewayCommands replays expired HTTPS leases through the real public
-// codecs and service orchestration. The persisted envelope contains no bearer
-// secret; a private context value restores only the immutable principal that
-// authorized the original database reservation. ResumeGatewayCommand remains
-// the atomic claim, so client retries and workers across replicas cannot both
-// invoke the provider concurrently.
-func (s *Server) RecoverGatewayCommands(ctx context.Context, limit int) error {
-	commands, listErr := s.store.RecoverableGatewayCommands(ctx, timetext.Format(s.now()), limit)
-	if len(commands) == 0 {
-		return listErr
-	}
-	// Provider calls are potentially slow. A small fixed pool bounds memory and
-	// upstream concurrency while allowing one stuck endpoint to stop neither a
-	// later Gateway command nor the independent payment/Realtime workers.
-	workerCount := min(4, len(commands))
-	jobs := make(chan store.RecoverableGatewayCommand)
-	errorsFound := make(chan error, len(commands))
-	var workers sync.WaitGroup
-	for range workerCount {
-		workers.Go(func() {
-			for command := range jobs {
-				if err := s.recoverGatewayCommand(ctx, command); err != nil {
-					errorsFound <- err
-				}
-			}
-		})
-	}
-	for _, command := range commands {
-		jobs <- command
-	}
-	close(jobs)
-	workers.Wait()
-	close(errorsFound)
-	if listErr != nil {
-		return listErr
-	}
-	for err := range errorsFound {
-		return err
-	}
-	return nil
-}
-
-func (s *Server) recoverGatewayCommand(ctx context.Context, command store.RecoverableGatewayCommand) error {
-	now := timetext.Format(s.now())
-	fail := func(message string, permanent bool) error {
-		if err := s.store.RecordGatewayRecoveryFailure(ctx, command.RequestID, message, now, permanent); err != nil {
-			return fmt.Errorf("record Gateway recovery failure %s: %w", command.RequestID, err)
-		}
-		return errors.New(message)
-	}
-	var envelope providerctx.RecoveryRequest
-	if err := json.Unmarshal(command.RecoveryRequest, &envelope); err != nil || envelope.Method != http.MethodPost || len(envelope.Body) == 0 || (!strings.HasPrefix(envelope.RequestURI, "/v1/") && !strings.HasPrefix(envelope.RequestURI, "/v1beta/")) {
-		return fail("Gateway recovery request "+command.RequestID+" is invalid", true)
-	}
-	replayContext := providerctx.WithRecoveryExecution(ctx)
-	replayContext = context.WithValue(replayContext, gatewayRecoveryPrincipalKey, command.Principal)
-	request, err := http.NewRequestWithContext(replayContext, envelope.Method, "http://gateway-recovery.invalid"+envelope.RequestURI, bytes.NewReader(envelope.Body))
-	if err != nil {
-		return fail("construct Gateway recovery request "+command.RequestID+": "+err.Error(), true)
-	}
-	request.Header.Set("Idempotency-Key", command.IdempotencyKey)
-	request.Header.Set("X-Request-ID", "recovery-"+command.RequestID)
-	if envelope.ContentType != "" {
-		request.Header.Set("Content-Type", envelope.ContentType)
-	}
-	response := &bufferedResponseWriter{header: make(http.Header)}
-	s.handler.ServeHTTP(response, request)
-	status, statusErr := s.store.GatewayCommandStatus(ctx, command.RequestID)
-	if statusErr != nil {
-		return fail("read Gateway recovery state "+command.RequestID+": "+statusErr.Error(), false)
-	}
-	if status == "succeeded" || status == "failed" || status == "cancelled" {
-		return nil
-	}
-	if response.status == http.StatusConflict {
-		var responseError struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
-		_ = json.Unmarshal(response.body.Bytes(), &responseError)
-		if responseError.Error.Code == "idempotency_in_progress" {
-			// A client or another replica won the atomic lease claim. Its
-			// execution owns the next transition; the losing observer is not a
-			// recovery failure and must not advance the failure counter.
-			return nil
-		}
-		// A payload mismatch is not lease contention. The persisted envelope
-		// can never reclaim this command and requires explicit reconciliation.
-		return fail(fmt.Sprintf("Gateway recovery request %s returned conflict %s", command.RequestID, responseError.Error.Code), true)
-	}
-	permanent := response.status >= 400 && response.status < 500
-	return fail(fmt.Sprintf("Gateway recovery request %s returned HTTP %d without a terminal state", command.RequestID, response.status), permanent)
 }
 
 // requireUserOrGatewayScope preserves the full User-session Account surface
@@ -1198,7 +1183,7 @@ func (s *Server) requireUserOrGatewayScope(requiredScope string, next http.Handl
 	})
 }
 
-func gatewayPrincipalHasScope(principal store.GatewayPrincipal, required string) bool {
+func gatewayPrincipalHasScope(principal store.GatewayKeyPrincipal, required string) bool {
 	var scopes []string
 	if json.Unmarshal(principal.Scopes, &scopes) != nil {
 		return false
@@ -1212,9 +1197,6 @@ func gatewayPrincipalHasScope(principal store.GatewayPrincipal, required string)
 }
 
 func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
-	if !requireIdempotencyKey(w, r) {
-		return
-	}
 	if s.gateway == nil {
 		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "AI execution is not configured")
 		return
@@ -1239,25 +1221,9 @@ func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		s.streamChatCompletions(w, r, request)
 		return
 	}
-	response, err := s.gateway.Chat(r.Context(), store.GatewayPrincipal{
-		UserID: contextString(r.Context(), userIDKey), AccountID: contextString(r.Context(), accountIDKey),
-		APIKeyID: contextString(r.Context(), apiKeyIDKey),
-	}, r.Header.Get("Idempotency-Key"), request)
+	response, err := s.gateway.Chat(r.Context(), customerCredential(r), request)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			writeError(w, http.StatusNotFound, "model_not_found", "model is not available")
-		case errors.Is(err, store.ErrInsufficientBalance):
-			writeError(w, http.StatusPaymentRequired, "insufficient_balance", "available balance is insufficient")
-		case errors.Is(err, store.ErrAccountFrozen):
-			writeError(w, http.StatusLocked, "account_frozen", "account balance is frozen")
-		case errors.Is(err, store.ErrIdempotencyConflict):
-			writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used with a different payload")
-		case errors.Is(err, store.ErrCommandInProgress):
-			writeError(w, http.StatusConflict, "idempotency_in_progress", "idempotent command is already being executed")
-		default:
-			writeError(w, http.StatusBadGateway, "provider_error", "AI request failed")
-		}
+		s.writeGatewayExecutionError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1272,10 +1238,7 @@ func (s *Server) streamChatCompletions(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	wroteHeader := false
-	err := s.gateway.StreamChat(r.Context(), store.GatewayPrincipal{
-		UserID: contextString(r.Context(), userIDKey), AccountID: contextString(r.Context(), accountIDKey),
-		APIKeyID: contextString(r.Context(), apiKeyIDKey),
-	}, r.Header.Get("Idempotency-Key"), request, func(chunk []byte) error {
+	err := s.gateway.StreamChat(r.Context(), customerCredential(r), request, func(chunk []byte) error {
 		if !wroteHeader {
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
@@ -1493,7 +1456,13 @@ func (s *Server) createMerchantAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listGatewayUsage(w http.ResponseWriter, r *http.Request) {
-	query, err := accountListQuery(r, true)
+	var query store.AccountListQuery
+	var err error
+	if s.surface == SurfaceGizPay {
+		query, err = receivedUsageListQuery(r)
+	} else {
+		query, err = accountListQuery(r, true)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -1508,12 +1477,49 @@ func (s *Server) listGatewayUsage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "to must be an RFC3339 timestamp")
 		return
 	}
-	usage, err := s.store.ListGatewayUsagePage(r.Context(), contextString(r.Context(), userIDKey), r.PathValue("account_id"), from, to, query)
+	// GizPay owns no API-key usage projection and no regional execution table.
+	// Account history is exactly the Usage received through Quota Exchange.
+	if strings.TrimSpace(r.URL.Query().Get("api_key_id")) != "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "api_key_id is not a supported Usage dimension")
+		return
+	}
+	usage, err := s.store.ListReceivedGatewayUsagePage(r.Context(), contextString(r.Context(), userIDKey), r.PathValue("account_id"), from, to, query)
 	if err != nil {
 		writeDataError(w, err)
 		return
 	}
-	writeAccountPage(w, usage)
+	asOf := usage.AsOf
+	if asOf == "" {
+		asOf = timetext.Format(s.now())
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": usage.Items,
+		"page": map[string]any{"next_cursor": usage.NextCursor, "has_more": usage.HasMore},
+		// This is deliberately not a completeness watermark. It only tells the
+		// client when GizPay read its own received-and-posted facts and that very
+		// recent regional Usage may still be waiting for a later Exchange.
+		"consistency": map[string]any{
+			"as_of":                       asOf,
+			"mode":                        "eventual",
+			"recent_usage_may_be_pending": true,
+		},
+	})
+}
+
+func receivedUsageListQuery(r *http.Request) (store.AccountListQuery, error) {
+	values := r.URL.Query()
+	query := store.AccountListQuery{Cursor: values.Get("cursor")}
+	if len(query.Cursor) > 255 {
+		return query, errors.New("cursor is too long")
+	}
+	if raw := values.Get("limit"); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 100 {
+			return query, errors.New("limit must be between 1 and 100")
+		}
+		query.Limit = limit
+	}
+	return query, nil
 }
 
 func (s *Server) listAccountTransactions(w http.ResponseWriter, r *http.Request) {
@@ -1537,15 +1543,6 @@ func (s *Server) listInvoices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page(invoices))
-}
-
-func (s *Server) listAccountCatalog(w http.ResponseWriter, r *http.Request) {
-	models, err := s.store.ListAccountCatalog(r.Context(), contextString(r.Context(), userIDKey), r.PathValue("account_id"), timetext.Format(s.now()))
-	if err != nil {
-		writeDataError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, page(models))
 }
 
 func (s *Server) getInvoice(w http.ResponseWriter, r *http.Request) {
@@ -1680,11 +1677,19 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPublicModels(w http.ResponseWriter, r *http.Request) {
+	if s.gateway == nil {
+		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "regional quota runtime is not configured")
+		return
+	}
+	if err := s.gateway.CheckQuota(r.Context(), gatewayservice.CustomerCredential{RawAPIKey: contextString(r.Context(), rawGatewayAPIKeyKey)}); err != nil {
+		s.writeGatewayExecutionError(w, err)
+		return
+	}
 	protocol := "openai"
 	if r.Header.Get("x-api-key") != "" && r.Header.Get("Authorization") == "" {
 		protocol = "anthropic"
 	}
-	models, err := s.store.ListPublicModelsForAccount(r.Context(), contextString(r.Context(), accountIDKey), protocol, s.now())
+	models, err := s.store.ListPublicModelsForAccount(r.Context(), "", protocol, s.now())
 	if err != nil {
 		writeDataError(w, err)
 		return
@@ -1708,7 +1713,15 @@ func (s *Server) listPublicModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listGeminiModels(w http.ResponseWriter, r *http.Request) {
-	models, err := s.store.ListPublicModelsForAccount(r.Context(), contextString(r.Context(), accountIDKey), "gemini", s.now())
+	if s.gateway == nil {
+		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "regional quota runtime is not configured")
+		return
+	}
+	if err := s.gateway.CheckQuota(r.Context(), gatewayservice.CustomerCredential{RawAPIKey: contextString(r.Context(), rawGatewayAPIKeyKey)}); err != nil {
+		s.writeGatewayExecutionError(w, err)
+		return
+	}
+	models, err := s.store.ListPublicModelsForAccount(r.Context(), "", "gemini", s.now())
 	if err != nil {
 		writeDataError(w, err)
 		return
@@ -2007,6 +2020,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("X-Gizway-Error-Code", code)
 	writeJSON(w, status, map[string]any{
 		"error": map[string]string{"code": code, "message": message},
 	})

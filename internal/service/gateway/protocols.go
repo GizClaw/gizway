@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,15 +10,14 @@ import (
 
 	"github.com/maximhq/bifrost/core/schemas"
 
-	"github.com/idy/gizway/internal/providerctx"
 	"github.com/idy/gizway/internal/store"
 	"github.com/idy/gizway/internal/timetext"
 )
 
 // ProtocolRenderer converts Bifrost's canonical Responses result back to the
 // exact public protocol selected by the route (OpenAI, Anthropic, or Gemini).
-// The rendered bytes, rather than an internal provider shape, are what the
-// idempotency record persists and replays.
+// The rendered bytes are returned directly to the current caller; Refactor 01
+// has no persisted response replay path.
 type ProtocolRenderer func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error)
 
 // ProtocolStreamRenderer converts one canonical Responses event into zero or
@@ -36,36 +34,25 @@ type protocolExecution struct {
 
 // executeProtocol owns the shared reserve -> provider -> measured settlement
 // state machine for every non-Realtime compatible protocol operation.
-func (s *Service) executeProtocol(ctx context.Context, principal store.GatewayPrincipal, operation, idempotencyKey, publicModel string, fingerprint any, requestedMaxOutput int64, invoke func(context.Context, []store.GatewayCandidate) (protocolExecution, error)) ([]byte, error) {
+func (s *Service) executeProtocol(ctx context.Context, principal CustomerCredential, operation, publicModel string, requestedMaxOutput int64, invoke func(context.Context, []store.GatewayCandidate) (protocolExecution, error)) ([]byte, error) {
 	if s.executor == nil {
 		return nil, errors.New("AI executor is not configured")
 	}
-	encoded, err := json.Marshal(fingerprint)
-	if err != nil {
-		return nil, fmt.Errorf("encode %s request: %w", operation, err)
-	}
-	payloadHash := sha256Bytes(encoded)
 	now := s.now().UTC()
-	plan, err := s.beginGatewayExecution(ctx, principal, operation, idempotencyKey, publicModel, payloadHash, now, requestedMaxOutput, func(candidate store.GatewayCandidate) (int64, error) {
-		return protocolReservationUpperBound(operation, candidate, requestedMaxOutput)
+	plan, err := s.beginGatewayExecution(ctx, principal, operation, publicModel, now, requestedMaxOutput, func(candidate store.GatewayCandidate) (int64, error) {
+		return protocolCommitmentUpperBound(operation, candidate, requestedMaxOutput)
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(plan.replayJSON) > 0 {
-		return plan.replayJSON, nil
-	}
 	requestID := plan.requestID
 	candidates := plan.candidates
 	candidate := candidates[0]
-	ctx = providerctx.WithIdempotencyKey(ctx, requestID)
-
 	result, err := invoke(ctx, candidates)
 	if err != nil {
 		s.releaseGatewayCommand(ctx, requestID, "provider_error")
 		return nil, err
 	}
-	s.providerSucceeded()
 	if len(result.response) == 0 || !json.Valid(result.response) {
 		s.releaseGatewayCommand(ctx, requestID, "response_error")
 		return nil, errors.New("provider-compatible response is not valid JSON")
@@ -85,21 +72,16 @@ func (s *Service) executeProtocol(ctx context.Context, principal store.GatewayPr
 		s.releaseGatewayCommand(ctx, requestID, "invalid_usage")
 		return nil, err
 	}
-	if err := s.settleGatewayCommandForVariant(ctx, requestID, result.providerRequestID, result.winner.VariantID, metrics, result.response, timetext.Format(s.now())); err != nil {
+	if err := s.settleGatewayCommandForVariant(ctx, requestID, result.providerRequestID, result.winner.VariantID, metrics, timetext.Format(s.now())); err != nil {
 		return nil, err
 	}
 	return result.response, nil
 }
 
-func sha256Bytes(value []byte) []byte {
-	hash := sha256.Sum256(value)
-	return hash[:]
-}
-
 // ExecuteResponses handles OpenAI Responses plus Anthropic/Gemini codecs that
 // translate through Bifrost's canonical Responses model.
-func (s *Service) ExecuteResponses(ctx context.Context, principal store.GatewayPrincipal, operation, idempotencyKey, publicModel string, fingerprint any, request *schemas.BifrostResponsesRequest, render ProtocolRenderer) ([]byte, error) {
-	return s.executeProtocol(ctx, principal, operation, idempotencyKey, publicModel, fingerprint, responsesMaxOutput(request), func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
+func (s *Service) ExecuteResponses(ctx context.Context, principal CustomerCredential, operation, publicModel string, request *schemas.BifrostResponsesRequest, render ProtocolRenderer) ([]byte, error) {
+	return s.executeProtocol(ctx, principal, operation, publicModel, responsesMaxOutput(request), func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
 		response, err := s.executor.ResponsesCandidates(providerContext, candidateTargets(candidates), request)
 		if err != nil {
 			return protocolExecution{}, err
@@ -137,43 +119,25 @@ func (s *Service) ExecuteResponses(ctx context.Context, principal store.GatewayP
 
 // ExecuteResponsesStream provides one shared reserve/stream/settle state
 // machine for OpenAI Responses, Anthropic Messages and Gemini GenerateContent.
-// It persists the exact framed public bytes for replay and settles only the
-// terminal provider usage after the stream closes successfully.
-func (s *Service) ExecuteResponsesStream(ctx context.Context, principal store.GatewayPrincipal, operation, idempotencyKey, publicModel string, fingerprint any, request *schemas.BifrostResponsesRequest, render ProtocolStreamRenderer, emit func([]byte) error) error {
-	encoded, err := json.Marshal(fingerprint)
-	if err != nil {
-		return fmt.Errorf("encode %s stream request: %w", operation, err)
-	}
+// It settles only the terminal provider usage after the stream closes
+// successfully; emitted frames are not retained for replay.
+func (s *Service) ExecuteResponsesStream(ctx context.Context, principal CustomerCredential, operation, publicModel string, request *schemas.BifrostResponsesRequest, render ProtocolStreamRenderer, emit func([]byte) error) error {
 	now := s.now().UTC()
-	plan, err := s.beginGatewayExecution(ctx, principal, operation, idempotencyKey, publicModel, sha256Bytes(encoded), now, responsesMaxOutput(request), func(candidate store.GatewayCandidate) (int64, error) {
-		return protocolReservationUpperBound(operation, candidate, responsesMaxOutput(request))
+	plan, err := s.beginGatewayExecution(ctx, principal, operation, publicModel, now, responsesMaxOutput(request), func(candidate store.GatewayCandidate) (int64, error) {
+		return protocolCommitmentUpperBound(operation, candidate, responsesMaxOutput(request))
 	})
 	if err != nil {
 		return err
 	}
-	if len(plan.replayJSON) > 0 {
-		var stored [][]byte
-		if err := json.Unmarshal(plan.replayJSON, &stored); err != nil {
-			return fmt.Errorf("decode stored %s stream: %w", operation, err)
-		}
-		for _, frame := range stored {
-			if err := emit(frame); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 	requestID := plan.requestID
 	candidates := plan.candidates
 	candidate := candidates[0]
-	ctx = providerctx.WithIdempotencyKey(ctx, requestID)
 	chunks, cancel, err := s.executor.ResponsesStreamCandidates(ctx, candidateTargets(candidates), request)
 	if err != nil {
 		s.releaseGatewayCommand(ctx, requestID, "provider_error")
 		return err
 	}
 	defer cancel()
-	stored := make([][]byte, 0, 8)
 	var usage *schemas.ResponsesResponseUsage
 	var clientWriteErr error
 	providerRequestID := ""
@@ -215,7 +179,6 @@ func (s *Service) ExecuteResponsesStream(ctx context.Context, principal store.Ga
 			if len(frame) == 0 {
 				continue
 			}
-			stored = append(stored, append([]byte(nil), frame...))
 			if clientWriteErr == nil {
 				if err := emit(frame); err != nil {
 					// The terminal Responses event can carry trustworthy usage.
@@ -230,7 +193,6 @@ func (s *Service) ExecuteResponsesStream(ctx context.Context, principal store.Ga
 			}
 		}
 	}
-	s.providerSucceeded()
 	if usage == nil {
 		s.releaseGatewayCommand(ctx, requestID, "invalid_usage")
 		return errors.New("provider responses stream did not include terminal usage")
@@ -257,12 +219,7 @@ func (s *Service) ExecuteResponsesStream(ctx context.Context, principal store.Ga
 		s.releaseGatewayCommand(ctx, requestID, "invalid_usage")
 		return err
 	}
-	storedJSON, err := json.Marshal(stored)
-	if err != nil {
-		s.releaseGatewayCommand(ctx, requestID, "response_error")
-		return err
-	}
-	if err := s.settleGatewayCommandForVariant(ctx, requestID, providerRequestID, resolved.VariantID, metrics, storedJSON, timetext.Format(s.now())); err != nil {
+	if err := s.settleGatewayCommandForVariant(ctx, requestID, providerRequestID, resolved.VariantID, metrics, timetext.Format(s.now())); err != nil {
 		return err
 	}
 	if clientWriteErr != nil {
@@ -271,8 +228,8 @@ func (s *Service) ExecuteResponsesStream(ctx context.Context, principal store.Ga
 	return nil
 }
 
-func (s *Service) ExecuteEmbedding(ctx context.Context, principal store.GatewayPrincipal, idempotencyKey, publicModel string, fingerprint any, request *schemas.BifrostEmbeddingRequest) ([]byte, error) {
-	return s.executeProtocol(ctx, principal, "embeddings", idempotencyKey, publicModel, fingerprint, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
+func (s *Service) ExecuteEmbedding(ctx context.Context, principal CustomerCredential, publicModel string, request *schemas.BifrostEmbeddingRequest) ([]byte, error) {
+	return s.executeProtocol(ctx, principal, "embeddings", publicModel, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
 		response, err := s.executor.EmbeddingCandidates(providerContext, candidateTargets(candidates), request)
 		if err != nil {
 			return protocolExecution{}, err
@@ -294,8 +251,8 @@ func (s *Service) ExecuteEmbedding(ctx context.Context, principal store.GatewayP
 	})
 }
 
-func (s *Service) ExecuteSpeech(ctx context.Context, principal store.GatewayPrincipal, idempotencyKey, publicModel string, fingerprint any, request *schemas.BifrostSpeechRequest) ([]byte, error) {
-	return s.executeProtocol(ctx, principal, "audio.speech", idempotencyKey, publicModel, fingerprint, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
+func (s *Service) ExecuteSpeech(ctx context.Context, principal CustomerCredential, publicModel string, request *schemas.BifrostSpeechRequest) ([]byte, error) {
+	return s.executeProtocol(ctx, principal, "audio.speech", publicModel, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
 		response, err := s.executor.SpeechCandidates(providerContext, candidateTargets(candidates), request)
 		if err != nil {
 			return protocolExecution{}, err
@@ -323,8 +280,8 @@ func (s *Service) ExecuteSpeech(ctx context.Context, principal store.GatewayPrin
 	})
 }
 
-func (s *Service) ExecuteTranscription(ctx context.Context, principal store.GatewayPrincipal, idempotencyKey, publicModel string, fingerprint any, request *schemas.BifrostTranscriptionRequest) ([]byte, error) {
-	return s.executeProtocol(ctx, principal, "audio.transcriptions", idempotencyKey, publicModel, fingerprint, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
+func (s *Service) ExecuteTranscription(ctx context.Context, principal CustomerCredential, publicModel string, request *schemas.BifrostTranscriptionRequest) ([]byte, error) {
+	return s.executeProtocol(ctx, principal, "audio.transcriptions", publicModel, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
 		response, err := s.executor.TranscriptionCandidates(providerContext, candidateTargets(candidates), request)
 		if err != nil {
 			return protocolExecution{}, err
@@ -354,8 +311,8 @@ func (s *Service) ExecuteTranscription(ctx context.Context, principal store.Gate
 	})
 }
 
-func (s *Service) ExecuteImageGeneration(ctx context.Context, principal store.GatewayPrincipal, idempotencyKey, publicModel string, fingerprint any, request *schemas.BifrostImageGenerationRequest) ([]byte, error) {
-	return s.executeProtocol(ctx, principal, "images.generations", idempotencyKey, publicModel, fingerprint, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
+func (s *Service) ExecuteImageGeneration(ctx context.Context, principal CustomerCredential, publicModel string, request *schemas.BifrostImageGenerationRequest) ([]byte, error) {
+	return s.executeProtocol(ctx, principal, "images.generations", publicModel, 0, func(providerContext context.Context, candidates []store.GatewayCandidate) (protocolExecution, error) {
 		response, err := s.executor.ImageGenerationCandidates(providerContext, candidateTargets(candidates), request)
 		if err != nil {
 			return protocolExecution{}, err
@@ -425,7 +382,7 @@ func pricedQuantities(prices map[string]store.GatewayPrice, quantities map[strin
 	return metrics, nil
 }
 
-func protocolReservationUpperBound(operation string, candidate store.GatewayCandidate, requestedMaxOutput int64) (int64, error) {
+func protocolCommitmentUpperBound(operation string, candidate store.GatewayCandidate, requestedMaxOutput int64) (int64, error) {
 	for _, metric := range requiredProtocolPrices(operation) {
 		if _, ok := candidate.Prices[metric]; !ok {
 			return 0, fmt.Errorf("missing active %s price for %s", metric, operation)
@@ -445,19 +402,19 @@ func protocolReservationUpperBound(operation string, candidate store.GatewayCand
 	case "images.generations":
 		limits["input_token"], limits["output_token"], limits["image"] = candidate.ContextWindow, maxOutput, 10
 	case "embeddings":
-		inputReserve, err := inputTokenReservationUpperBound(candidate.Prices, candidate.ContextWindow)
+		inputCommitment, err := inputTokenCommitmentUpperBound(candidate.Prices, candidate.ContextWindow)
 		if err != nil {
 			return 0, err
 		}
-		total = inputReserve
+		total = inputCommitment
 	default:
 		// Responses, Anthropic Messages and Gemini GenerateContent are
 		// token-metered in the supported compatibility surface.
-		inputReserve, err := inputTokenReservationUpperBound(candidate.Prices, candidate.ContextWindow)
+		inputCommitment, err := inputTokenCommitmentUpperBound(candidate.Prices, candidate.ContextWindow)
 		if err != nil {
 			return 0, err
 		}
-		total = inputReserve
+		total = inputCommitment
 		limits["output_token"] = maxOutput
 	}
 	for metric, price := range candidate.Prices {
@@ -470,14 +427,14 @@ func protocolReservationUpperBound(operation string, candidate store.GatewayCand
 			if err != nil {
 				return 0, err
 			}
-			return 0, errors.New("reservation overflow")
+			return 0, errors.New("quota commitment overflow")
 		}
 		total += charge
 	}
 	return total, nil
 }
 
-func inputTokenReservationUpperBound(prices map[string]store.GatewayPrice, contextWindow int64) (int64, error) {
+func inputTokenCommitmentUpperBound(prices map[string]store.GatewayPrice, contextWindow int64) (int64, error) {
 	charges := make([]int64, 0, 2)
 	for _, metric := range []string{"input_token", "cached_input_token"} {
 		price, ok := prices[metric]
@@ -496,7 +453,7 @@ func inputTokenReservationUpperBound(prices map[string]store.GatewayPrice, conte
 	// than one whole microcredit, so one extra integer unit is a safe bound.
 	if contextWindow > 1 && charges[0] > 0 && charges[1] > 0 {
 		if upper == math.MaxInt64 {
-			return 0, errors.New("reservation overflow")
+			return 0, errors.New("quota commitment overflow")
 		}
 		upper++
 	}
@@ -520,7 +477,7 @@ func responsesMaxOutput(request *schemas.BifrostResponsesRequest) int64 {
 	if request != nil && request.Params != nil && request.Params.MaxOutputTokens != nil {
 		value := int64(*request.Params.MaxOutputTokens)
 		// Zero is only the omitted sentinel inside Gizway. An explicitly supplied
-		// zero must be rejected before reservation/provider execution, matching
+		// zero must be rejected before local commitment/provider execution, matching
 		// Chat Completions and preventing Bifrost from silently raising it.
 		if value <= 0 {
 			return -1

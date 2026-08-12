@@ -16,13 +16,30 @@ func TestRepositoryOpenAPIContractsResolveBundleAndMatchRoutes(t *testing.T) {
 	if err := CheckHurlCoverage(filepath.Join(root, "api", "openapi"), filepath.Join(root, "tests", "api", "stories")); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"account.json", "admin.json", "payment.json"} {
+	for _, name := range []string{"account.json", "gizpay-admin.json", "gizway-admin.json", "internal-gizpay.json", "payment.json"} {
 		raw, err := os.ReadFile(filepath.Join(output, name))
 		if err != nil || len(raw) == 0 {
 			t.Fatalf("bundle %s: bytes=%d err=%v", name, len(raw), err)
 		}
 		if containsExternalRef(raw) {
 			t.Fatalf("bundle %s retained an external YAML reference", name)
+		}
+	}
+}
+
+func TestSharedAdministratorOperationIsLimitedToIndependentAdminRoots(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		first, second, route string
+		want                 bool
+	}{
+		{"gizpay-admin.yaml", "gizway-admin.yaml", "POST /admin/v1/auth/login", true},
+		{"gizway-admin.yaml", "gizpay-admin.yaml", "POST /admin/v1/administrators/id/api_keys", true},
+		{"gizpay-admin.yaml", "gizway-admin.yaml", "POST /admin/v1/rate_publications", false},
+		{"account.yaml", "gizway-admin.yaml", "POST /admin/v1/auth/login", false},
+	} {
+		if got := sharedAdministratorOperation(test.first, test.second, test.route); got != test.want {
+			t.Errorf("sharedAdministratorOperation(%q, %q, %q) = %t, want %t", test.first, test.second, test.route, got, test.want)
 		}
 	}
 }
@@ -90,17 +107,70 @@ paths:
 		t.Fatal(err)
 	}
 	storyPath := filepath.Join(hurl, "story.hurl")
-	if err := os.WriteFile(storyPath, []byte("# covers: getThing\nGET {{base_url}}/test/v1/not-things\n"), 0o600); err != nil {
+	if err := os.WriteFile(storyPath, []byte("# covers: account.yaml#getThing\nGET {{pay_url}}/test/v1/not-things\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := CheckHurlCoverage(openapi, hurl); err == nil {
 		t.Fatal("comment-only Hurl coverage succeeded")
 	}
-	if err := os.WriteFile(storyPath, []byte("# covers: getThing\nGET {{base_url}}/test/v1/things/{{thing_id}}\n"), 0o600); err != nil {
+	if err := os.WriteFile(storyPath, []byte("# covers: account.yaml#getThing\nGET {{pay_url}}/test/v1/things/{{thing_id}}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := CheckHurlCoverage(openapi, hurl); err != nil {
 		t.Fatalf("matching Hurl request failed: %v", err)
+	}
+}
+
+func TestHurlCoverageRequiresEveryDocumentOperation(t *testing.T) {
+	openapi := t.TempDir()
+	hurl := t.TempDir()
+	document := `openapi: 3.1.0
+info: {title: Test, version: 1.0.0}
+servers: [{url: https://api.gizway.com/test/v1}]
+paths:
+  /things:
+    get: {operationId: listThings, responses: {'200': {description: ok}}}
+  /other:
+    get: {operationId: getOther, responses: {'200': {description: ok}}}
+`
+	if err := os.WriteFile(filepath.Join(openapi, "account.yaml"), []byte(document), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	story := "# covers: account.yaml#listThings\nGET {{pay_url}}/test/v1/things\n"
+	if err := os.WriteFile(filepath.Join(hurl, "story.hurl"), []byte(story), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := CheckHurlCoverage(openapi, hurl)
+	if err == nil || !strings.Contains(err.Error(), "account.yaml#getOther") {
+		t.Fatalf("missing operation was not reported: %v", err)
+	}
+}
+
+func TestHurlCoverageSeparatesCentralAndRegionalAdminDocuments(t *testing.T) {
+	openapi := t.TempDir()
+	hurl := t.TempDir()
+	central := `openapi: 3.1.0
+info: {title: Central, version: 1.0.0}
+servers: [{url: https://credit.gizway.com/admin/v1}]
+paths:
+  /me:
+    get: {operationId: getCurrentAdministrator, responses: {'200': {description: ok}}}
+`
+	regional := strings.ReplaceAll(central, "title: Central", "title: Regional")
+	regional = strings.ReplaceAll(regional, "credit.gizway.com", "global.gizway.com")
+	if err := os.WriteFile(filepath.Join(openapi, "gizpay-admin.yaml"), []byte(central), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(openapi, "gizway-admin.yaml"), []byte(regional), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	story := "# covers: gizpay-admin.yaml#getCurrentAdministrator\nGET {{pay_url}}/admin/v1/me\n"
+	if err := os.WriteFile(filepath.Join(hurl, "story.hurl"), []byte(story), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := CheckHurlCoverage(openapi, hurl)
+	if err == nil || !strings.Contains(err.Error(), "gizway-admin.yaml#getCurrentAdministrator") {
+		t.Fatalf("regional Admin operation was incorrectly merged with central coverage: %v", err)
 	}
 }
 

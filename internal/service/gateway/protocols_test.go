@@ -2,15 +2,17 @@ package gateway
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
 
+	"github.com/idy/gizway/internal/service/gatewayquota"
+	"github.com/idy/gizway/internal/service/localadmission"
 	"github.com/idy/gizway/internal/store"
 	"github.com/idy/gizway/internal/testdb"
 )
@@ -169,17 +171,15 @@ func (*protocolExecutor) ExchangeRealtimeWebRTCSDP(context.Context, store.Provid
 	return "", errors.New("unused")
 }
 
-func protocolTestService(t *testing.T, executor *protocolExecutor) (*Service, store.GatewayPrincipal) {
+func protocolTestService(t *testing.T, executor *protocolExecutor) (*Service, CustomerCredential) {
 	t.Helper()
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizWayStory(t)
 	t.Cleanup(func() { _ = database.Close() })
 	repository := store.New(database.SQL)
-	hash := sha256.Sum256([]byte("giz_story_user_active_1"))
-	principal, err := repository.AuthenticateGatewayKey(t.Context(), hash[:], "2026-08-10T01:00:00.000000000Z")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return New(repository, executor), principal
+	runtime := gatewayquota.New(&regionalExchanger{}, localadmission.New(time.Now), repository, time.Now)
+	service := NewWithRealtimeProviderCallback(repository, executor, "", "")
+	service.ConfigureRegionalQuota(runtime)
+	return service, CustomerCredential{RawAPIKey: "giz_protocol_test"}
 }
 
 func protocolUsage() *schemas.ResponsesResponseUsage {
@@ -189,18 +189,24 @@ func protocolUsage() *schemas.ResponsesResponseUsage {
 	}
 }
 
-func assertNoActiveGatewayWork(t *testing.T, service *Service) {
-	t.Helper()
-	activeReservations, startedRequests, err := service.store.GatewayActiveWorkCounts(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if activeReservations != 0 || startedRequests != 0 {
-		t.Fatalf("active reservations=%d started requests=%d", activeReservations, startedRequests)
+func testPrices() map[string]store.GatewayPrice {
+	return map[string]store.GatewayPrice{
+		"input_token":        {ID: "input", Metric: "input_token", UnitSize: 1000, EffectivePrice: 1800},
+		"cached_input_token": {ID: "cached", Metric: "cached_input_token", UnitSize: 1000, EffectivePrice: 900},
+		"output_token":       {ID: "output", Metric: "output_token", UnitSize: 1000, EffectivePrice: 3600},
 	}
 }
 
-func TestProtocolOperationsSettleAndReplay(t *testing.T) {
+func assertNoActiveGatewayWork(t *testing.T, service *Service) {
+	t.Helper()
+	service.regionalMu.Lock()
+	defer service.regionalMu.Unlock()
+	if len(service.regionalExecutions) != 0 {
+		t.Fatalf("active regional executions=%d", len(service.regionalExecutions))
+	}
+}
+
+func TestProtocolOperationsSettleWithoutCentralReplay(t *testing.T) {
 	id := "provider-response"
 	seconds := 2.4
 	executor := &protocolExecutor{
@@ -215,29 +221,29 @@ func TestProtocolOperationsSettleAndReplay(t *testing.T) {
 		return json.Marshal(response)
 	}
 	request := &schemas.BifrostResponsesRequest{}
-	first, err := service.ExecuteResponses(t.Context(), principal, "responses", "responses-key", "story-text", map[string]any{"input": "x"}, request, render)
+	first, err := service.ExecuteResponses(t.Context(), principal, "responses", "story-text", request, render)
 	if err != nil || !json.Valid(first) {
 		t.Fatalf("ExecuteResponses = %s, %v", first, err)
 	}
-	replayed, err := service.ExecuteResponses(t.Context(), principal, "responses", "responses-key", "story-text", map[string]any{"input": "x"}, request, render)
-	if err != nil || string(replayed) != string(first) || executor.responsesCalls != 1 {
-		t.Fatalf("Responses replay = %s, calls=%d, err=%v", replayed, executor.responsesCalls, err)
+	second, err := service.ExecuteResponses(t.Context(), principal, "responses", "story-text", request, render)
+	if err != nil || string(second) != string(first) || executor.responsesCalls != 2 {
+		t.Fatalf("second regional response = %s, calls=%d, err=%v", second, executor.responsesCalls, err)
 	}
-	if _, err := service.ExecuteEmbedding(t.Context(), principal, "embedding-key", "story-text", "embed", &schemas.BifrostEmbeddingRequest{}); err != nil {
+	if _, err := service.ExecuteEmbedding(t.Context(), principal, "story-text", &schemas.BifrostEmbeddingRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ExecuteSpeech(t.Context(), principal, "speech-key", "story-text", "speech", &schemas.BifrostSpeechRequest{}); err != nil {
+	if _, err := service.ExecuteSpeech(t.Context(), principal, "story-text", &schemas.BifrostSpeechRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ExecuteTranscription(t.Context(), principal, "transcription-key", "story-text", "audio", &schemas.BifrostTranscriptionRequest{}); err != nil {
+	if _, err := service.ExecuteTranscription(t.Context(), principal, "story-text", &schemas.BifrostTranscriptionRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ExecuteImageGeneration(t.Context(), principal, "image-key", "story-text", "image", &schemas.BifrostImageGenerationRequest{}); err != nil {
+	if _, err := service.ExecuteImageGeneration(t.Context(), principal, "story-text", &schemas.BifrostImageGenerationRequest{}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestProtocolStreamSettlesAndReplaysFrames(t *testing.T) {
+func TestProtocolStreamSettlesEachRegionalExecution(t *testing.T) {
 	id := "stream-response"
 	completed := &schemas.BifrostResponsesStreamResponse{
 		Type:     schemas.ResponsesStreamResponseTypeCompleted,
@@ -250,7 +256,7 @@ func TestProtocolStreamSettlesAndReplaysFrames(t *testing.T) {
 		return [][]byte{encoded}, err
 	}
 	var first [][]byte
-	err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "stream-key", "story-text", "stream", &schemas.BifrostResponsesRequest{}, render, func(frame []byte) error {
+	err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, render, func(frame []byte) error {
 		first = append(first, append([]byte(nil), frame...))
 		return nil
 	})
@@ -258,12 +264,12 @@ func TestProtocolStreamSettlesAndReplaysFrames(t *testing.T) {
 		t.Fatalf("ExecuteResponsesStream frames=%d err=%v", len(first), err)
 	}
 	var replay [][]byte
-	err = service.ExecuteResponsesStream(t.Context(), principal, "responses", "stream-key", "story-text", "stream", &schemas.BifrostResponsesRequest{}, render, func(frame []byte) error {
+	err = service.ExecuteResponsesStream(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, render, func(frame []byte) error {
 		replay = append(replay, append([]byte(nil), frame...))
 		return nil
 	})
-	if err != nil || len(replay) != 1 || string(replay[0]) != string(first[0]) || executor.streamCalls != 1 {
-		t.Fatalf("stream replay=%q calls=%d err=%v", replay, executor.streamCalls, err)
+	if err != nil || len(replay) != 1 || string(replay[0]) != string(first[0]) || executor.streamCalls != 2 {
+		t.Fatalf("second regional stream=%q calls=%d err=%v", replay, executor.streamCalls, err)
 	}
 }
 
@@ -288,17 +294,17 @@ func TestProtocolUsageAndPricingFailures(t *testing.T) {
 		})
 	}
 	candidate := store.GatewayCandidate{ContextWindow: 4096, MaxOutputTokens: 4096, Prices: map[string]store.GatewayPrice{"unknown": {UnitSize: 1, EffectivePrice: 1}}}
-	if _, err := protocolReservationUpperBound("responses", candidate, 0); err == nil {
-		t.Fatal("unsupported reservation metric succeeded")
+	if _, err := protocolCommitmentUpperBound("responses", candidate, 0); err == nil {
+		t.Fatal("unsupported quota commitment metric succeeded")
 	}
 	overflow := map[string]store.GatewayPrice{"request": {UnitSize: 1, EffectivePrice: 1}, "input_token": {UnitSize: 1, EffectivePrice: ^int64(0)}}
 	candidate.Prices = overflow
-	if _, err := protocolReservationUpperBound("responses", candidate, 0); err == nil {
-		t.Fatal("overflow reservation succeeded")
+	if _, err := protocolCommitmentUpperBound("responses", candidate, 0); err == nil {
+		t.Fatal("overflow quota commitment succeeded")
 	}
 }
 
-func TestProtocolReservationAllowsCompleteZeroPriceSet(t *testing.T) {
+func TestProtocolCommitmentAllowsCompleteZeroPriceSet(t *testing.T) {
 	prices := testPrices()
 	for metric, price := range prices {
 		price.EffectivePrice = 0
@@ -306,8 +312,8 @@ func TestProtocolReservationAllowsCompleteZeroPriceSet(t *testing.T) {
 		prices[metric] = price
 	}
 	candidate := store.GatewayCandidate{ContextWindow: 4096, MaxOutputTokens: 4096, Prices: prices}
-	if reserved, err := protocolReservationUpperBound("responses", candidate, 0); err != nil || reserved != 0 {
-		t.Fatalf("zero-price protocol reservation = %d, %v", reserved, err)
+	if commitment, err := protocolCommitmentUpperBound("responses", candidate, 0); err != nil || commitment != 0 {
+		t.Fatalf("zero-price protocol commitment = %d, %v", commitment, err)
 	}
 }
 
@@ -329,7 +335,7 @@ func TestProtocolProviderResponsesFailClosed(t *testing.T) {
 	t.Run("responses missing usage", func(t *testing.T) {
 		executor := &protocolExecutor{responses: &schemas.BifrostResponsesResponse{}}
 		service, principal := protocolTestService(t, executor)
-		_, err := service.ExecuteResponses(t.Context(), principal, "responses", "key", "story-text", "x", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error) {
+		_, err := service.ExecuteResponses(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error) {
 			return []byte(`{}`), nil
 		})
 		if err == nil {
@@ -341,7 +347,7 @@ func TestProtocolProviderResponsesFailClosed(t *testing.T) {
 		usage.InputTokensDetails.CachedReadTokens = 12
 		executor := &protocolExecutor{responses: &schemas.BifrostResponsesResponse{Usage: usage}}
 		service, principal := protocolTestService(t, executor)
-		_, err := service.ExecuteResponses(t.Context(), principal, "responses", "key", "story-text", "x", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error) {
+		_, err := service.ExecuteResponses(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error) {
 			return []byte(`{}`), nil
 		})
 		if err == nil {
@@ -351,7 +357,7 @@ func TestProtocolProviderResponsesFailClosed(t *testing.T) {
 	t.Run("responses invalid public JSON", func(t *testing.T) {
 		executor := &protocolExecutor{responses: &schemas.BifrostResponsesResponse{Usage: protocolUsage()}}
 		service, principal := protocolTestService(t, executor)
-		_, err := service.ExecuteResponses(t.Context(), principal, "responses", "key", "story-text", "x", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error) {
+		_, err := service.ExecuteResponses(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesResponse, string) ([]byte, error) {
 			return []byte(`not-json`), nil
 		})
 		if err == nil {
@@ -366,16 +372,16 @@ func TestProtocolProviderResponsesFailClosed(t *testing.T) {
 			image:         &schemas.BifrostImageGenerationResponse{},
 		}
 		service, principal := protocolTestService(t, executor)
-		if _, err := service.ExecuteEmbedding(t.Context(), principal, "embedding", "story-text", "x", &schemas.BifrostEmbeddingRequest{}); err == nil {
+		if _, err := service.ExecuteEmbedding(t.Context(), principal, "story-text", &schemas.BifrostEmbeddingRequest{}); err == nil {
 			t.Fatal("embedding without usage succeeded")
 		}
-		if _, err := service.ExecuteSpeech(t.Context(), principal, "speech", "story-text", "x", &schemas.BifrostSpeechRequest{}); err == nil {
+		if _, err := service.ExecuteSpeech(t.Context(), principal, "story-text", &schemas.BifrostSpeechRequest{}); err == nil {
 			t.Fatal("speech without audio succeeded")
 		}
-		if _, err := service.ExecuteTranscription(t.Context(), principal, "transcription", "story-text", "x", &schemas.BifrostTranscriptionRequest{}); err == nil {
+		if _, err := service.ExecuteTranscription(t.Context(), principal, "story-text", &schemas.BifrostTranscriptionRequest{}); err == nil {
 			t.Fatal("transcription without usage succeeded")
 		}
-		if _, err := service.ExecuteImageGeneration(t.Context(), principal, "image", "story-text", "x", &schemas.BifrostImageGenerationRequest{}); err == nil {
+		if _, err := service.ExecuteImageGeneration(t.Context(), principal, "story-text", &schemas.BifrostImageGenerationRequest{}); err == nil {
 			t.Fatal("image without result succeeded")
 		}
 	})
@@ -384,7 +390,7 @@ func TestProtocolProviderResponsesFailClosed(t *testing.T) {
 			PromptTokens: 2, PromptTokensDetails: &schemas.ChatPromptTokensDetails{CachedReadTokens: 3}, TotalTokens: 2,
 		}}}
 		service, principal := protocolTestService(t, executor)
-		if _, err := service.ExecuteEmbedding(t.Context(), principal, "embedding-invalid-cache", "story-text", "x", &schemas.BifrostEmbeddingRequest{}); err == nil {
+		if _, err := service.ExecuteEmbedding(t.Context(), principal, "story-text", &schemas.BifrostEmbeddingRequest{}); err == nil {
 			t.Fatal("embedding cached input above total succeeded")
 		}
 		assertNoActiveGatewayWork(t, service)
@@ -393,18 +399,18 @@ func TestProtocolProviderResponsesFailClosed(t *testing.T) {
 		t.Run("transcription "+name, func(t *testing.T) {
 			executor := &protocolExecutor{transcription: &schemas.BifrostTranscriptionResponse{Usage: &schemas.TranscriptionUsage{Seconds: &duration}}}
 			service, principal := protocolTestService(t, executor)
-			if _, err := service.ExecuteTranscription(t.Context(), principal, "key", "story-text", "x", &schemas.BifrostTranscriptionRequest{}); err == nil {
+			if _, err := service.ExecuteTranscription(t.Context(), principal, "story-text", &schemas.BifrostTranscriptionRequest{}); err == nil {
 				t.Fatal("invalid duration succeeded")
 			}
 		})
 	}
 }
 
-func TestProtocolStreamFailuresReleaseReservation(t *testing.T) {
+func TestProtocolStreamFailuresReleaseCommitment(t *testing.T) {
 	t.Run("missing terminal usage", func(t *testing.T) {
 		executor := &protocolExecutor{stream: []*schemas.BifrostStreamChunk{{BifrostResponsesStreamResponse: &schemas.BifrostResponsesStreamResponse{Type: schemas.ResponsesStreamResponseTypeCreated}}}}
 		service, principal := protocolTestService(t, executor)
-		err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "key", "story-text", "x", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesStreamResponse, string) ([][]byte, error) {
+		err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesStreamResponse, string) ([][]byte, error) {
 			return [][]byte{[]byte(`{}`)}, nil
 		}, func([]byte) error { return nil })
 		if err == nil {
@@ -415,7 +421,7 @@ func TestProtocolStreamFailuresReleaseReservation(t *testing.T) {
 	t.Run("render failure", func(t *testing.T) {
 		executor := &protocolExecutor{stream: []*schemas.BifrostStreamChunk{{BifrostResponsesStreamResponse: &schemas.BifrostResponsesStreamResponse{Type: schemas.ResponsesStreamResponseTypeCreated}}}}
 		service, principal := protocolTestService(t, executor)
-		err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "key", "story-text", "x", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesStreamResponse, string) ([][]byte, error) {
+		err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesStreamResponse, string) ([][]byte, error) {
 			return nil, errors.New("codec")
 		}, func([]byte) error { return nil })
 		if err == nil {
@@ -426,7 +432,7 @@ func TestProtocolStreamFailuresReleaseReservation(t *testing.T) {
 	t.Run("client disconnect", func(t *testing.T) {
 		executor := &protocolExecutor{stream: []*schemas.BifrostStreamChunk{{BifrostResponsesStreamResponse: &schemas.BifrostResponsesStreamResponse{Type: schemas.ResponsesStreamResponseTypeCreated}}}}
 		service, principal := protocolTestService(t, executor)
-		err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "key", "story-text", "x", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesStreamResponse, string) ([][]byte, error) {
+		err := service.ExecuteResponsesStream(t.Context(), principal, "responses", "story-text", &schemas.BifrostResponsesRequest{}, func(context.Context, *schemas.BifrostResponsesStreamResponse, string) ([][]byte, error) {
 			return [][]byte{[]byte(`{}`)}, nil
 		}, func([]byte) error { return errors.New("disconnect") })
 		if err == nil {

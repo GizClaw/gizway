@@ -95,3 +95,16 @@ jobs:
 
       - name: Run PostgreSQL unit tests
         run: make test-unit-postgresql
+
+  e2e:
+    name: Split-service Compose E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Run quota, product, and failure profiles
+        run: make test-e2e

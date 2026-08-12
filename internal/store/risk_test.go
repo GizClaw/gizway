@@ -47,7 +47,11 @@ func TestMerchantServiceRiskLifecycle(t *testing.T) {
 	}
 
 	services, err := repository.ListMerchantServices(ctx, "11000000-0000-4000-8000-000000000002", merchantAccountID)
-	if err != nil || len(services) < 2 {
+	found := false
+	for _, listed := range services {
+		found = found || listed.ID == service.ID
+	}
+	if err != nil || len(services) != 2 || !found {
 		t.Fatalf("ListMerchantServices = %d, %v", len(services), err)
 	}
 	approved, err := repository.DecideMerchantService(ctx, "90000000-0000-4000-8000-000000000001", service.ID, "approve", "approved after risk", "2026-08-10T00:00:01.000000000Z")
@@ -83,7 +87,7 @@ func TestMerchantServiceRiskDenialAndPaymentLimits(t *testing.T) {
 
 	intentHash := sha256.Sum256([]byte("intent"))
 	intent := store.PaymentIntent{ID: "intent-over-limit", MerchantAccountID: merchantAccountID, ServiceID: "23000000-0000-4000-8000-000000000001", ExternalOrderID: "over", Amount: store.CreditAmount{Asset: "GIZ_CREDIT", Microcredits: 10_000_001}, PlatformFee: store.CreditAmount{Asset: "GIZ_CREDIT", Microcredits: 1}, NetAmount: store.CreditAmount{Asset: "GIZ_CREDIT", Microcredits: 10_000_000}, FeeBPS: 250, Status: "created", Metadata: store.JSON(`{}`), ExpiresAt: "2027-08-10T00:00:00.000000000Z", CreatedAt: "2026-08-10T00:00:00.000000000Z"}
-	if _, _, err := repository.CreatePaymentIntent(ctx, merchantAccountID, "over-limit", intentHash[:], intent); !errors.Is(err, store.ErrRiskDenied) {
+	if _, _, err := repository.CreatePaymentIntentForKey(ctx, merchantAccountID, "", "over-limit", intentHash[:], intent); !errors.Is(err, store.ErrRiskDenied) {
 		t.Fatalf("over-limit payment intent = %v", err)
 	}
 }

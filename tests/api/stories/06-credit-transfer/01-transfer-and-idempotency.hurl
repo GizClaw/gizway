@@ -9,9 +9,9 @@
 #
 # Fixture: story-base
 # Isolation: this file receives a new PostgreSQL schema and server process.
-# covers: createCreditTransfer listCreditTransfers getAccountBalance
+# covers: account.yaml#createCreditTransfer account.yaml#listCreditTransfers account.yaml#getAccountBalance
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -19,7 +19,7 @@ HTTP 200
 jsonpath "$.microcredits" == 100000000
 
 
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-06-transfer-one
 Content-Type: application/json
@@ -40,7 +40,7 @@ jsonpath "$.status" == "succeeded"
 
 
 # Same key and byte-equivalent business payload returns the original resource.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-06-transfer-one
 Content-Type: application/json
@@ -56,7 +56,7 @@ jsonpath "$.id" == "{{transfer_id}}"
 
 
 # A changed payload under the same command key must not mutate either balance.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-06-transfer-one
 Content-Type: application/json
@@ -71,7 +71,7 @@ HTTP 409
 jsonpath "$.error.code" == "idempotency_conflict"
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -79,7 +79,7 @@ HTTP 200
 jsonpath "$.microcredits" == 75000000
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -87,7 +87,7 @@ HTTP 200
 jsonpath "$.microcredits" == 75000000
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -97,7 +97,7 @@ jsonpath "$.data[0].id" == "{{transfer_id}}"
 jsonpath "$.data[0].direction" == "outgoing"
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/transfers
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/transfers
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -110,7 +110,7 @@ jsonpath "$.data[0].direction" == "incoming"
 # The list contract is bounded even when the current fixture has one row.
 # Invalid cursors are rejected instead of being ignored and triggering a full
 # table scan; valid limit=1 still returns the one transfer without continuation.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers?limit=1
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers?limit=1
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -119,7 +119,7 @@ jsonpath "$.data" count == 1
 jsonpath "$.page.has_more" == false
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers?cursor=not-a-cursor
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers?cursor=not-a-cursor
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 400

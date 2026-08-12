@@ -15,7 +15,7 @@ func TestEmbeddedAccountScopedProjectionContract(t *testing.T) {
 			t.Errorf("sync rules do not bind %s to account bucket", view)
 		}
 	}
-	for _, table := range []string{"gateway_requests", "credit_transfers", "topups", "refunds", "payment_intents", "ledger_entries"} {
+	for _, table := range []string{"gateway_usage_records", "credit_transfers", "topups", "refunds", "payment_intents", "ledger_entries"} {
 		if !strings.Contains(PublicationSQL, table) {
 			t.Errorf("publication omits %s", table)
 		}

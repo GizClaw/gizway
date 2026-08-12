@@ -17,10 +17,10 @@
 #
 # Fixture: a zero-balance account is created through the public Account API.
 # Isolation: fresh PostgreSQL and separate fake AI/payment processes per file.
-# covers: createMerchantAccount createApiKey createTopup listTopups
-# covers: refundUnusedTopup getAccountBalance listAccountTransactions listInvoices getInvoice
+# covers: account.yaml#createMerchantAccount account.yaml#createApiKey account.yaml#createTopup account.yaml#listTopups
+# covers: account.yaml#refundUnusedTopup account.yaml#getAccountBalance account.yaml#listAccountTransactions account.yaml#listInvoices account.yaml#getInvoice
 
-POST {{base_url}}/account/v1/merchant_accounts
+POST {{pay_url}}/account/v1/merchant_accounts
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-zero-account
 Content-Type: application/json
@@ -36,7 +36,7 @@ HTTP 201
 topup_account_id: jsonpath "$.account.id"
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/api_keys
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-gateway-key
 Content-Type: application/json
@@ -59,7 +59,7 @@ POST {{payment_url}}/v1/test/fail_next_checkout_after_commit
 HTTP 204
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-topup
 Content-Type: application/json
@@ -73,7 +73,7 @@ HTTP 503
 jsonpath "$.error.code" == "provider_unavailable"
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-topup
 Content-Type: application/json
@@ -98,7 +98,7 @@ jsonpath "$.refundable_amount.microcredits" == 0
 # Retrying the same customer command may repeat the network request after an
 # ambiguous response, but the stable top-up ID is also sent as the provider's
 # Idempotency-Key. The provider therefore creates exactly one checkout.
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-topup
 Content-Type: application/json
@@ -120,7 +120,7 @@ jsonpath "$.provider_reference" == "{{provider_reference}}"
 POST {{payment_url}}/v1/test/confirm
 Content-Type: application/json
 {
-  "callback_url": "{{base_url}}/callbacks/v1/payment_events",
+  "callback_url": "{{pay_url}}/callbacks/v1/payment_events",
   "event_id": "storypay-event-05-expired",
   "provider_reference": "{{provider_reference}}",
   "currency": "USD",
@@ -134,7 +134,7 @@ HTTP 401
 POST {{payment_url}}/v1/test/confirm
 Content-Type: application/json
 {
-  "callback_url": "{{base_url}}/callbacks/v1/payment_events",
+  "callback_url": "{{pay_url}}/callbacks/v1/payment_events",
   "event_id": "storypay-event-05-future",
   "provider_reference": "{{provider_reference}}",
   "currency": "USD",
@@ -148,7 +148,7 @@ HTTP 401
 POST {{payment_url}}/v1/test/confirm
 Content-Type: application/json
 {
-  "callback_url": "{{base_url}}/callbacks/v1/payment_events",
+  "callback_url": "{{pay_url}}/callbacks/v1/payment_events",
   "event_id": "storypay-event-05-one",
   "provider_reference": "{{provider_reference}}",
   "currency": "USD",
@@ -162,7 +162,7 @@ HTTP 200
 POST {{payment_url}}/v1/test/confirm
 Content-Type: application/json
 {
-  "callback_url": "{{base_url}}/callbacks/v1/payment_events",
+  "callback_url": "{{pay_url}}/callbacks/v1/payment_events",
   "event_id": "storypay-event-05-one",
   "provider_reference": "{{provider_reference}}",
   "currency": "USD",
@@ -175,7 +175,7 @@ HTTP 200
 # One successful event creates one immutable invoice even after the exact
 # provider redelivery above. Provider routing and credential fields are not
 # part of the customer receipt.
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/invoices
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/invoices
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -191,7 +191,7 @@ jsonpath "$.data[0].provider_reference" not exists
 jsonpath "$.data[0].secret" not exists
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/invoices/{{invoice_id}}
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/invoices/{{invoice_id}}
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -201,13 +201,13 @@ jsonpath "$.topup_id" == "{{topup_id}}"
 
 
 # Ownership is derived from the authenticated user, not only the account path.
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/invoices/{{invoice_id}}
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/invoices/{{invoice_id}}
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 404
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/balance
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -215,7 +215,7 @@ HTTP 200
 jsonpath "$.microcredits" == 10000000
 
 
-POST {{base_url}}/v1/chat/completions
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{topup_gateway_key}}
 Idempotency-Key: story-05-consume-credit
 Content-Type: application/json
@@ -228,7 +228,25 @@ Content-Type: application/json
 HTTP 200
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups
+# Usage is delivered on the next short quota exchange, not synchronously in
+# the provider response. Advancing the regional clock and querying the catalog
+# triggers that exchange before refundable-lot accounting is inspected.
+POST {{way_url}}/test/v1/clock/advance
+Content-Type: application/json
+{
+  "by": "5m"
+}
+
+HTTP 200
+
+
+GET {{way_url}}/v1/models
+Authorization: Bearer {{topup_gateway_key}}
+
+HTTP 200
+
+
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -241,7 +259,7 @@ jsonpath "$.data[0].refundable_amount.microcredits" == 9999964
 # Top-up history is a bounded cursor page. A malformed cursor must be rejected
 # rather than ignored; otherwise a growing financial history becomes an
 # unbounded production query even though OpenAPI advertises pagination.
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups?limit=1
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups?limit=1
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -250,7 +268,7 @@ jsonpath "$.data" count == 1
 jsonpath "$.page.has_more" == false
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups?cursor=bad
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups?cursor=bad
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 400
@@ -266,7 +284,7 @@ POST {{payment_url}}/v1/test/fail_next_refund_after_commit
 HTTP 204
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-refund
 Content-Type: application/json
@@ -279,7 +297,7 @@ HTTP 503
 jsonpath "$.error.code" == "provider_unavailable"
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-refund
 Content-Type: application/json
@@ -295,7 +313,7 @@ jsonpath "$.fiat_amount_minor" == 450
 
 
 # The same command replays the original refund and does not call StoryPay again.
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-refund
 Content-Type: application/json
@@ -309,7 +327,7 @@ jsonpath "$.status" == "succeeded"
 
 
 # Spent and already-refunded Credit is no longer refundable.
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-over-refund
 Content-Type: application/json
@@ -322,7 +340,7 @@ HTTP 409
 jsonpath "$.error.code" == "not_refundable"
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/balance
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -339,7 +357,7 @@ jsonpath "$.checkouts" == 1
 jsonpath "$.refunds" == 1
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/transactions
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/transactions
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -358,7 +376,7 @@ POST {{payment_url}}/v1/test/fail_next_refund
 HTTP 204
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-definitive-refund-failure
 Content-Type: application/json
@@ -372,7 +390,7 @@ jsonpath "$.status" == "failed"
 jsonpath "$.completed_at" exists
 
 
-GET {{base_url}}/account/v1/accounts/{{topup_account_id}}/balance
+GET {{pay_url}}/account/v1/accounts/{{topup_account_id}}/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -380,7 +398,7 @@ HTTP 200
 jsonpath "$.microcredits" == 4999964
 
 
-POST {{base_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
+POST {{pay_url}}/account/v1/accounts/{{topup_account_id}}/topups/{{topup_id}}/refunds
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-05-definitive-refund-failure
 Content-Type: application/json

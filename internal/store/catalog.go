@@ -33,18 +33,7 @@ type AccountCatalogModel struct {
 	CreatedAt    string                  `json:"created_at"`
 }
 
-func (s *Store) ListAccountCatalog(ctx context.Context, userID, accountID string, at string) ([]AccountCatalogModel, error) {
-	var owned int
-	if err := s.db.GetContext(ctx, &owned, `SELECT COUNT(*) FROM accounts a JOIN users u ON u.id=a.owner_user_id WHERE a.id=? AND a.owner_user_id=? AND a.status='active' AND u.status='active'`, accountID, userID); err != nil {
-		return nil, err
-	}
-	if owned == 0 {
-		return nil, ErrNotFound
-	}
-	return s.listExecutableCatalog(ctx, accountID, at)
-}
-
-func (s *Store) listExecutableCatalog(ctx context.Context, accountID, at string) ([]AccountCatalogModel, error) {
+func (s *Store) listExecutableCatalog(ctx context.Context, _ string, at string) ([]AccountCatalogModel, error) {
 	var rows []struct {
 		ModelID         string `db:"model_id"`
 		Slug            string `db:"slug"`
@@ -56,13 +45,10 @@ func (s *Store) listExecutableCatalog(ctx context.Context, accountID, at string)
 		ContextWindow   *int64 `db:"context_window"`
 		MaxOutputTokens *int64 `db:"max_output_tokens"`
 	}
-	if err := s.db.SelectContext(ctx, &rows, `SELECT m.id AS model_id,m.slug,m.name,m.created_at,mv.id AS variant_id,mv.variant_slug,mv.capabilities,mv.context_window,mv.max_output_tokens FROM models m JOIN model_variants mv ON mv.model_id=m.id JOIN provider_endpoints pe ON pe.id=mv.provider_endpoint_id JOIN providers p ON p.id=pe.provider_id WHERE m.status='active' AND mv.status IN ('active','degraded') AND pe.status='active' AND p.status='active'
-		AND (?='' OR (
-		  NOT EXISTS (SELECT 1 FROM account_model_entitlements deny_rule WHERE deny_rule.account_id=? AND deny_rule.model_id=m.id AND deny_rule.effect='deny')
-		  AND (NOT EXISTS (SELECT 1 FROM account_model_entitlements allow_mode WHERE allow_mode.account_id=? AND allow_mode.effect='allow')
-		       OR EXISTS (SELECT 1 FROM account_model_entitlements allow_rule WHERE allow_rule.account_id=? AND allow_rule.model_id=m.id AND allow_rule.effect='allow'))
-		))
-		ORDER BY m.slug,pe.priority,mv.variant_slug`, accountID, accountID, accountID, accountID); err != nil {
+	baseQuery := `SELECT m.id AS model_id,m.slug,m.name,m.created_at,mv.id AS variant_id,mv.variant_slug,mv.capabilities,mv.context_window,mv.max_output_tokens FROM models m JOIN model_variants mv ON mv.model_id=m.id JOIN provider_endpoints pe ON pe.id=mv.provider_endpoint_id JOIN providers p ON p.id=pe.provider_id WHERE m.status='active' AND mv.status IN ('active','degraded') AND pe.status='active' AND p.status='active'`
+	args := []any{}
+	baseQuery += ` ORDER BY m.slug,pe.priority,mv.variant_slug`
+	if err := s.db.SelectContext(ctx, &rows, baseQuery, args...); err != nil {
 		return nil, err
 	}
 	models := make([]AccountCatalogModel, 0)

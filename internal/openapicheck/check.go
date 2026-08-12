@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -63,6 +64,11 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 		if err := standardDocument.Validate(context.Background()); err != nil {
 			return fmt.Errorf("%s: standard OpenAPI validation: %w", name, err)
 		}
+		resolved, err := bundleValue(docs, name, document, map[string]bool{})
+		if err != nil {
+			return err
+		}
+		document = resolved.(map[string]any)
 		rootCount++
 		basePath, err := serverBasePath(document)
 		if err != nil {
@@ -90,11 +96,11 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 				if operationID == "" {
 					return fmt.Errorf("%s: %s %s lacks operationId", name, upper, path)
 				}
-				if previous := operationIDs[operationID]; previous != "" {
+				route := upper + " " + strings.TrimSuffix(basePath, "/") + path
+				if previous := operationIDs[operationID]; previous != "" && !sharedAdministratorOperation(previous, name, route) {
 					return fmt.Errorf("duplicate operationId %s in %s and %s", operationID, previous, name)
 				}
 				operationIDs[operationID] = name
-				route := upper + " " + strings.TrimSuffix(basePath, "/") + path
 				documentedRoutes[route] = true
 				if !implemented[route] {
 					return fmt.Errorf("%s: documented route %s is not registered by internal/api", name, route)
@@ -105,12 +111,12 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 			return err
 		}
 	}
-	if rootCount != 3 {
-		return fmt.Errorf("expected 3 root OpenAPI documents, found %d", rootCount)
+	if rootCount != 5 {
+		return fmt.Errorf("expected 5 root OpenAPI documents, found %d", rootCount)
 	}
 	for route := range implemented {
 		path := strings.SplitN(route, " ", 2)[1]
-		if path == "/healthz" || strings.HasPrefix(path, "/test/") || hurlOnlyProtocolPath(path) {
+		if operationalPath(path) || strings.HasPrefix(path, "/test/") || hurlOnlyProtocolPath(path) {
 			continue
 		}
 		if !documentedRoutes[route] {
@@ -123,7 +129,7 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
 		return err
 	}
-	for _, name := range []string{"account.yaml", "admin.yaml", "payment.yaml"} {
+	for _, name := range []string{"account.yaml", "gizpay-admin.yaml", "gizway-admin.yaml", "internal-gizpay.yaml", "payment.yaml"} {
 		bundled, err := bundleValue(docs, name, docs[name], map[string]bool{})
 		if err != nil {
 			return err
@@ -138,6 +144,27 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 		}
 	}
 	return nil
+}
+
+// GizPay and every regional GizWay deployment have independent administrator
+// databases but intentionally implement the same identity API. The two root
+// contracts are deployed at different servers, so OpenAPI requires operationId
+// uniqueness inside each document, not across those documents. Keep this
+// exception narrow: Catalog and center-only operations must remain globally
+// distinct so accidental cross-surface ownership still fails the contract gate.
+func sharedAdministratorOperation(first, second, route string) bool {
+	if !((first == "gizpay-admin.yaml" && second == "gizway-admin.yaml") ||
+		(first == "gizway-admin.yaml" && second == "gizpay-admin.yaml")) {
+		return false
+	}
+	path := strings.SplitN(route, " ", 2)[1]
+	return strings.HasPrefix(path, "/admin/v1/auth/") || path == "/admin/v1/me" ||
+		strings.HasPrefix(path, "/admin/v1/administrators")
+}
+
+func operationalPath(path string) bool {
+	return path == "/healthz" || path == "/livez" || path == "/readyz" ||
+		path == "/internal/v1/readyz" || path == "/admin/v1/bootstrap_status"
 }
 
 func loadDocuments(directory string) (documents, error) {
@@ -191,11 +218,11 @@ func serverBasePath(document map[string]any) (string, error) {
 		return "", errors.New("server must be an object")
 	}
 	value, _ := server["url"].(string)
-	prefix := "https://api.gizway.com"
-	if !strings.HasPrefix(value, prefix) {
-		return "", errors.New("canonical server must use https://api.gizway.com")
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("canonical server must be an absolute HTTPS URL")
 	}
-	return strings.TrimPrefix(value, prefix), nil
+	return parsed.Path, nil
 }
 
 func bundleValue(docs documents, current string, value any, stack map[string]bool) (any, error) {

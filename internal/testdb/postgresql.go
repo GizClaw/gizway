@@ -15,28 +15,45 @@ import (
 	"github.com/idy/gizway/internal/storage"
 )
 
-// OpenStory creates, migrates, and seeds one schema owned by the test.
-func OpenStory(t testing.TB) *storage.Storage {
+// OpenGizPayStory creates a seeded control-plane schema owned by the test.
+func OpenGizPayStory(t testing.TB) *storage.Storage {
 	t.Helper()
-	return open(t, true)
+	return openStory(t, storage.OpenGizPayStoryPostgreSQL)
 }
 
-// OpenEmpty creates and migrates one schema without fixture rows.
-func OpenEmpty(t testing.TB) *storage.Storage {
+// OpenGizWayStory creates a seeded regional schema owned by the test.
+func OpenGizWayStory(t testing.TB) *storage.Storage {
 	t.Helper()
-	return open(t, false)
+	return openStory(t, storage.OpenGizWayStoryPostgreSQL)
 }
 
-func open(t testing.TB, storySeed bool) *storage.Storage {
+// OpenGizPay and OpenGizWay are the architecture-test entrypoints. Tests of a
+// production service must use its direct schema rather than the legacy story
+// monolith, otherwise a query can pass only because the wrong database happens
+// to contain both control-plane and regional tables.
+func OpenGizPay(t testing.TB) *storage.Storage {
 	t.Helper()
-	scopedDSN := NewSchema(t)
-	var database *storage.Storage
-	var err error
-	if storySeed {
-		database, err = storage.OpenStoryPostgreSQL(scopedDSN)
-	} else {
-		database, err = storage.OpenPostgreSQL(scopedDSN, true)
+	return openService(t, storage.OpenGizPayPostgreSQL)
+}
+
+func OpenGizWay(t testing.TB) *storage.Storage {
+	t.Helper()
+	return openService(t, storage.OpenGizWayPostgreSQL)
+}
+
+func openService(t testing.TB, opener func(string, bool) (*storage.Storage, error)) *storage.Storage {
+	t.Helper()
+	database, err := opener(NewSchema(t), true)
+	if err != nil {
+		t.Fatalf("open isolated service PostgreSQL schema: %v", err)
 	}
+	t.Cleanup(func() { _ = database.Close() })
+	return database
+}
+
+func openStory(t testing.TB, opener func(string) (*storage.Storage, error)) *storage.Storage {
+	t.Helper()
+	database, err := opener(NewSchema(t))
 	if err != nil {
 		t.Fatalf("open isolated PostgreSQL schema: %v", err)
 	}

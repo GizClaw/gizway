@@ -8,4 +8,4 @@ cd "${repository_root}"
 start_test_postgresql
 trap stop_test_postgresql EXIT INT TERM
 
-"${GO:-go}" test -count=1 ./internal/store -run '^TestPostgreSQL'
+"${GO:-go}" test -count=1 ./internal/store ./internal/storage ./internal/service/gateway ./internal/service/gatewayquota ./internal/api -run '^TestPostgreSQL'

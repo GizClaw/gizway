@@ -11,10 +11,10 @@
 #
 # Fixture: story-base administrator key.
 # Isolation: fresh PostgreSQL per file.
-# covers: listProviders createProvider updateProvider listProviderEndpoints
-# covers: createProviderEndpoint updateProviderEndpoint rotateProviderCredential
+# covers: gizway-admin.yaml#listProviders gizway-admin.yaml#createProvider gizway-admin.yaml#updateProvider gizway-admin.yaml#listProviderEndpoints
+# covers: gizway-admin.yaml#createProviderEndpoint gizway-admin.yaml#updateProviderEndpoint gizway-admin.yaml#rotateProviderCredential
 
-GET {{base_url}}/admin/v1/providers
+GET {{way_url}}/admin/v1/providers
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
@@ -22,7 +22,7 @@ HTTP 200
 jsonpath "$.data" count == 1
 
 
-POST {{base_url}}/admin/v1/providers
+POST {{way_url}}/admin/v1/providers
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-provider
 Content-Type: application/json
@@ -38,7 +38,7 @@ provider_id: jsonpath "$.id"
 jsonpath "$.status" == "active"
 
 
-POST {{base_url}}/admin/v1/providers/{{provider_id}}/endpoints
+POST {{way_url}}/admin/v1/providers/{{provider_id}}/endpoints
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-provider-endpoint
 Content-Type: application/json
@@ -63,7 +63,7 @@ jsonpath "$.credential_ref" not exists
 # Endpoint routing fields are validated before SQL. Malformed public URLs and
 # negative priorities produce a stable 400 rather than a driver error or a
 # catalog row that can fail only during customer traffic.
-POST {{base_url}}/admin/v1/providers/{{provider_id}}/endpoints
+POST {{way_url}}/admin/v1/providers/{{provider_id}}/endpoints
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-invalid-provider-endpoint
 Content-Type: application/json
@@ -80,7 +80,7 @@ HTTP 400
 jsonpath "$.error.code" == "invalid_request"
 
 
-POST {{base_url}}/admin/v1/provider_endpoints/{{endpoint_id}}/rotate_credential
+POST {{way_url}}/admin/v1/provider_endpoints/{{endpoint_id}}/rotate_credential
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-rotate-provider-secret
 Content-Type: application/json
@@ -91,7 +91,7 @@ Content-Type: application/json
 HTTP 204
 
 
-PATCH {{base_url}}/admin/v1/provider_endpoints/{{endpoint_id}}
+PATCH {{way_url}}/admin/v1/provider_endpoints/{{endpoint_id}}
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-update-endpoint
 Content-Type: application/json
@@ -112,7 +112,7 @@ jsonpath "$.priority" == 0
 jsonpath "$.credential_ref" not exists
 
 
-GET {{base_url}}/admin/v1/providers/{{provider_id}}/endpoints
+GET {{way_url}}/admin/v1/providers/{{provider_id}}/endpoints
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
@@ -123,7 +123,7 @@ jsonpath "$.data[0].region" == "us-east-2"
 jsonpath "$.data[0].priority" == 0
 
 
-PATCH {{base_url}}/admin/v1/providers/{{provider_id}}
+PATCH {{way_url}}/admin/v1/providers/{{provider_id}}
 Authorization: Bearer {{admin_api_key}}
 Idempotency-Key: story-08-disable-provider
 Content-Type: application/json
