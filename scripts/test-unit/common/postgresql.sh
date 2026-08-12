@@ -34,9 +34,19 @@ start_test_postgresql() {
     export GIZWAY_TEST_POSTGRES_DSN
 
     attempt=0
-    until docker exec "${test_postgresql_container}" pg_isready --username postgres --dbname gizway_test >/dev/null 2>&1; do
+    # The official image first starts a temporary PostgreSQL instance while it
+    # initializes the data directory, then shuts that instance down before
+    # starting the real server. pg_isready alone can observe that temporary
+    # window and let a test race directly into "database system is shutting
+    # down". Require the entrypoint completion marker as well as final
+    # readiness so every caller receives a stable disposable database.
+    until docker logs "${test_postgresql_container}" 2>&1 | rg -q 'PostgreSQL init process complete; ready for start up.' \
+        && docker exec "${test_postgresql_container}" pg_isready --username postgres --dbname gizway_test >/dev/null 2>&1; do
         attempt=$((attempt + 1))
-        if [ "${attempt}" -ge 60 ]; then
+        # Cold Docker volumes on desktop hosts can spend well over 15 seconds
+        # in initdb/fsync before the final server starts. Keep polling in small
+        # intervals, but allow one minute before treating startup as failed.
+        if [ "${attempt}" -ge 240 ]; then
             echo "disposable PostgreSQL did not become ready" >&2
             docker logs "${test_postgresql_container}" >&2 || true
             stop_test_postgresql

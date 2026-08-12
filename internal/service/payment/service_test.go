@@ -36,7 +36,7 @@ func TestPolicyAndSignatureValidation(t *testing.T) {
 }
 
 func TestRecoverPendingRefundsCompletesDurableProviderCommand(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 	provider := httptest.NewServer(paymentprovider.Handler("unused-callback-secret"))

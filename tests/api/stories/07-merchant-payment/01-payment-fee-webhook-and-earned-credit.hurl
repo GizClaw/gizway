@@ -15,12 +15,12 @@
 #
 # Fixture: user two owns a pre-approved merchant account; user one is payer.
 # Isolation: fresh PostgreSQL and external fake webhook receiver per Hurl file.
-# covers: createApiKey createPaymentIntent getPaymentIntent getCheckoutPaymentIntent
-# covers: confirmPaymentIntent cancelPaymentIntent reverseMerchantPayment listMerchantTransactions
-# covers: createWebhookEndpoint listWebhookEndpoints getAccountBalance
-# covers: updateWebhookEndpoint deleteWebhookEndpoint rotateWebhookEndpointSecret
+# covers: account.yaml#createApiKey payment.yaml#createPaymentIntent payment.yaml#getPaymentIntent payment.yaml#getCheckoutPaymentIntent
+# covers: payment.yaml#confirmPaymentIntent payment.yaml#cancelPaymentIntent payment.yaml#reverseMerchantPayment payment.yaml#listMerchantTransactions
+# covers: payment.yaml#createWebhookEndpoint payment.yaml#listWebhookEndpoints account.yaml#getAccountBalance
+# covers: payment.yaml#updateWebhookEndpoint payment.yaml#deleteWebhookEndpoint payment.yaml#rotateWebhookEndpointSecret
 
-POST {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/api_keys
+POST {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/api_keys
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-07-payment-key
 Content-Type: application/json
@@ -36,7 +36,7 @@ payment_key: jsonpath "$.secret"
 payment_key_id: jsonpath "$.id"
 
 
-POST {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/api_keys
+POST {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/api_keys
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-07-gateway-key
 Content-Type: application/json
@@ -51,7 +51,7 @@ HTTP 201
 merchant_gateway_key: jsonpath "$.secret"
 
 
-POST {{base_url}}/pay/v1/webhook_endpoints
+POST {{pay_url}}/pay/v1/webhook_endpoints
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-create-success-webhook
 Content-Type: application/json
@@ -71,7 +71,7 @@ jsonpath "$.signing_secret" startsWith "whsec_"
 
 # Exact create replay returns the same endpoint but never discloses its secret
 # a second time. A different payload under this key would be HTTP 409.
-POST {{base_url}}/pay/v1/webhook_endpoints
+POST {{pay_url}}/pay/v1/webhook_endpoints
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-create-success-webhook
 Content-Type: application/json
@@ -88,7 +88,7 @@ jsonpath "$.signing_secret" not exists
 
 # Rotation returns only the new secret. Existing delivery rows retain their
 # encrypted secret snapshot, while subsequent deliveries use this version.
-POST {{base_url}}/pay/v1/webhook_endpoints/{{webhook_endpoint_id}}/rotate_secret
+POST {{pay_url}}/pay/v1/webhook_endpoints/{{webhook_endpoint_id}}/rotate_secret
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-rotate-webhook-secret
 
@@ -102,7 +102,7 @@ jsonpath "$.signing_secret" != "{{webhook_secret}}"
 
 # Secret rotation is an idempotent command. Repeating the same key returns the
 # same generated value and does not rotate or audit twice.
-POST {{base_url}}/pay/v1/webhook_endpoints/{{webhook_endpoint_id}}/rotate_secret
+POST {{pay_url}}/pay/v1/webhook_endpoints/{{webhook_endpoint_id}}/rotate_secret
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-rotate-webhook-secret
 
@@ -113,7 +113,7 @@ jsonpath "$.signing_secret" == "{{rotated_webhook_secret}}"
 
 # Event filters are enforced by Gizway before an outbox delivery is created.
 # This endpoint remains silent for the succeeded event below.
-POST {{base_url}}/pay/v1/webhook_endpoints
+POST {{pay_url}}/pay/v1/webhook_endpoints
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-create-cancellation-webhook
 Content-Type: application/json
@@ -129,7 +129,7 @@ cancellation_endpoint_id: jsonpath "$.id"
 
 # Disabled endpoints remain visible for operators but are excluded from new
 # event fan-out.
-PATCH {{base_url}}/pay/v1/webhook_endpoints/{{cancellation_endpoint_id}}
+PATCH {{pay_url}}/pay/v1/webhook_endpoints/{{cancellation_endpoint_id}}
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-disable-cancellation-webhook
 Content-Type: application/json
@@ -142,36 +142,35 @@ HTTP 200
 jsonpath "$.status" == "disabled"
 
 
-GET {{base_url}}/pay/v1/webhook_endpoints
+GET {{pay_url}}/pay/v1/webhook_endpoints
 Authorization: Bearer {{payment_key}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data" count == 3
-jsonpath "$.data[2].id" == "{{cancellation_endpoint_id}}"
-jsonpath "$.data[2].status" == "disabled"
+jsonpath "$.data" count == 2
+jsonpath "$.data[1].id" == "{{cancellation_endpoint_id}}"
+jsonpath "$.data[1].status" == "disabled"
 
 
 # Delete hides merchant configuration but preserves the database row and any
 # historical delivery references.
-DELETE {{base_url}}/pay/v1/webhook_endpoints/{{cancellation_endpoint_id}}
+DELETE {{pay_url}}/pay/v1/webhook_endpoints/{{cancellation_endpoint_id}}
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-delete-cancellation-webhook
 
 HTTP 204
 
 
-GET {{base_url}}/pay/v1/webhook_endpoints
+GET {{pay_url}}/pay/v1/webhook_endpoints
 Authorization: Bearer {{payment_key}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data" count == 2
+jsonpath "$.data" count == 1
 jsonpath "$.data[0].signing_secret" not exists
-jsonpath "$.data[1].signing_secret" not exists
 
 
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-order-one
 Content-Type: application/json
@@ -198,7 +197,7 @@ jsonpath "$.checkout_url" startsWith "{{checkout_url}}/checkout/"
 # external_order_id is merchant-unique even when a caller changes the
 # Idempotency-Key. The API exposes a stable conflict and never leaks PostgreSQL or
 # PostgreSQL table/constraint details.
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-order-one-duplicate-key
 Content-Type: application/json
@@ -219,7 +218,7 @@ body not contains "UNIQUE"
 body not contains "constraint"
 
 
-GET {{base_url}}/pay/v1/payment_intents/{{payment_intent_id}}
+GET {{pay_url}}/pay/v1/payment_intents/{{payment_intent_id}}
 Authorization: Bearer {{payment_key}}
 
 HTTP 200
@@ -227,7 +226,7 @@ HTTP 200
 jsonpath "$.external_order_id" == "VPN-ORDER-0001"
 
 
-GET {{base_url}}/pay/v1/checkout/payment_intents/{{payment_intent_id}}
+GET {{pay_url}}/pay/v1/checkout/payment_intents/{{payment_intent_id}}
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -237,7 +236,7 @@ jsonpath "$.amount.microcredits" == 100001
 jsonpath "$.platform_fee.microcredits" == 2501
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{payment_intent_id}}/confirm
+POST {{pay_url}}/pay/v1/payment_intents/{{payment_intent_id}}/confirm
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-07-confirm-one
 X-Request-ID: story-07-confirm-request
@@ -249,7 +248,7 @@ jsonpath "$.payer_account_id" == "21000000-0000-4000-8000-000000000001"
 
 
 # Replay must not duplicate the three-way ledger posting or webhook event.
-POST {{base_url}}/pay/v1/payment_intents/{{payment_intent_id}}/confirm
+POST {{pay_url}}/pay/v1/payment_intents/{{payment_intent_id}}/confirm
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-07-confirm-one
 
@@ -261,23 +260,23 @@ jsonpath "$.status" == "succeeded"
 # Payer debit, merchant net, platform fee, final intent state and this audit
 # row are one database transaction. Exact confirmation replay above cannot add
 # a second audit event.
-GET {{base_url}}/admin/v1/audit_events
+GET {{pay_url}}/admin/v1/audit_events?action=payment_intent.confirmed
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data" count == 9
-jsonpath "$.data[8].actor_type" == "user"
-jsonpath "$.data[8].action" == "payment_intent.confirmed"
-jsonpath "$.data[8].resource_id" == "{{payment_intent_id}}"
-jsonpath "$.data[8].request_id" == "story-07-confirm-request"
+jsonpath "$.data" count == 1
+jsonpath "$.data[0].actor_type" == "user"
+jsonpath "$.data[0].action" == "payment_intent.confirmed"
+jsonpath "$.data[0].resource_id" == "{{payment_intent_id}}"
+jsonpath "$.data[0].request_id" == "story-07-confirm-request"
 
 
 # Merchant API mutations are attributed to the non-secret Payment key ID that
 # authenticated them, never to the account owner who did not make the request.
 # The action filter is part of the bounded Admin query contract and avoids an
 # order-sensitive assertion against unrelated API-key creation audit rows.
-GET {{base_url}}/admin/v1/audit_events?action=webhook_endpoint.created&limit=1
+GET {{pay_url}}/admin/v1/audit_events?action=webhook_endpoint.created&limit=1
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
@@ -292,7 +291,7 @@ jsonpath "$.page.has_more" == true
 
 # Cursor 1 continues after the first bounded row; the filtered result does not
 # reload or return the first endpoint again.
-GET {{base_url}}/admin/v1/audit_events?action=webhook_endpoint.created&limit=1&cursor={{audit_next_cursor}}
+GET {{pay_url}}/admin/v1/audit_events?action=webhook_endpoint.created&limit=1&cursor={{audit_next_cursor}}
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
@@ -303,7 +302,7 @@ jsonpath "$.data[0].actor_id" == "{{payment_key_id}}"
 jsonpath "$.page.has_more" == false
 
 
-GET {{base_url}}/pay/v1/transactions
+GET {{pay_url}}/pay/v1/transactions
 Authorization: Bearer {{payment_key}}
 
 HTTP 200
@@ -315,7 +314,7 @@ jsonpath "$.data[0].platform_fee.microcredits" == 2501
 jsonpath "$.data[0].net_amount.microcredits" == 97500
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -323,7 +322,7 @@ HTTP 200
 jsonpath "$.microcredits" == 99899999
 
 
-GET {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/balance
+GET {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -341,7 +340,7 @@ jsonpath "$.last_webhook.payload.type" == "payment_intent.succeeded"
 jsonpath "$.last_webhook.payload.data.object.external_order_id" == "VPN-ORDER-0001"
 
 
-POST {{base_url}}/v1/chat/completions
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{merchant_gateway_key}}
 Idempotency-Key: story-07-merchant-ai
 Content-Type: application/json
@@ -354,7 +353,22 @@ Content-Type: application/json
 HTTP 200
 
 
-GET {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/balance
+POST {{way_url}}/test/v1/clock/advance
+Content-Type: application/json
+{
+  "by": "5m"
+}
+
+HTTP 200
+
+
+GET {{way_url}}/v1/models
+Authorization: Bearer {{merchant_gateway_key}}
+
+HTTP 200
+
+
+GET {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -363,7 +377,7 @@ jsonpath "$.microcredits" == 97464
 
 
 # There is no top-up provenance behind earned Credit, hence no withdrawal path.
-POST {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/topups/00000000-0000-4000-8000-000000000000/refunds
+POST {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/topups/00000000-0000-4000-8000-000000000000/refunds
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-07-earned-refund-denied
 Content-Type: application/json
@@ -375,14 +389,14 @@ HTTP 404
 
 
 # A Gateway key is valid credentials, but the wrong class for GizPay.
-GET {{base_url}}/pay/v1/transactions
+GET {{pay_url}}/pay/v1/transactions
 Authorization: Bearer {{merchant_gateway_key}}
 
 HTTP 401
 
 
 # Cancellation works only before confirmation.
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-order-cancel
 Content-Type: application/json
@@ -400,7 +414,7 @@ HTTP 201
 cancel_intent_id: jsonpath "$.id"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{cancel_intent_id}}/cancel
+POST {{pay_url}}/pay/v1/payment_intents/{{cancel_intent_id}}/cancel
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-cancel
 
@@ -409,7 +423,7 @@ HTTP 200
 jsonpath "$.status" == "cancelled"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{payment_intent_id}}/cancel
+POST {{pay_url}}/pay/v1/payment_intents/{{payment_intent_id}}/cancel
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-cancel-completed
 
@@ -419,7 +433,7 @@ HTTP 409
 # A completed payment is corrected only through its linked compensating
 # workflow. This separate payment is left unspent so the merchant still owns
 # the full net amount required for an atomic reversal.
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-order-reversal
 Content-Type: application/json
@@ -437,7 +451,7 @@ HTTP 201
 reversal_payment_intent_id: jsonpath "$.id"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/confirm
+POST {{pay_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/confirm
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-07-confirm-reversal-payment
 
@@ -446,7 +460,7 @@ HTTP 200
 jsonpath "$.status" == "succeeded"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/reversals
+POST {{pay_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/reversals
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-reverse-payment
 X-Request-ID: story-07-reversal-request
@@ -469,7 +483,7 @@ jsonpath "$.status" == "succeeded"
 
 # Exact replay returns the same immutable reversal and posts no second entry or
 # webhook. A different key for the same payment is rejected below.
-POST {{base_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/reversals
+POST {{pay_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/reversals
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-reverse-payment
 Content-Type: application/json
@@ -482,7 +496,7 @@ HTTP 200
 jsonpath "$.id" == "{{merchant_reversal_id}}"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/reversals
+POST {{pay_url}}/pay/v1/payment_intents/{{reversal_payment_intent_id}}/reversals
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-reverse-payment-again
 Content-Type: application/json
@@ -497,7 +511,7 @@ jsonpath "$.error.code" == "reversal_conflict"
 
 # The compensating posting restores the payer's exact gross Credit and removes
 # the merchant net, without creating top-up refund entitlement.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -505,7 +519,7 @@ HTTP 200
 jsonpath "$.microcredits" == 99899999
 
 
-GET {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/balance
+GET {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 200
@@ -513,7 +527,7 @@ HTTP 200
 jsonpath "$.microcredits" == 97464
 
 
-GET {{base_url}}/pay/v1/transactions
+GET {{pay_url}}/pay/v1/transactions
 Authorization: Bearer {{payment_key}}
 
 HTTP 200
@@ -531,7 +545,7 @@ jsonpath "$.last_webhook.payload.type" == "transaction.reversed"
 jsonpath "$.last_webhook.payload.data.object.id" == "{{merchant_reversal_id}}"
 
 
-GET {{base_url}}/admin/v1/audit_events
+GET {{pay_url}}/admin/v1/audit_events
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 200
@@ -544,7 +558,7 @@ jsonpath "$.data[?(@.resource_id == '{{merchant_reversal_id}}')].request_id" == 
 # executable in any calendar year. Advancing past the checkout deadline drives
 # the durable created -> expired transition immediately; no payer debit or
 # merchant settlement can occur afterward.
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-07-expiring-intent
 Content-Type: application/json
@@ -553,7 +567,7 @@ Content-Type: application/json
   "external_order_id": "VPN-ORDER-EXPIRING",
   "amount": {"asset": "GIZ_CREDIT", "microcredits": 1000},
   "description": "Clock-controlled expiry",
-  "expires_at": "2026-08-11T12:00:01Z",
+  "expires_at": "2026-08-12T12:00:01Z",
   "metadata": {}
 }
 
@@ -564,7 +578,7 @@ expiring_payment_intent_id: jsonpath "$.id"
 jsonpath "$.status" == "created"
 
 
-POST {{base_url}}/test/v1/clock/advance
+POST {{pay_url}}/test/v1/clock/advance
 Content-Type: application/json
 {
   "by": "2s"
@@ -574,10 +588,10 @@ HTTP 200
 [Captures]
 expired_at: jsonpath "$.now"
 [Asserts]
-jsonpath "$.now" startsWith "2026-08-11T12:00:02."
+jsonpath "$.now" startsWith "2026-08-12T12:00:02."
 
 
-GET {{base_url}}/pay/v1/payment_intents/{{expiring_payment_intent_id}}
+GET {{pay_url}}/pay/v1/payment_intents/{{expiring_payment_intent_id}}
 Authorization: Bearer {{payment_key}}
 
 HTTP 200
@@ -586,7 +600,7 @@ jsonpath "$.status" == "expired"
 jsonpath "$.completed_at" == "{{expired_at}}"
 
 
-POST {{base_url}}/pay/v1/payment_intents/{{expiring_payment_intent_id}}/confirm
+POST {{pay_url}}/pay/v1/payment_intents/{{expiring_payment_intent_id}}/confirm
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-07-expired-confirm
 

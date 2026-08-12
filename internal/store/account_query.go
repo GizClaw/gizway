@@ -1,6 +1,8 @@
 package store
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strconv"
 )
@@ -18,6 +20,7 @@ type AccountListQuery struct {
 	Cursor   string
 	Limit    int
 	APIKeyID string
+	AsOf     string
 }
 
 // AccountPage keeps the data and continuation decision together so handlers
@@ -26,6 +29,32 @@ type AccountPage[T any] struct {
 	Items      []T
 	NextCursor *string
 	HasMore    bool
+	AsOf       string
+}
+
+type receivedUsageCursor struct {
+	Offset int    `json:"offset"`
+	AsOf   string `json:"as_of"`
+}
+
+func decodeReceivedUsageCursor(raw, initialAsOf string) (int, string, error) {
+	if raw == "" {
+		return 0, initialAsOf, nil
+	}
+	encoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return 0, "", errors.New("invalid received Usage cursor")
+	}
+	var cursor receivedUsageCursor
+	if json.Unmarshal(encoded, &cursor) != nil || cursor.Offset < 0 || cursor.AsOf == "" {
+		return 0, "", errors.New("invalid received Usage cursor")
+	}
+	return cursor.Offset, cursor.AsOf, nil
+}
+
+func encodeReceivedUsageCursor(offset int, asOf string) string {
+	encoded, _ := json.Marshal(receivedUsageCursor{Offset: offset, AsOf: asOf})
+	return base64.RawURLEncoding.EncodeToString(encoded)
 }
 
 func normalizeAccountListQuery(query AccountListQuery) (limit, offset int, err error) {

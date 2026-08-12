@@ -1,0 +1,219 @@
+openapi: 3.1.0
+info:
+  title: GizPay Internal API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Node-to-control-plane contracts. Quota is a current-balance query, never a
+    lease, reservation, precharge, or value derived from the previous response.
+servers:
+  - url: https://api.gizway.com/internal/v1
+security:
+  - gatewayNodeMtls: []
+paths:
+  /readyz:
+    get:
+      operationId: getInternalReadiness
+      summary: Verify the authenticated Gateway node identity and GizPay dependencies
+      responses:
+        '200':
+          description: GizPay is ready and returns the identity resolved from the client certificate.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InternalReadiness'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '503': {$ref: './common.yaml#/components/responses/ServiceUnavailable'}
+  /rate-publications:
+    post:
+      operationId: publishRatePublication
+      summary: Commit an immutable regional pricing snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RatePublication'}
+      responses:
+        '200':
+          description: Identical publication replay.
+          content: {application/json: {schema: {$ref: '#/components/schemas/RatePublicationResult'}}}
+        '201':
+          description: Publication committed.
+          content: {application/json: {schema: {$ref: '#/components/schemas/RatePublicationResult'}}}
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+  /rate-publications/{source_publication_id}:
+    get:
+      operationId: getRatePublication
+      summary: Recover the result of an ambiguous publication request
+      parameters:
+        - name: source_publication_id
+          in: path
+          required: true
+          description: Regional publication ID supplied in the original publish request.
+          schema: {type: string, minLength: 1, maxLength: 255}
+      responses:
+        '200':
+          description: Committed publication.
+          content: {application/json: {schema: {$ref: '#/components/schemas/RatePublicationResult'}}}
+        '404': {$ref: './common.yaml#/components/responses/NotFound'}
+  /quota/exchanges:
+    post:
+      operationId: exchangeQuota
+      summary: Optionally report usage and return the account's current quota
+      description: >-
+        GizPay validates the raw customer API key, attributes every supplied
+        Usage record to that key's account, commits new UCGIDs, and then returns
+        the independently calculated current spendable balance. This operation
+        has no Idempotency-Key because UCGID is the retry boundary. An empty or
+        omitted usage array is a valid quota-only query and has no financial
+        side effect.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaExchangeRequest'
+      responses:
+        '200':
+          description: Usage was accepted or safely deduplicated and current quota was returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaExchangeResponse'
+        '400': {$ref: './common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
+        '409': {$ref: './common.yaml#/components/responses/Conflict'}
+        '422':
+          description: Usage is structurally valid but cannot be priced from the referenced publication.
+          content:
+            application/json:
+              schema: {$ref: './common.yaml#/components/schemas/Error'}
+        '503': {$ref: './common.yaml#/components/responses/ServiceUnavailable'}
+components:
+  schemas:
+    InternalReadiness:
+      type: object
+      additionalProperties: true
+      required: [status, node_id, region, checks]
+      properties:
+        status: {type: string, enum: [ready]}
+        node_id: {type: string, minLength: 1}
+        region: {type: string, enum: [cn, global]}
+        checks: {type: object, additionalProperties: {type: string}}
+    RatePublication:
+      type: object
+      additionalProperties: false
+      required: [source_publication_id, revision, effective_at, prices]
+      properties:
+        source_publication_id: {type: string, minLength: 1, maxLength: 255}
+        revision: {type: integer, format: int64, minimum: 1}
+        effective_at: {type: string, format: date-time}
+        prices:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/PublishedPrice'}
+    PublishedPrice:
+      type: object
+      additionalProperties: false
+      required: [model_variant_id, public_model, metric, unit_size, base_price_microcredits, customer_price_microcredits, discount_bps]
+      properties:
+        model_variant_id: {type: string, minLength: 1, maxLength: 255}
+        public_model: {type: string, minLength: 1, maxLength: 255}
+        metric: {type: string, enum: [input_token, output_token, cached_input_token, input_audio_token, output_audio_token, audio_second, image, video_second, request]}
+        unit_size: {type: integer, format: int64, minimum: 1}
+        base_price_microcredits: {type: integer, format: int64, minimum: 0}
+        customer_price_microcredits: {type: integer, format: int64, minimum: 0}
+        discount_bps: {type: integer, minimum: 0, maximum: 10000}
+    RatePublicationResult:
+      type: object
+      additionalProperties: false
+      required: [id, source_publication_id, revision, status, effective_at, content_sha256, created_at]
+      properties:
+        id: {type: string}
+        source_publication_id: {type: string}
+        revision: {type: integer, format: int64, minimum: 1}
+        status: {type: string, enum: [active, retired, disabled]}
+        effective_at: {type: string, format: date-time}
+        content_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        created_at: {type: string, format: date-time}
+    QuotaExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [api_key]
+      properties:
+        api_key:
+          type: string
+          minLength: 1
+          writeOnly: true
+          description: >-
+            Raw customer credential used only for secure hash lookup. It must
+            never be persisted, logged, traced, audited, or returned.
+        usage:
+          type: array
+          maxItems: 200
+          default: []
+          items:
+            $ref: '#/components/schemas/UsageRecord'
+    UsageRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - ucgid
+        - operation_id
+        - public_model
+        - model_variant_id
+        - rate_publication_id
+        - metrics
+        - started_at
+        - completed_at
+      properties:
+        ucgid:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Globally unique Usage identity and the only retry idempotency boundary.
+        operation_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        public_model:
+          type: string
+          minLength: 1
+          maxLength: 255
+        model_variant_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        rate_publication_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        metrics:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: integer
+            format: int64
+            minimum: 0
+          description: Raw measured quantities; a caller-supplied final charge is not accepted.
+        started_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    QuotaExchangeResponse:
+      type: object
+      additionalProperties: false
+      required: [status, quota, checked_at, recheck_after_seconds]
+      properties:
+        status:
+          type: string
+          enum: [allowed, denied]
+        quota:
+          $ref: './common.yaml#/components/schemas/CreditAmount'
+        checked_at:
+          type: string
+          format: date-time
+        recheck_after_seconds:
+          type: integer
+          minimum: 1
+          description: MVP value is 300 seconds; this is a recheck deadline, not a lease expiry.

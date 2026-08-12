@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -308,7 +307,7 @@ func (s *Store) RevokeAdminAPIKey(ctx context.Context, actorID, administratorID,
 
 func (s *Store) AdminOverview(ctx context.Context, generatedAt string) (map[string]any, error) {
 	result := map[string]any{"generated_at": generatedAt}
-	queries := map[string]string{"users": `SELECT COUNT(*) FROM users`, "active_api_keys": `SELECT COUNT(*) FROM api_keys WHERE status='active'`, "gateway_requests": `SELECT COUNT(*) FROM gateway_requests`}
+	queries := map[string]string{"users": `SELECT COUNT(*) FROM users`, "active_api_keys": `SELECT COUNT(*) FROM api_keys WHERE status='active'`, "received_usage": `SELECT COUNT(*) FROM gateway_usage_records`}
 	for key, q := range queries {
 		var value int64
 		if err := s.db.GetContext(ctx, &value, q); err != nil {
@@ -317,7 +316,7 @@ func (s *Store) AdminOverview(ctx context.Context, generatedAt string) (map[stri
 		result[key] = value
 	}
 	var charged, payments int64
-	if err := s.db.GetContext(ctx, &charged, `SELECT COALESCE(SUM(charged_microcredits),0) FROM gateway_requests WHERE status='succeeded'`); err != nil {
+	if err := s.db.GetContext(ctx, &charged, `SELECT COALESCE(SUM(charged_microcredits),0) FROM gateway_usage_records`); err != nil {
 		return nil, err
 	}
 	if err := s.db.GetContext(ctx, &payments, `SELECT COALESCE(SUM(amount_microcredits),0) FROM payment_intents WHERE status='succeeded'`); err != nil {
@@ -326,45 +325,6 @@ func (s *Store) AdminOverview(ctx context.Context, generatedAt string) (map[stri
 	result["charged"] = CreditAmount{Asset: "GIZ_CREDIT", Microcredits: charged}
 	result["payments"] = CreditAmount{Asset: "GIZ_CREDIT", Microcredits: payments}
 	return result, nil
-}
-
-type AccountModelEntitlement struct {
-	AccountID string `db:"account_id" json:"account_id"`
-	ModelID   string `db:"model_id" json:"model_id"`
-	Effect    string `db:"effect" json:"effect"`
-	Reason    string `db:"reason" json:"reason"`
-	UpdatedAt string `db:"updated_at" json:"updated_at"`
-}
-
-// SetAccountModelEntitlement is the Admin-owned policy command consumed by
-// discovery and execution. The upsert and its human-attributed audit record
-// share one transaction, so a route can never change without an explanation.
-func (s *Store) SetAccountModelEntitlement(ctx context.Context, actorID, accountID, modelID, effect, reason, at string) (AccountModelEntitlement, error) {
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return AccountModelEntitlement{}, err
-	}
-	defer tx.Rollback()
-	var resources int
-	if err := tx.GetContext(ctx, &resources, `SELECT COUNT(*) FROM accounts a JOIN models m ON m.id=? WHERE a.id=?`, modelID, accountID); err != nil {
-		return AccountModelEntitlement{}, err
-	}
-	if resources != 1 {
-		return AccountModelEntitlement{}, ErrNotFound
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO account_model_entitlements(account_id,model_id,effect,reason,created_by_administrator_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,?,?)
-		ON CONFLICT(account_id,model_id) DO UPDATE SET effect=excluded.effect,reason=excluded.reason,created_by_administrator_id=excluded.created_by_administrator_id,updated_at=excluded.updated_at`,
-		accountID, modelID, effect, reason, actorID, at, at); err != nil {
-		return AccountModelEntitlement{}, fmt.Errorf("set account model entitlement: %w", err)
-	}
-	if err := insertAudit(ctx, tx, actorID, "account_model_entitlement.set", "account", accountID, reason, at); err != nil {
-		return AccountModelEntitlement{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return AccountModelEntitlement{}, err
-	}
-	return AccountModelEntitlement{AccountID: accountID, ModelID: modelID, Effect: effect, Reason: reason, UpdatedAt: at}, nil
 }
 
 func (s *Store) AdminGetUser(ctx context.Context, id string) (map[string]any, error) {
@@ -489,13 +449,13 @@ func (s *Store) AdminRevokeAPIKey(ctx context.Context, actorID, keyID, reason, a
 }
 
 func (s *Store) AdminRows(ctx context.Context, kind, id string) ([]map[string]any, error) {
-	queries := map[string]string{"gateway_requests": `SELECT id,account_id,api_key_id,model_id,model_variant_id,provider_request_id,protocol,status,input_tokens,output_tokens,cached_input_tokens,input_audio_tokens,output_audio_tokens,charged_microcredits,error_code,recovery_status,recovery_attempts,recovery_next_attempt_at,recovery_last_error,started_at,completed_at FROM gateway_requests`, "payments": `SELECT id,'topup' AS type,account_id,credit_microcredits AS amount_microcredits,status,created_at FROM topups UNION ALL SELECT id,'refund',account_id,credit_microcredits,status,created_at FROM refunds UNION ALL SELECT id,'transfer',sender_account_id,amount_microcredits,status,created_at FROM credit_transfers UNION ALL SELECT id,'merchant_payment',merchant_account_id,amount_microcredits,status,created_at FROM payment_intents`, "ledger_accounts": `SELECT la.id,la.owner_account_id,la.code,la.kind,la.asset_code,la.normal_balance,la.status,COALESCE(b.balance_microcredits,0) AS posted_balance_microcredits FROM ledger_accounts la LEFT JOIN account_balances b ON b.account_id=la.owner_account_id`, "ledger_transactions": `SELECT id,transaction_type,status,description,reference_type,reference_id,created_at,posted_at FROM ledger_transactions`, "webhook_deliveries": `SELECT d.id,d.event_id,d.endpoint_id,v.event_type,d.attempt,d.status,d.response_status,d.error,d.created_at FROM webhook_deliveries d JOIN webhook_events v ON v.id=d.event_id`, "audit_events": `SELECT id,actor_type,actor_id,action,resource_type,resource_id,reason,request_id,metadata,created_at FROM audit_events ORDER BY sequence`}
+	queries := map[string]string{"gateway_executions": `SELECT id,public_model,model_variant_id,provider_request_id,protocol,stream_mode,rate_publication_id,status,estimated_microcredits,actual_microcredits,started_at,completed_at FROM gateway_executions`, "payments": `SELECT id,'topup' AS type,account_id,credit_microcredits AS amount_microcredits,status,created_at FROM topups UNION ALL SELECT id,'refund',account_id,credit_microcredits,status,created_at FROM refunds UNION ALL SELECT id,'transfer',sender_account_id,amount_microcredits,status,created_at FROM credit_transfers UNION ALL SELECT id,'merchant_payment',merchant_account_id,amount_microcredits,status,created_at FROM payment_intents`, "ledger_accounts": `SELECT la.id,la.owner_account_id,la.code,la.kind,la.asset_code,la.normal_balance,la.status,COALESCE(b.balance_microcredits,0) AS posted_balance_microcredits FROM ledger_accounts la LEFT JOIN account_balances b ON b.account_id=la.owner_account_id`, "ledger_transactions": `SELECT id,transaction_type,status,description,reference_type,reference_id,created_at,posted_at FROM ledger_transactions`, "webhook_deliveries": `SELECT d.id,d.event_id,d.endpoint_id,v.event_type,d.attempt,d.status,d.response_status,d.error,d.created_at FROM webhook_deliveries d JOIN webhook_events v ON v.id=d.event_id`, "audit_events": `SELECT id,actor_type,actor_id,action,resource_type,resource_id,reason,request_id,metadata,created_at FROM audit_events ORDER BY sequence`}
 	query, ok := queries[kind]
 	if !ok {
 		return nil, errors.New("unsupported admin query")
 	}
 	args := []any{}
-	if kind == "gateway_requests" && id != "" {
+	if kind == "gateway_executions" && id != "" {
 		query += ` WHERE id=?`
 		args = append(args, id)
 	}

@@ -33,10 +33,13 @@ func TestPostgreSQLSetupRollsBackSchemaWhenSeedFails(t *testing.T) {
 	}
 	defer database.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
 
-	err = applyPostgreSQLSetup(context.Background(), database,
-		`CREATE TABLE `+schema+`.setup_probe (id INTEGER PRIMARY KEY)`,
-		`INSERT INTO `+schema+`.missing_table(id) VALUES (1)`)
-	if err == nil || !strings.Contains(err.Error(), "apply PostgreSQL seed") {
+	if _, err := database.Exec(`SET search_path TO ` + schema); err != nil {
+		t.Fatal(err)
+	}
+	err = applyServiceMigrations(context.Background(), database, "probe",
+		[]string{`CREATE TABLE setup_probe (id INTEGER PRIMARY KEY)`},
+		`INSERT INTO missing_table(id) VALUES (1)`)
+	if err == nil || !strings.Contains(err.Error(), "apply probe story fixture") {
 		t.Fatalf("setup error = %v, want seed failure", err)
 	}
 	var tableName *string

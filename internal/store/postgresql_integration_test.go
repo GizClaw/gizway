@@ -44,7 +44,7 @@ func postgresTestStore(t *testing.T) (*store.Store, *sqlx.DB) {
 		_, _ = bootstrap.ExecContext(context.Background(), `DROP SCHEMA `+schema+` CASCADE`)
 		_ = bootstrap.Close()
 	})
-	database, err := storage.OpenPostgreSQL(postgresSearchPathDSN(t, dsn, schema), true)
+	database, err := storage.OpenGizPayPostgreSQL(postgresSearchPathDSN(t, dsn, schema), true)
 	if err != nil {
 		t.Fatalf("migrate empty PostgreSQL schema: %v", err)
 	}
@@ -67,7 +67,7 @@ func postgresSearchPathDSN(t *testing.T, dsn, schema string) string {
 	return dsn + " search_path=" + schema
 }
 
-func TestPostgreSQLMigrationAndConcurrentSpend(t *testing.T) {
+func TestPostgreSQLGizPayMigrationAndConcurrentSpend(t *testing.T) {
 	repository, db := postgresTestStore(t)
 	const now = "2026-08-10T00:00:00.000000000Z"
 	statements := []string{
@@ -91,12 +91,6 @@ func TestPostgreSQLMigrationAndConcurrentSpend(t *testing.T) {
 		  ('gateway-opening-system','gateway-opening','ls',1,'debit',100,$1),('gateway-opening-user','gateway-opening','l4',2,'credit',100,$1)`,
 		`INSERT INTO api_keys(id,account_id,name,kind,key_prefix,secret_hash,scopes,status,created_at) VALUES
 		  ('gateway-key','a4','PG Gateway','gateway','pg_gateway',decode(repeat('00',32),'hex'),'["gateway:invoke"]','active',$1)`,
-		`INSERT INTO providers(id,slug,name,status,created_at,updated_at) VALUES ('provider','pg-provider','PG Provider','active',$1,$1)`,
-		`INSERT INTO provider_endpoints(id,provider_id,name,base_url,credential_ref,priority,weight,status,created_at,updated_at) VALUES
-		  ('endpoint','provider','PG Endpoint','https://provider.invalid','credential',1,100,'active',$1,$1)`,
-		`INSERT INTO models(id,slug,name,modality,status,metadata,created_at,updated_at) VALUES ('model','pg-model','PG Model','["text"]','active','{}',$1,$1)`,
-		`INSERT INTO model_variants(id,model_id,provider_endpoint_id,provider_model_name,variant_slug,capabilities,status,created_at,updated_at) VALUES
-		  ('variant','model','endpoint','pg-wire-model','primary','{"chat":true}','active',$1,$1)`,
 		`INSERT INTO merchant_accounts(account_id,owner_user_id,legal_name,public_name,review_level,merchant_status,created_at,updated_at) VALUES
 		  ('a2','u2','PG Merchant LLC','PG Merchant','basic','approved',$1,$1)`,
 	}
@@ -147,46 +141,6 @@ func TestPostgreSQLMigrationAndConcurrentSpend(t *testing.T) {
 	}
 	if sender != 20 || recipients != 80 {
 		t.Fatalf("post-concurrency balances sender=%d recipients=%d", sender, recipients)
-	}
-
-	start = make(chan struct{})
-	results = make(chan error, 2)
-	for index := range 2 {
-		wait.Add(1)
-		go func(index int) {
-			defer wait.Done()
-			<-start
-			_, err := repository.BeginGatewayCommand(context.Background(), store.GatewayCommand{
-				ID: fmt.Sprintf("gateway-request-%d", index), AccountID: "a4", APIKeyID: "gateway-key",
-				ModelID: "model", VariantID: "variant", Operation: "chat.completions",
-				IdempotencyKey: fmt.Sprintf("pg-gateway-%d", index), PayloadHash: []byte{byte(index)},
-				ReserveAmount: 80, StartedAt: now, ExecutionSnapshot: []byte(`{"plan":"postgres"}`),
-			})
-			results <- err
-		}(index)
-	}
-	close(start)
-	wait.Wait()
-	close(results)
-	succeeded = 0
-	for err := range results {
-		if err == nil {
-			succeeded++
-		} else if !errors.Is(err, store.ErrInsufficientBalance) {
-			t.Fatalf("concurrent Gateway reservation returned non-business error: %v", err)
-		}
-	}
-	if succeeded != 1 {
-		t.Fatalf("concurrent Gateway reservations succeeded %d times", succeeded)
-	}
-	var activeReserved int64
-	if err := db.GetContext(t.Context(), &activeReserved, `SELECT COALESCE(SUM(amount_microcredits),0) FROM credit_reservations WHERE account_id='a4' AND status='active'`); err != nil || activeReserved != 80 {
-		t.Fatalf("active Gateway reservation=%d err=%v", activeReserved, err)
-	}
-	blockedAt := now
-	blockedPayload := sha256.Sum256([]byte("reserved transfer"))
-	if _, _, err := repository.CreateCreditTransfer(t.Context(), "u4", "pg-reserved-transfer", blockedPayload[:], store.CreditTransfer{ID: "pg-reserved-transfer", SenderAccountID: "a4", RecipientAccountID: "a2", Amount: store.CreditAmount{Asset: "GIZ_CREDIT", Microcredits: 30}, Status: "succeeded", CreatedAt: now, CompletedAt: &blockedAt}); !errors.Is(err, store.ErrInsufficientBalance) {
-		t.Fatalf("PostgreSQL transfer spent active Gateway reservation: %v", err)
 	}
 
 	if _, err := db.ExecContext(t.Context(), `INSERT INTO administrators(id,email,display_name,password_hash,status,created_at,updated_at) VALUES ('admin-one','admin-one@gizway.test','one','hash','active',$1,$1),('admin-two','admin-two@gizway.test','two','hash','active',$1,$1)`, now); err != nil {

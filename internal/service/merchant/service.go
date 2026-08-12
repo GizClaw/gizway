@@ -47,10 +47,6 @@ func invalidRequest(message string) error {
 	return fmt.Errorf("%w: %s", ErrInvalidRequest, message)
 }
 
-func NewWithRisk(repository *store.Store, risk *riskadapter.Client, allowPrivateTargets bool) *Service {
-	return NewConfigured(repository, risk, allowPrivateTargets, "https://pay.gizway.test")
-}
-
 func NewConfigured(repository *store.Store, risk *riskadapter.Client, allowPrivateTargets bool, checkoutBaseURL string) *Service {
 	service := &Service{store: repository, now: time.Now, risk: risk, allowPrivateTargets: allowPrivateTargets, checkoutBaseURL: strings.TrimRight(checkoutBaseURL, "/")}
 	service.http = service.webhookClient()
@@ -61,10 +57,6 @@ func (s *Service) ConfigureClock(now func() time.Time) {
 	if now != nil {
 		s.now = now
 	}
-}
-
-func New(repository *store.Store) *Service {
-	return NewConfigured(repository, nil, false, "https://pay.gizway.test")
 }
 
 // NewForStoryTests permits loopback webhook receivers used by the executable

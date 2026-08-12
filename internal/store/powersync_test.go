@@ -12,7 +12,7 @@ import (
 // verifies the security boundary at its real ownership layer: every view is
 // account-keyed, contains only that account's rows, and rejects direct writes.
 func TestPowerSyncViewsAreAccountScopedAndReadOnly(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 	now := "2026-08-11T12:00:00.000000000Z"

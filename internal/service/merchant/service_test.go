@@ -17,7 +17,7 @@ import (
 )
 
 func TestPolicyValidation(t *testing.T) {
-	service := New(nil)
+	service := NewConfigured(nil, nil, false, "https://pay.gizway.test")
 	service.now = func() time.Time { return time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC) }
 	validExpiry := "2026-08-11T00:00:00.000000000Z"
 	invalid := []CreateIntentRequest{
@@ -66,7 +66,7 @@ func TestPolicyValidation(t *testing.T) {
 	if _, err := safeWebhookDialContext(context.Background(), "tcp", "missing-port"); err == nil {
 		t.Fatal("safe webhook dialer accepted malformed address")
 	}
-	production := New(nil)
+	production := NewConfigured(nil, nil, false, "https://pay.gizway.test")
 	privateRedirect := &http.Request{URL: &url.URL{Scheme: "http", Host: "127.0.0.1", Path: "/hook"}}
 	if err := production.http.CheckRedirect(privateRedirect, nil); err == nil {
 		t.Fatal("production webhook client accepted private redirect")
@@ -83,7 +83,7 @@ func TestPolicyValidation(t *testing.T) {
 }
 
 func TestDeliverRejectsPersistedPrivateTarget(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 	endpoint := store.WebhookEndpoint{
@@ -100,13 +100,13 @@ func TestDeliverRejectsPersistedPrivateTarget(t *testing.T) {
 	if _, err := database.SQL.Exec(`INSERT INTO webhook_deliveries(id,event_id,endpoint_id,attempt,status,created_at) VALUES ('unsafe-delivery','unsafe-event','unsafe-endpoint',1,'pending','2026-08-10T00:00:00.000000000Z')`); err != nil {
 		t.Fatal(err)
 	}
-	if err := New(repository).Deliver(context.Background(), "unsafe-delivery"); err == nil {
+	if err := NewConfigured(repository, nil, false, "https://pay.gizway.test").Deliver(context.Background(), "unsafe-delivery"); err == nil {
 		t.Fatal("Deliver accepted a persisted private target")
 	}
 }
 
 func TestDispatchRecoverableClaimsAndCompletesPendingOutbox(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 	calls := 0
@@ -145,7 +145,7 @@ func TestDispatchRecoverableClaimsAndCompletesPendingOutbox(t *testing.T) {
 }
 
 func TestFailedWebhookSchedulesBoundedBackoffAttempt(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 	calls := 0
@@ -191,7 +191,7 @@ func TestFailedWebhookSchedulesBoundedBackoffAttempt(t *testing.T) {
 }
 
 func TestWebhookAttemptFiveExhaustsWithoutAnotherRow(t *testing.T) {
-	database := testdb.OpenStory(t)
+	database := testdb.OpenGizPayStory(t)
 	defer database.Close()
 	repository := store.New(database.SQL)
 	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) }))

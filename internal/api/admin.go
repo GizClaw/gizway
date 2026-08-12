@@ -31,6 +31,11 @@ func (s *Server) registerAdminRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /admin/v1/administrators/{administrator_id}/api_keys", s.requireAdmin(http.HandlerFunc(s.createAdministratorAPIKey)))
 	mux.Handle("POST /admin/v1/administrators/{administrator_id}/api_keys/{admin_api_key_id}/revoke", s.requireAdmin(http.HandlerFunc(s.revokeAdministratorAPIKey)))
 	mux.Handle("GET /admin/v1/overview", s.requireAdmin(http.HandlerFunc(s.getAdminOverview)))
+	mux.Handle("POST /admin/v1/gateway_nodes", s.requireAdmin(http.HandlerFunc(s.createGatewayNode)))
+	mux.Handle("GET /admin/v1/gateway_nodes/{node_id}", s.requireAdmin(http.HandlerFunc(s.getGatewayNode)))
+	mux.Handle("POST /admin/v1/gateway_nodes/{node_id}/certificates", s.requireAdmin(http.HandlerFunc(s.registerGatewayNodeCertificate)))
+	mux.Handle("POST /admin/v1/gateway_nodes/{node_id}/certificates/{certificate_id}/activate", s.requireAdmin(http.HandlerFunc(s.activateGatewayNodeCertificate)))
+	mux.Handle("POST /admin/v1/gateway_nodes/{node_id}/certificates/{certificate_id}/revoke", s.requireAdmin(http.HandlerFunc(s.revokeGatewayNodeCertificate)))
 	mux.Handle("GET /admin/v1/users", s.requireAdmin(http.HandlerFunc(s.adminListUsers)))
 	mux.Handle("GET /admin/v1/users/{user_id}", s.requireAdmin(http.HandlerFunc(s.adminGetUser)))
 	mux.Handle("POST /admin/v1/users/{user_id}/status", s.requireAdmin(http.HandlerFunc(s.changeUserStatus)))
@@ -47,12 +52,15 @@ func (s *Server) registerAdminRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /admin/v1/provider_endpoints/{endpoint_id}/rotate_credential", s.requireAdmin(http.HandlerFunc(s.rotateProviderCredential)))
 	mux.Handle("GET /admin/v1/api_keys", s.requireAdmin(http.HandlerFunc(s.adminListAPIKeys)))
 	mux.Handle("POST /admin/v1/api_keys/{api_key_id}/revoke", s.requireAdmin(http.HandlerFunc(s.adminRevokeAPIKey)))
-	mux.Handle("GET /admin/v1/gateway_requests", s.requireAdmin(http.HandlerFunc(s.adminListGatewayRequests)))
-	mux.Handle("GET /admin/v1/gateway_requests/{request_id}", s.requireAdmin(http.HandlerFunc(s.adminGetGatewayRequest)))
+	mux.Handle("GET /admin/v1/gateway_executions", s.requireAdmin(http.HandlerFunc(s.adminListGatewayExecutions)))
+	mux.Handle("GET /admin/v1/gateway_executions/{execution_id}", s.requireAdmin(http.HandlerFunc(s.adminGetGatewayExecution)))
+	mux.Handle("GET /admin/v1/received_usage", s.requireAdmin(http.HandlerFunc(s.adminListReceivedUsage)))
+	mux.Handle("GET /admin/v1/usage_outbox", s.requireAdmin(http.HandlerFunc(s.adminListUsageOutbox)))
+	mux.Handle("GET /admin/v1/rate_publications", s.requireAdmin(http.HandlerFunc(s.adminListRatePublications)))
+	mux.Handle("POST /admin/v1/rate_publications/{publication_id}/disable", s.requireAdmin(http.HandlerFunc(s.adminDisableRatePublication)))
 	mux.Handle("GET /admin/v1/payments", s.requireAdmin(http.HandlerFunc(s.adminListPayments)))
 	mux.Handle("GET /admin/v1/ledger/accounts", s.requireAdmin(http.HandlerFunc(s.adminListLedgerAccounts)))
 	mux.Handle("POST /admin/v1/accounts/{account_id}/balance_status", s.requireAdmin(http.HandlerFunc(s.changeAccountBalanceStatus)))
-	mux.Handle("PUT /admin/v1/accounts/{account_id}/model_entitlements/{model_id}", s.requireAdmin(http.HandlerFunc(s.setAccountModelEntitlement)))
 	mux.Handle("GET /admin/v1/ledger/transactions", s.requireAdmin(http.HandlerFunc(s.adminListLedgerTransactions)))
 	mux.Handle("POST /admin/v1/ledger/adjustments", s.requireAdmin(http.HandlerFunc(s.createLedgerAdjustment)))
 	mux.Handle("POST /admin/v1/ledger/transactions/{transaction_id}/reverse", s.requireAdmin(http.HandlerFunc(s.reverseLedgerTransaction)))
@@ -81,7 +89,8 @@ func parseAdminListQuery(r *http.Request) (store.AdminListQuery, error) {
 		OwnerAccountID: values.Get("owner_account_id"), TransactionType: values.Get("transaction_type"),
 		ReferenceID: values.Get("reference_id"), MerchantID: values.Get("merchant_account_id"),
 		ActorID: values.Get("actor_user_id"), Action: values.Get("action"), ResourceType: values.Get("resource_type"),
-		ResourceID: values.Get("resource_id"), From: values.Get("from"), To: values.Get("to"),
+		ResourceID: values.Get("resource_id"), NodeID: values.Get("node_id"), Region: values.Get("region"),
+		From: values.Get("from"), To: values.Get("to"),
 	}
 	if len(query.Cursor) > 255 {
 		return query, errors.New("cursor is too long")
@@ -132,26 +141,6 @@ func (s *Server) changeAccountBalanceStatus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
-}
-
-func (s *Server) setAccountModelEntitlement(w http.ResponseWriter, r *http.Request) {
-	if !requireIdempotencyKey(w, r) {
-		return
-	}
-	var request struct {
-		Effect string `json:"effect"`
-		Reason string `json:"reason"`
-	}
-	if decodeJSON(r, &request) != nil || (request.Effect != "allow" && request.Effect != "deny") || strings.TrimSpace(request.Reason) == "" || len(request.Reason) > 500 {
-		writeError(w, http.StatusBadRequest, "invalid_request", "effect must be allow or deny and reason is required")
-		return
-	}
-	row, err := s.store.SetAccountModelEntitlement(r.Context(), contextString(r.Context(), administratorIDKey), r.PathValue("account_id"), r.PathValue("model_id"), request.Effect, strings.TrimSpace(request.Reason), s.nowText())
-	if err != nil {
-		writeDataError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, row)
 }
 
 func (s *Server) loginAdministrator(w http.ResponseWriter, r *http.Request) {
@@ -660,11 +649,39 @@ func (s *Server) adminRows(w http.ResponseWriter, r *http.Request, kind string) 
 	}
 	writeAdminPage(w, rows)
 }
-func (s *Server) adminListGatewayRequests(w http.ResponseWriter, r *http.Request) {
-	s.adminRows(w, r, "gateway_requests")
+func (s *Server) adminListGatewayExecutions(w http.ResponseWriter, r *http.Request) {
+	s.adminRows(w, r, "gateway_executions")
 }
-func (s *Server) adminGetGatewayRequest(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.store.AdminRows(r.Context(), "gateway_requests", r.PathValue("request_id"))
+func (s *Server) adminListReceivedUsage(w http.ResponseWriter, r *http.Request) {
+	s.adminRows(w, r, "received_usage")
+}
+func (s *Server) adminListUsageOutbox(w http.ResponseWriter, r *http.Request) {
+	s.adminRows(w, r, "usage_outbox")
+}
+func (s *Server) adminListRatePublications(w http.ResponseWriter, r *http.Request) {
+	if s.surface == SurfaceGizWay {
+		s.adminRows(w, r, "regional_rate_publications")
+		return
+	}
+	s.adminRows(w, r, "rate_publications")
+}
+func (s *Server) adminDisableRatePublication(w http.ResponseWriter, r *http.Request) {
+	if !requireIdempotencyKey(w, r) {
+		return
+	}
+	reason := strings.TrimSpace(reasonBody(r))
+	if reason == "" || len(reason) > 500 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "reason is required")
+		return
+	}
+	if err := s.store.DisableRatePublication(r.Context(), contextString(r.Context(), administratorIDKey), r.PathValue("publication_id"), reason, s.nowText()); err != nil {
+		writeDataError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+func (s *Server) adminGetGatewayExecution(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.store.AdminRows(r.Context(), "gateway_executions", r.PathValue("execution_id"))
 	if err != nil || len(rows) == 0 {
 		writeDataError(w, store.ErrNotFound)
 		return

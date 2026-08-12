@@ -10,7 +10,7 @@ ACTIONLINT ?= actionlint
 	fmt fmt-go fmt-hurl fmt-module \
 	lint lint-go lint-actions \
 	verify-modules build \
-	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql
+	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql test-e2e
 
 help:
 	@printf '%s\n' \
@@ -36,7 +36,8 @@ help:
 		'  test-unit-go        run Go tests and enforce module coverage above 80 percent' \
 		'  test-unit-go-race   run all Go tests with the race detector' \
 		'  test-unit-api       validate contracts and run fake-provider Hurl stories' \
-		'  test-unit-postgresql run production-dialect tests on local PostgreSQL'
+		'  test-unit-postgresql run production-dialect tests on local PostgreSQL' \
+		'  test-e2e            run quota, product, and failure Compose acceptance profiles'
 
 fmt: fmt-go fmt-hurl fmt-module
 
@@ -50,7 +51,7 @@ fmt-go:
 	fi
 
 fmt-hurl:
-	@find tests/api -type f -name '*.hurl' -print0 | xargs -0 $(HURLFMT) --check
+	@find tests -type f -name '*.hurl' -print0 | xargs -0 $(HURLFMT) --check
 
 fmt-module:
 	@$(GO) mod tidy -diff
@@ -85,3 +86,6 @@ test-unit-api:
 
 test-unit-postgresql:
 	@GO='$(GO)' ./scripts/test-unit/test-unit-postgresql.sh
+
+test-e2e:
+	@./tests/e2e/run.sh

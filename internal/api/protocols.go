@@ -14,15 +14,13 @@ import (
 	bfopenai "github.com/maximhq/bifrost/core/providers/openai"
 	"github.com/maximhq/bifrost/core/schemas"
 
+	gizpayclient "github.com/idy/gizway/internal/client/gizpay"
 	"github.com/idy/gizway/internal/service/gateway"
 	"github.com/idy/gizway/internal/store"
 )
 
-func gatewayPrincipal(r *http.Request) store.GatewayPrincipal {
-	return store.GatewayPrincipal{
-		UserID: contextString(r.Context(), userIDKey), AccountID: contextString(r.Context(), accountIDKey),
-		APIKeyID: contextString(r.Context(), apiKeyIDKey),
-	}
+func customerCredential(r *http.Request) gateway.CustomerCredential {
+	return gateway.CustomerCredential{RawAPIKey: contextString(r.Context(), rawGatewayAPIKeyKey)}
 }
 
 func (s *Server) openAIResponses(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +36,7 @@ func (s *Server) openAIResponses(w http.ResponseWriter, r *http.Request) {
 	defer codecContext.Cancel()
 	canonical := request.ToBifrostResponsesRequest(codecContext)
 	if request.IsStreamingRequested() {
-		s.streamResponses(w, r, "responses", request.Model, request, canonical,
+		s.streamResponses(w, r, "responses", request.Model, canonical,
 			func(_ context.Context, response *schemas.BifrostResponsesStreamResponse, _ string) ([][]byte, error) {
 				public, err := gateway.MarshalPublicJSON(response.WithDefaults())
 				if err != nil {
@@ -48,7 +46,7 @@ func (s *Server) openAIResponses(w http.ResponseWriter, r *http.Request) {
 			})
 		return
 	}
-	response, err := s.gateway.ExecuteResponses(r.Context(), gatewayPrincipal(r), "responses", r.Header.Get("Idempotency-Key"), request.Model, request, canonical,
+	response, err := s.gateway.ExecuteResponses(r.Context(), customerCredential(r), "responses", request.Model, canonical,
 		func(_ context.Context, response *schemas.BifrostResponsesResponse, _ string) ([]byte, error) {
 			return gateway.MarshalPublicJSON(response)
 		})
@@ -70,7 +68,7 @@ func (s *Server) openAIEmbeddings(w http.ResponseWriter, r *http.Request) {
 	}
 	codecContext := schemas.NewBifrostContext(r.Context(), time.Now().Add(30*time.Second))
 	defer codecContext.Cancel()
-	response, err := s.gateway.ExecuteEmbedding(r.Context(), gatewayPrincipal(r), r.Header.Get("Idempotency-Key"), request.Model, request, request.ToBifrostEmbeddingRequest(codecContext))
+	response, err := s.gateway.ExecuteEmbedding(r.Context(), customerCredential(r), request.Model, request.ToBifrostEmbeddingRequest(codecContext))
 	if err != nil {
 		s.writeGatewayExecutionError(w, err)
 		return
@@ -89,7 +87,7 @@ func (s *Server) openAISpeech(w http.ResponseWriter, r *http.Request) {
 	}
 	codecContext := schemas.NewBifrostContext(r.Context(), time.Now().Add(30*time.Second))
 	defer codecContext.Cancel()
-	responseJSON, err := s.gateway.ExecuteSpeech(r.Context(), gatewayPrincipal(r), r.Header.Get("Idempotency-Key"), request.Model, request, request.ToBifrostSpeechRequest(codecContext))
+	responseJSON, err := s.gateway.ExecuteSpeech(r.Context(), customerCredential(r), request.Model, request.ToBifrostSpeechRequest(codecContext))
 	if err != nil {
 		s.writeGatewayExecutionError(w, err)
 		return
@@ -109,9 +107,6 @@ func (s *Server) openAISpeech(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) openAITranscription(w http.ResponseWriter, r *http.Request) {
-	if !requireIdempotencyKey(w, r) {
-		return
-	}
 	if s.gateway == nil {
 		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "AI execution is not configured")
 		return
@@ -148,7 +143,7 @@ func (s *Server) openAITranscription(w http.ResponseWriter, r *http.Request) {
 	}
 	codecContext := schemas.NewBifrostContext(r.Context(), time.Now().Add(30*time.Second))
 	defer codecContext.Cancel()
-	response, err := s.gateway.ExecuteTranscription(r.Context(), gatewayPrincipal(r), r.Header.Get("Idempotency-Key"), request.Model, request, request.ToBifrostTranscriptionRequest(codecContext))
+	response, err := s.gateway.ExecuteTranscription(r.Context(), customerCredential(r), request.Model, request.ToBifrostTranscriptionRequest(codecContext))
 	if err != nil {
 		s.writeGatewayExecutionError(w, err)
 		return
@@ -167,7 +162,7 @@ func (s *Server) openAIImageGeneration(w http.ResponseWriter, r *http.Request) {
 	}
 	codecContext := schemas.NewBifrostContext(r.Context(), time.Now().Add(30*time.Second))
 	defer codecContext.Cancel()
-	response, err := s.gateway.ExecuteImageGeneration(r.Context(), gatewayPrincipal(r), r.Header.Get("Idempotency-Key"), request.Model, request, request.ToBifrostImageGenerationRequest(codecContext))
+	response, err := s.gateway.ExecuteImageGeneration(r.Context(), customerCredential(r), request.Model, request.ToBifrostImageGenerationRequest(codecContext))
 	if err != nil {
 		s.writeGatewayExecutionError(w, err)
 		return
@@ -188,7 +183,7 @@ func (s *Server) anthropicMessages(w http.ResponseWriter, r *http.Request) {
 	defer codecContext.Cancel()
 	canonical := request.ToBifrostResponsesRequest(codecContext)
 	if request.Stream != nil && *request.Stream {
-		s.streamResponses(w, r, "anthropic.messages", request.Model, request, canonical,
+		s.streamResponses(w, r, "anthropic.messages", request.Model, canonical,
 			func(ctx context.Context, response *schemas.BifrostResponsesStreamResponse, _ string) ([][]byte, error) {
 				bfctx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
 				defer bfctx.Cancel()
@@ -205,7 +200,7 @@ func (s *Server) anthropicMessages(w http.ResponseWriter, r *http.Request) {
 			})
 		return
 	}
-	response, err := s.gateway.ExecuteResponses(r.Context(), gatewayPrincipal(r), "anthropic.messages", r.Header.Get("Idempotency-Key"), request.Model, request, canonical,
+	response, err := s.gateway.ExecuteResponses(r.Context(), customerCredential(r), "anthropic.messages", request.Model, canonical,
 		func(ctx context.Context, response *schemas.BifrostResponsesResponse, _ string) ([]byte, error) {
 			bfctx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
 			defer bfctx.Cancel()
@@ -246,7 +241,7 @@ func (s *Server) geminiGenerateContent(w http.ResponseWriter, r *http.Request) {
 	canonical := request.ToBifrostResponsesRequest(codecContext)
 	if action == "streamGenerateContent" {
 		state := bfgemini.NewBifrostToGeminiStreamState()
-		s.streamResponses(w, r, "gemini.streamGenerateContent", model, request, canonical,
+		s.streamResponses(w, r, "gemini.streamGenerateContent", model, canonical,
 			func(_ context.Context, response *schemas.BifrostResponsesStreamResponse, _ string) ([][]byte, error) {
 				converted := bfgemini.ToGeminiResponsesStreamResponse(response, state)
 				if converted == nil {
@@ -260,7 +255,7 @@ func (s *Server) geminiGenerateContent(w http.ResponseWriter, r *http.Request) {
 			})
 		return
 	}
-	response, err := s.gateway.ExecuteResponses(r.Context(), gatewayPrincipal(r), "gemini.generateContent", r.Header.Get("Idempotency-Key"), model, request, canonical,
+	response, err := s.gateway.ExecuteResponses(r.Context(), customerCredential(r), "gemini.generateContent", model, canonical,
 		func(_ context.Context, response *schemas.BifrostResponsesResponse, _ string) ([]byte, error) {
 			return json.Marshal(bfgemini.ToGeminiResponsesResponse(response))
 		})
@@ -294,7 +289,7 @@ func (s *Server) geminiEmbeddings(w http.ResponseWriter, r *http.Request, model,
 	request.Model = model
 	codecContext := schemas.NewBifrostContext(r.Context(), time.Now().Add(30*time.Second))
 	defer codecContext.Cancel()
-	responseJSON, err := s.gateway.ExecuteEmbedding(r.Context(), gatewayPrincipal(r), r.Header.Get("Idempotency-Key"), model, request, request.ToBifrostEmbeddingRequest(codecContext))
+	responseJSON, err := s.gateway.ExecuteEmbedding(r.Context(), customerCredential(r), model, request.ToBifrostEmbeddingRequest(codecContext))
 	if err != nil {
 		s.writeGatewayExecutionError(w, err)
 		return
@@ -323,9 +318,6 @@ func (s *Server) unsupportedAIRead(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) requireAICommand(w http.ResponseWriter, r *http.Request) bool {
-	if !requireIdempotencyKey(w, r) {
-		return false
-	}
 	if s.gateway == nil {
 		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "AI execution is not configured")
 		return false
@@ -335,18 +327,18 @@ func (s *Server) requireAICommand(w http.ResponseWriter, r *http.Request) bool {
 
 func (s *Server) writeGatewayExecutionError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, gizpayclient.ErrInvalidAPIKey):
+		writeError(w, http.StatusUnauthorized, "invalid_api_key", "API key is invalid or inactive")
+	case errors.Is(err, gizpayclient.ErrInvalidNodeIdentity):
+		writeError(w, http.StatusServiceUnavailable, "quota_identity_unavailable", "regional quota identity is unavailable")
+	case errors.Is(err, gizpayclient.ErrTemporarilyUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "quota service is temporarily unavailable")
 	case errors.Is(err, gateway.ErrInvalidRequest):
 		writeError(w, http.StatusBadRequest, "invalid_request", "AI request parameters are invalid")
+	case errors.Is(err, gateway.ErrQuotaDenied):
+		writeError(w, http.StatusPaymentRequired, "quota_denied", "current quota does not allow this request")
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "model_not_found", "model is not available")
-	case errors.Is(err, store.ErrInsufficientBalance):
-		writeError(w, http.StatusPaymentRequired, "insufficient_balance", "available balance is insufficient")
-	case errors.Is(err, store.ErrAccountFrozen):
-		writeError(w, http.StatusLocked, "account_frozen", "account balance is frozen")
-	case errors.Is(err, store.ErrIdempotencyConflict):
-		writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used with a different payload")
-	case errors.Is(err, store.ErrCommandInProgress):
-		writeError(w, http.StatusConflict, "idempotency_in_progress", "idempotent command is already being executed")
 	default:
 		writeError(w, http.StatusBadGateway, "provider_error", "AI request failed")
 	}
@@ -358,7 +350,7 @@ func writeProtocolJSON(w http.ResponseWriter, response []byte) {
 	_, _ = w.Write(response)
 }
 
-func (s *Server) streamResponses(w http.ResponseWriter, r *http.Request, operation, publicModel string, fingerprint any, request *schemas.BifrostResponsesRequest, render gateway.ProtocolStreamRenderer) {
+func (s *Server) streamResponses(w http.ResponseWriter, r *http.Request, operation, publicModel string, request *schemas.BifrostResponsesRequest, render gateway.ProtocolStreamRenderer) {
 	wroteHeader := false
 	emit := func(frame []byte) error {
 		if !wroteHeader {
@@ -375,7 +367,7 @@ func (s *Server) streamResponses(w http.ResponseWriter, r *http.Request, operati
 		}
 		return nil
 	}
-	err := s.gateway.ExecuteResponsesStream(r.Context(), gatewayPrincipal(r), operation, r.Header.Get("Idempotency-Key"), publicModel, fingerprint, request, render, emit)
+	err := s.gateway.ExecuteResponsesStream(r.Context(), customerCredential(r), operation, publicModel, request, render, emit)
 	if err != nil && !wroteHeader {
 		s.writeGatewayExecutionError(w, err)
 	}

@@ -9,11 +9,11 @@
 #
 # Fixture: story-base
 # Isolation: this file receives a new PostgreSQL schema and server process.
-# covers: createApiKey listApiKeys revokeApiKey getCurrentUser
+# covers: account.yaml#createApiKey account.yaml#listApiKeys account.yaml#revokeApiKey account.yaml#getCurrentUser
 
 # Capture the baseline count so later assertions prove failed commands had no
 # database side effect. story-base contains one bootstrap key for this account.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -24,7 +24,7 @@ jsonpath "$.data[0].secret_hash" not exists
 
 
 # Unknown fields are rejected instead of being silently ignored.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-reject-unknown-field
 Content-Type: application/json
@@ -41,7 +41,7 @@ jsonpath "$.error.code" == "invalid_request"
 
 
 # Scope allowlists are enforced for the selected credential kind.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-reject-payment-scope
 Content-Type: application/json
@@ -58,7 +58,7 @@ jsonpath "$.error.code" == "invalid_request"
 
 # A successful creation returns a new unpredictable plaintext exactly where it
 # can be captured by the client. Subsequent representations expose only prefix.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-create-gateway-key
 Content-Type: application/json
@@ -85,7 +85,7 @@ jsonpath "$.secret_hash" not exists
 # An exact retry resolves to the original database row. Because credential
 # plaintext is intentionally never persisted, the replay returns metadata and
 # does not manufacture or disclose a second secret.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-create-gateway-key
 Content-Type: application/json
@@ -103,7 +103,7 @@ jsonpath "$.secret" not exists
 
 
 # Reusing the command key with a different payload is a deterministic conflict.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-create-gateway-key
 Content-Type: application/json
@@ -121,7 +121,7 @@ jsonpath "$.error.code" == "idempotency_conflict"
 
 # Read-after-write proves the row was committed to PostgreSQL. The plaintext and
 # internal hash must both be absent from the metadata projection.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200
@@ -134,7 +134,7 @@ jsonpath "$.data[1].secret_hash" not exists
 
 # Gateway authentication with the captured secret proves creation stored usable
 # database state rather than returning a fabricated response.
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 Authorization: Bearer {{created_key_secret}}
 
 HTTP 200
@@ -144,7 +144,7 @@ jsonpath "$.object" == "list"
 
 # Credential classes are not interchangeable: a Gateway key cannot access the
 # first-party Account surface even though the signature and hash are valid.
-GET {{base_url}}/account/v1/me
+GET {{pay_url}}/account/v1/me
 Authorization: Bearer {{created_key_secret}}
 
 HTTP 401
@@ -152,7 +152,7 @@ HTTP 401
 jsonpath "$.error.code" == "unauthorized"
 
 
-DELETE {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys/{{created_key_id}}
+DELETE {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys/{{created_key_id}}
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-revoke-gateway-key
 
@@ -161,25 +161,36 @@ HTTP 204
 
 # DELETE is a command too: replaying it returns the persisted 204 instead of
 # executing the revoke handler and appending another audit event.
-DELETE {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys/{{created_key_id}}
+DELETE {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys/{{created_key_id}}
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-01-revoke-gateway-key
 
 HTTP 204
 
 
-# Revocation takes effect on the next request and does not rely on process-local
-# caches. Authentication rereads the persisted key status.
-GET {{base_url}}/v1/models
+# Gateway may continue using the last returned Quota until its short recheck
+# interval expires. Advancing the regional test clock proves revocation is
+# enforced on the next Quota query, without requiring GizWay to own customer
+# identity or API-key state.
+POST {{way_url}}/test/v1/clock/advance
+Content-Type: application/json
+{
+  "by": "5m"
+}
+
+HTTP 200
+
+
+GET {{way_url}}/v1/models
 Authorization: Bearer {{created_key_secret}}
 
 HTTP 401
 [Asserts]
-jsonpath "$.error.code" == "unauthorized"
+jsonpath "$.error.code" == "invalid_api_key"
 
 
 # Another user cannot inspect the first user's key collection.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_two_key}}
 
 HTTP 404

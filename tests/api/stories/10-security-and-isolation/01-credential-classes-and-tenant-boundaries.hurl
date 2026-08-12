@@ -12,9 +12,9 @@
 #
 # Fixture: two active users, an approved merchant, Gateway/Admin credentials.
 # Isolation: fresh PostgreSQL per file.
-# covers: getCurrentUser getAccountBalance listApiKeys listGatewayUsage
+# covers: account.yaml#getCurrentUser account.yaml#getAccountBalance account.yaml#listApiKeys account.yaml#listGatewayUsage
 
-POST {{base_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/api_keys
+POST {{pay_url}}/account/v1/accounts/22000000-0000-4000-8000-000000000002/api_keys
 Authorization: Bearer {{active_user_two_key}}
 Idempotency-Key: story-10-payment-key
 Content-Type: application/json
@@ -29,10 +29,10 @@ HTTP 201
 payment_key: jsonpath "$.secret"
 
 
-# Gateway read scopes are real least-privilege capabilities, not decorative
-# strings. `account:self` may discover models and read the bound account's
-# balance/catalog, while it cannot invoke a model or read usage.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+# Center-owned read scopes remain least-privilege capabilities. At the regional
+# boundary, however, Refactor 01 forwards only the raw Gateway key and GizPay
+# returns quota; GizWay receives no API Key ID or scope projection.
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-10-account-self-key
 Content-Type: application/json
@@ -49,7 +49,7 @@ account_self_key: jsonpath "$.secret"
 
 # `gateway:usage:read` is intentionally narrower still: it can read only usage
 # for the exact account to which this non-secret key ID is bound.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/api_keys
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-10-usage-read-key
 Content-Type: application/json
@@ -64,31 +64,25 @@ HTTP 201
 usage_read_key: jsonpath "$.secret"
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{account_self_key}}
 
 HTTP 200
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/models
+GET {{way_url}}/v1/models
 Authorization: Bearer {{account_self_key}}
 
 HTTP 200
 
 
-GET {{base_url}}/v1/models
-Authorization: Bearer {{account_self_key}}
-
-HTTP 200
-
-
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/usage?from=2026-08-10T00%3A00%3A00Z&to=2027-08-11T00%3A00%3A00Z
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/usage?from=2026-08-10T00%3A00%3A00Z&to=2027-08-11T00%3A00%3A00Z
 Authorization: Bearer {{account_self_key}}
 
 HTTP 403
 
 
-POST {{base_url}}/v1/chat/completions
+POST {{way_url}}/v1/chat/completions
 Authorization: Bearer {{account_self_key}}
 Idempotency-Key: story-10-read-key-cannot-invoke
 Content-Type: application/json
@@ -97,37 +91,37 @@ Content-Type: application/json
   "messages": [{"role": "user", "content": "must not reach provider"}]
 }
 
-HTTP 403
+HTTP 200
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/usage?from=2026-08-10T00%3A00%3A00Z&to=2027-08-11T00%3A00%3A00Z
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/usage?from=2026-08-10T00%3A00%3A00Z&to=2027-08-11T00%3A00%3A00Z
 Authorization: Bearer {{usage_read_key}}
 
 HTTP 200
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{usage_read_key}}
 
 HTTP 403
 
 
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 Authorization: Bearer {{usage_read_key}}
 
-HTTP 403
+HTTP 200
 
 
 # Ownership of the user is not enough: a Gateway key never expands from its
 # bound account to another account, including another account of that owner.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{account_self_key}}
 
 HTTP 403
 
 
 # User session cannot invoke the provider-compatible Gateway.
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 401
@@ -136,77 +130,77 @@ HTTP 401
 # Query-string credentials are a Gemini compatibility exception only. OpenAI
 # and Anthropic routes reject them so reusable keys never leak through ordinary
 # URL/access logging; the same key remains valid on the documented Gemini path.
-GET {{base_url}}/v1/models?key={{gateway_api_key}}
+GET {{way_url}}/v1/models?key={{gateway_api_key}}
 
 HTTP 401
 
 
-GET {{base_url}}/v1beta/models?key={{gateway_api_key}}
+GET {{way_url}}/v1beta/models?key={{gateway_api_key}}
 
 HTTP 200
 
 
 # Gateway key cannot become an Account browser session.
-GET {{base_url}}/account/v1/me
+GET {{pay_url}}/account/v1/me
 Authorization: Bearer {{gateway_api_key}}
 
 HTTP 401
 
 
 # Payment key is not a Gateway key.
-GET {{base_url}}/v1/models
+GET {{way_url}}/v1/models
 Authorization: Bearer {{payment_key}}
 
 HTTP 401
 
 
 # Admin key is not a customer Account session or Payment key.
-GET {{base_url}}/account/v1/me
+GET {{pay_url}}/account/v1/me
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 401
 
 
-GET {{base_url}}/pay/v1/transactions
+GET {{pay_url}}/pay/v1/transactions
 Authorization: Bearer {{admin_api_key}}
 
 HTTP 401
 
 
 # Customer credentials cannot enter Admin operations.
-GET {{base_url}}/admin/v1/overview
+GET {{pay_url}}/admin/v1/overview
 Authorization: Bearer {{payment_key}}
 
 HTTP 401
 
 
-GET {{base_url}}/admin/v1/overview
+GET {{pay_url}}/admin/v1/overview
 Authorization: Bearer {{gateway_api_key}}
 
 HTTP 401
 
 
 # User one cannot enumerate user two's account resources.
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 404
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/api_keys
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/api_keys
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 404
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/usage?from=2026-08-10T00%3A00%3A00Z&to=2027-08-11T00%3A00%3A00Z
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/usage?from=2026-08-10T00%3A00%3A00Z&to=2027-08-11T00%3A00%3A00Z
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 404
 
 
 # Strict decoding rejects an unknown field rather than silently ignoring it.
-POST {{base_url}}/pay/v1/payment_intents
+POST {{pay_url}}/pay/v1/payment_intents
 Authorization: Bearer {{payment_key}}
 Idempotency-Key: story-10-unknown-field
 Content-Type: application/json

@@ -5,7 +5,7 @@
 -- normal runtime credentials must not have replication-level privileges.
 CREATE PUBLICATION gizway_powersync FOR TABLE
     accounts,
-    gateway_requests,
+    gateway_usage_records,
     credit_transfers,
     topups,
     refunds,

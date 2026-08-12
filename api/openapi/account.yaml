@@ -152,21 +152,6 @@ paths:
               schema: {$ref: '#/components/schemas/Balance'}
         '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
         '404': {$ref: './common.yaml#/components/responses/NotFound'}
-  /accounts/{account_id}/models:
-    get:
-      tags: [Accounts]
-      operationId: listAccountModels
-      summary: List executable models with variants and customer prices
-      parameters:
-        - $ref: '#/components/parameters/AccountId'
-      responses:
-        '200':
-          description: Account-authorized rich model catalog.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AccountModelList'}
-        '401': {$ref: './common.yaml#/components/responses/Unauthorized'}
-        '404': {$ref: './common.yaml#/components/responses/NotFound'}
   /accounts/{account_id}/api_keys:
     get:
       tags: [API keys]
@@ -374,12 +359,9 @@ paths:
     get:
       tags: [Usage]
       operationId: listGatewayUsage
-      summary: Query AI usage attributed to the account and its API keys
+      summary: Query AI Usage received and posted by GizPay for the Account
       parameters:
         - $ref: '#/components/parameters/AccountId'
-        - name: api_key_id
-          in: query
-          schema: {type: string, format: uuid}
         - name: from
           in: query
           required: true
@@ -531,50 +513,24 @@ components:
         status: {type: string, enum: [active, suspended, closed]}
         created_at: {type: string, format: date-time}
     Balance:
-      allOf:
-        - $ref: './common.yaml#/components/schemas/CreditAmount'
-        - type: object
-          required: [account_id, updated_at]
-          properties:
-            account_id: {type: string, format: uuid}
-            updated_at: {type: [string, "null"], format: date-time}
-    AccountModelPrice:
       type: object
       additionalProperties: false
-      required: [metric, unit_size, base_price_microcredits, effective_price_microcredits, discount_bps]
+      required: [account_id, asset, microcredits, posted_microcredits, payment_held_microcredits, ai_spendable_microcredits, transferable_microcredits, refundable_microcredits, as_of, updated_at]
       properties:
-        metric: {type: string}
-        unit_size: {type: integer, format: int64, minimum: 1}
-        base_price_microcredits: {type: integer, format: int64, minimum: 0}
-        effective_price_microcredits: {type: integer, format: int64, minimum: 0}
-        discount_bps: {type: integer, minimum: 0, maximum: 10000}
-    AccountModelVariant:
-      type: object
-      additionalProperties: false
-      required: [id, slug, capabilities, context_window, max_output_tokens, prices]
-      properties:
-        id: {type: string, format: uuid}
-        slug: {type: string}
-        capabilities: {type: object, additionalProperties: {type: boolean}}
-        context_window: {type: integer, format: int64, minimum: 1}
-        max_output_tokens: {type: integer, format: int64, minimum: 1}
-        prices: {type: array, items: {$ref: '#/components/schemas/AccountModelPrice'}}
-    AccountModel:
-      type: object
-      additionalProperties: false
-      required: [id, name, capabilities, variants, created_at]
-      properties:
-        id: {type: string}
-        name: {type: string}
-        capabilities: {type: array, items: {type: string}}
-        variants: {type: array, items: {$ref: '#/components/schemas/AccountModelVariant'}}
-        created_at: {type: string, format: date-time}
-    AccountModelList:
-      type: object
-      required: [data, page]
-      properties:
-        data: {type: array, items: {$ref: '#/components/schemas/AccountModel'}}
-        page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+        account_id: {type: string, format: uuid}
+        asset: {type: string, const: GIZ_CREDIT}
+        microcredits:
+          type: integer
+          format: int64
+          deprecated: true
+          description: Compatibility alias for posted_microcredits; may be negative.
+        posted_microcredits: {type: integer, format: int64}
+        payment_held_microcredits: {type: integer, format: int64, minimum: 0}
+        ai_spendable_microcredits: {type: integer, format: int64, minimum: 0}
+        transferable_microcredits: {type: integer, format: int64, minimum: 0}
+        refundable_microcredits: {type: integer, format: int64, minimum: 0}
+        as_of: {type: string, format: date-time}
+        updated_at: {type: [string, "null"], format: date-time}
     CreateApiKeyRequest:
       type: object
       additionalProperties: false
@@ -712,14 +668,14 @@ components:
         page: {$ref: './common.yaml#/components/schemas/PageInfo'}
     UsageRecord:
       type: object
-      required: [id, api_key_id, protocol, status, input_tokens, output_tokens, input_audio_tokens, output_audio_tokens, charges, charged_amount, started_at]
+      required: [id, ucgid, public_model, model_variant_id, input_tokens, output_tokens, input_audio_tokens, output_audio_tokens, charges, charged_microcredits, started_at, completed_at, received_at]
       properties:
-        id: {type: string, format: uuid}
-        api_key_id: {type: string, format: uuid}
-        model: {type: [string, "null"]}
-        variant: {type: [string, "null"]}
-        protocol: {type: string, enum: [https, websocket, webrtc]}
-        status: {type: string, enum: [started, succeeded, failed, cancelled]}
+        id: {type: string}
+        ucgid:
+          type: string
+          description: Present for Usage received through regional Quota Exchange.
+        public_model: {type: string}
+        model_variant_id: {type: string}
         input_tokens: {type: integer, format: int64, minimum: 0}
         output_tokens: {type: integer, format: int64, minimum: 0}
         cached_input_tokens: {type: integer, format: int64, minimum: 0}
@@ -728,9 +684,10 @@ components:
         charges:
           type: array
           items: {$ref: '#/components/schemas/UsageCharge'}
-        charged_amount: {$ref: './common.yaml#/components/schemas/CreditAmount'}
+        charged_microcredits: {type: integer, format: int64, minimum: 0}
         started_at: {type: string, format: date-time}
-        completed_at: {type: [string, "null"], format: date-time}
+        completed_at: {type: string, format: date-time}
+        received_at: {type: string, format: date-time}
     UsageCharge:
       type: object
       additionalProperties: false
@@ -747,10 +704,22 @@ components:
         charged_microcredits: {type: integer, format: int64, minimum: 0}
     UsageList:
       type: object
-      required: [data, page]
+      required: [data, page, consistency]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/UsageRecord'}}
         page: {$ref: './common.yaml#/components/schemas/PageInfo'}
+        consistency: {$ref: '#/components/schemas/UsageConsistency'}
+    UsageConsistency:
+      type: object
+      additionalProperties: false
+      required: [as_of, mode, recent_usage_may_be_pending]
+      properties:
+        as_of:
+          type: string
+          format: date-time
+          description: Time GizPay executed this center-database query; not an ingestion watermark.
+        mode: {type: string, const: eventual}
+        recent_usage_may_be_pending: {type: boolean, const: true}
     AccountTransaction:
       type: object
       required: [id, type, direction, amount, status, created_at]

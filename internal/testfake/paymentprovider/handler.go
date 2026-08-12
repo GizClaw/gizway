@@ -20,6 +20,13 @@ func Handler(callbackSecret string) http.Handler {
 }
 
 func HandlerWithClock(callbackSecret string, now func() time.Time) http.Handler {
+	return HandlerWithClockAndClient(callbackSecret, now, http.DefaultClient)
+}
+
+func HandlerWithClockAndClient(callbackSecret string, now func() time.Time, callbackClient *http.Client) http.Handler {
+	if callbackClient == nil {
+		callbackClient = http.DefaultClient
+	}
 	mux := http.NewServeMux()
 	var callbacks atomic.Int64
 	var checkouts atomic.Int64
@@ -150,7 +157,7 @@ func HandlerWithClock(callbackSecret string, now func() time.Time) http.Handler 
 		}
 		callback.Header.Set("Content-Type", "application/json")
 		callback.Header.Set("X-Gizway-Signature", fmt.Sprintf("t=%d,v1=%s", timestamp, hex.EncodeToString(mac.Sum(nil))))
-		resp, err := http.DefaultClient.Do(callback)
+		resp, err := callbackClient.Do(callback)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

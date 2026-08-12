@@ -43,8 +43,8 @@ func (cipher *secretCipher) encrypt(plaintext string) (string, error) {
 }
 
 func (cipher *secretCipher) decrypt(stored string) (string, error) {
-	// One-way and legacy references are not executable provider credentials.
-	// Callers that own an explicit legacy migration path may retain the original
+	// One-way development references are not executable provider credentials.
+	// Callers importing non-production fixtures may retain the original
 	// value themselves; this primitive only releases authenticated ciphertext.
 	if !strings.HasPrefix(stored, encryptedSecretPrefix) {
 		return "", nil

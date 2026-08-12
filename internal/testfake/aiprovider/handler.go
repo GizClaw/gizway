@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -72,8 +71,8 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 		return false
 	}
 	// The fixture speaks the actual OpenAI wire protocols consumed by Bifrost.
-	// Stable IDs and usage values make Hurl able to prove exact replay and
-	// settlement without mocking any Gizway service or database boundary.
+	// Stable IDs and usage values make tests deterministic without adding an
+	// upstream response-replay contract that GizWay no longer requires.
 	mux.HandleFunc("POST /v1/responses", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuthorization(w, r) {
 			return
@@ -539,67 +538,5 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			"usage":   usage,
 		})
 	})
-	return providerIdempotencyMiddleware(mux)
-}
-
-type providerResponseCacheEntry struct {
-	ready  chan struct{}
-	status int
-	header http.Header
-	body   []byte
-}
-
-// providerIdempotencyMiddleware models the upstream contract required for
-// crash-safe AI command recovery. A successful provider response is replayed
-// byte-for-byte when Gizway reissues the same durable request ID after losing
-// the response before settlement. Server errors are deliberately not cached so
-// Bifrost retains ownership of retry/fallback attempts.
-func providerIdempotencyMiddleware(next http.Handler) http.Handler {
-	var mu sync.Mutex
-	entries := make(map[string]*providerResponseCacheEntry)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.Header.Get("Idempotency-Key")
-		if key == "" || r.Method == http.MethodGet || r.Method == http.MethodHead {
-			next.ServeHTTP(w, r)
-			return
-		}
-		cacheKey := r.Method + "\x00" + r.URL.Path + "\x00" + key
-		mu.Lock()
-		if existing := entries[cacheKey]; existing != nil {
-			mu.Unlock()
-			select {
-			case <-existing.ready:
-				replayProviderResponse(w, existing)
-			case <-r.Context().Done():
-				http.Error(w, "request cancelled", http.StatusRequestTimeout)
-			}
-			return
-		}
-		entry := &providerResponseCacheEntry{ready: make(chan struct{})}
-		entries[cacheKey] = entry
-		mu.Unlock()
-
-		recorder := httptest.NewRecorder()
-		next.ServeHTTP(recorder, r)
-		result := recorder.Result()
-		body, _ := io.ReadAll(result.Body)
-		_ = result.Body.Close()
-		entry.status, entry.header, entry.body = result.StatusCode, result.Header.Clone(), body
-
-		mu.Lock()
-		if entry.status >= 500 {
-			delete(entries, cacheKey)
-		}
-		close(entry.ready)
-		mu.Unlock()
-		replayProviderResponse(w, entry)
-	})
-}
-
-func replayProviderResponse(w http.ResponseWriter, entry *providerResponseCacheEntry) {
-	for name, values := range entry.header {
-		w.Header()[name] = append([]string(nil), values...)
-	}
-	w.WriteHeader(entry.status)
-	_, _ = w.Write(entry.body)
+	return mux
 }

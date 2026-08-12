@@ -36,3 +36,23 @@ func TestRunRejectsInvalidInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteInventoryIncludesServiceScopedCoverageAndDeletionReasons(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	if err := writeInventory("../../api/openapi", "../../tests/api/stories", &output); err != nil {
+		t.Fatal(err)
+	}
+	text := output.String()
+	for _, expected := range []string{
+		"Final retained operation count:",
+		"gizpay-admin.yaml | GET | `/admin/v1/me` | getCurrentAdministrator | GizPay | Keep",
+		"gizway-admin.yaml | GET | `/admin/v1/me` | getCurrentAdministrator | GizWay | Keep",
+		"listAccountModels | GizPay | Delete",
+		"setAccountModelEntitlement | GizPay | Delete",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("inventory missing %q", expected)
+		}
+	}
+}

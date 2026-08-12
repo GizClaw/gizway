@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/idy/gizway/internal/providerctx"
 	"github.com/idy/gizway/internal/store"
 	"github.com/idy/gizway/internal/testfake/aiprovider"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -47,6 +46,27 @@ func TestClientCacheDoesNotEvictAnActiveClient(t *testing.T) {
 	}
 }
 
+func TestEvictIdleClientSkipsPinnedAndActiveEntries(t *testing.T) {
+	adapter := NewLazy()
+	adapter.clients = map[string]cachedClient{
+		"old-idle": {lastUsed: 1},
+		"new-idle": {lastUsed: 2},
+		"pinned":   {lastUsed: 0, pinned: true},
+		"active":   {lastUsed: 0, active: 1},
+	}
+	adapter.evictIdleClientLocked()
+	if _, ok := adapter.clients["old-idle"]; ok {
+		t.Fatal("oldest idle client was not evicted")
+	}
+	if _, ok := adapter.clients["new-idle"]; !ok {
+		t.Fatal("newer idle client was evicted first")
+	}
+	delete(adapter.clients, "new-idle")
+	if victim := adapter.evictIdleClientLocked(); victim != nil {
+		t.Fatal("pinned or active client was selected for eviction")
+	}
+}
+
 func TestRealtimeEventCodecAndUsage(t *testing.T) {
 	provider := httptest.NewServer(aiprovider.Handler())
 	defer provider.Close()
@@ -73,29 +93,6 @@ func TestRealtimeEventCodecAndUsage(t *testing.T) {
 	}
 	if string(public) != string(providerEvent) || !terminal || usage == nil || usage.PromptTokens != 12 || usage.CompletionTokens != 7 {
 		t.Fatalf("public=%s terminal=%v usage=%+v", public, terminal, usage)
-	}
-}
-
-func TestProviderReceivesDurableIdempotencyKey(t *testing.T) {
-	var received string
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		received = r.Header.Get("Idempotency-Key")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"provider-idempotent","object":"chat.completion","created":1,"model":"fake-text-v1","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
-	}))
-	defer provider.Close()
-	adapter, err := NewOpenAI(t.Context(), provider.URL, "provider-secret")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer adapter.Shutdown()
-	content := "hello"
-	ctx := providerctx.WithIdempotencyKey(t.Context(), "durable-gateway-request-id")
-	if _, err := adapter.ChatCompletionCandidates(ctx, []store.ProviderExecutionTarget{{Endpoint: provider.URL, Credential: "provider-secret", Model: "fake-text-v1", RouteKey: "route"}}, []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: &content}}}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if received != "durable-gateway-request-id" {
-		t.Fatalf("provider Idempotency-Key = %q", received)
 	}
 }
 

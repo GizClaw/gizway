@@ -5,10 +5,10 @@
 #
 # Fixture: story-base
 # Isolation: this file receives a new PostgreSQL schema and server process.
-# covers: createCreditTransfer getAccountBalance
+# covers: account.yaml#createCreditTransfer account.yaml#getAccountBalance
 
 # An account cannot transfer to itself.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-06-self-transfer
 Content-Type: application/json
@@ -23,7 +23,7 @@ jsonpath "$.error.code" == "invalid_request"
 
 
 # More than the posted balance is rejected atomically.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/transfers
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-06-insufficient
 Content-Type: application/json
@@ -38,7 +38,7 @@ jsonpath "$.error.code" == "insufficient_balance"
 
 
 # A user cannot spend an account owned by somebody else.
-POST {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/transfers
+POST {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000002/transfers
 Authorization: Bearer {{active_user_one_key}}
 Idempotency-Key: story-06-cross-account
 Content-Type: application/json
@@ -52,7 +52,7 @@ HTTP 404
 jsonpath "$.error.code" == "not_found"
 
 
-GET {{base_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
+GET {{pay_url}}/account/v1/accounts/21000000-0000-4000-8000-000000000001/balance
 Authorization: Bearer {{active_user_one_key}}
 
 HTTP 200

@@ -16,16 +16,11 @@ import (
 	bf "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 
-	"github.com/idy/gizway/internal/providerctx"
 	"github.com/idy/gizway/internal/store"
 )
 
 func bifrostContext(ctx context.Context, deadline time.Time) *schemas.BifrostContext {
-	bfctx := schemas.NewBifrostContext(ctx, deadline)
-	if key := providerctx.IdempotencyKey(ctx); key != "" {
-		bfctx.SetValue(schemas.BifrostContextKeyExtraHeaders, map[string][]string{"Idempotency-Key": {key}})
-	}
-	return bfctx
+	return schemas.NewBifrostContext(ctx, deadline)
 }
 
 type account struct {

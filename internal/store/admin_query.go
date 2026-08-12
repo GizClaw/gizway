@@ -30,6 +30,8 @@ type AdminListQuery struct {
 	Action          string
 	ResourceType    string
 	ResourceID      string
+	NodeID          string
+	Region          string
 	From            string
 	To              string
 }
@@ -137,11 +139,50 @@ func (s *Store) AdminRowsPage(ctx context.Context, kind string, query AdminListQ
 		}
 	}
 	switch kind {
-	case "gateway_requests":
-		base = `SELECT id,account_id,api_key_id,model_id,model_variant_id,provider_request_id,protocol,status,input_tokens,output_tokens,cached_input_tokens,input_audio_tokens,output_audio_tokens,charged_microcredits,error_code,recovery_status,recovery_attempts,recovery_next_attempt_at,recovery_last_error,started_at,completed_at FROM gateway_requests`
+	case "received_usage":
+		base = `SELECT ucgid,account_id,node_id,region,operation_id,public_model,model_variant_id,
+			rate_publication_id,charged_microcredits,ledger_transaction_id,started_at,completed_at,received_at
+			FROM gateway_usage_records`
 		add(query.AccountID, "account_id=?")
-		add(query.APIKeyID, "api_key_id=?")
-		add(query.ModelID, "model_id=?")
+		add(query.NodeID, "node_id=?")
+		add(query.Region, "region=?")
+		add(query.ModelID, "public_model=?")
+		add(query.From, "received_at>=?")
+		add(query.To, "received_at<?")
+		orderBy = "received_at,ucgid"
+	case "rate_publications":
+		base = `SELECT id,node_id,region,source_publication_id,revision,status,effective_at,created_at
+			FROM billing_rate_publications`
+		add(query.NodeID, "node_id=?")
+		add(query.Region, "region=?")
+		add(query.Status, "status=?")
+		orderBy = "created_at,id"
+	case "regional_rate_publications":
+		base = `SELECT id,region,revision,status,gizpay_publication_id,effective_at,created_at,updated_at
+			FROM rate_publications`
+		add(query.Region, "region=?")
+		add(query.Status, "status=?")
+		orderBy = "created_at,id"
+	case "usage_outbox":
+		// Deliberately omit runtime_key_token and payload: regional diagnostics
+		// expose delivery state, never the in-memory key association mechanism.
+		base = `SELECT ucgid,operation_id,public_model,model_variant_id,rate_publication_id,
+			period_started_at,period_ended_at,gateway_calculated_microcredits,status,attempt_count,
+			next_attempt_at,last_error,created_at,updated_at,reported_at,abandoned_at,failed_at
+			FROM gateway_usage_outbox`
+		add(query.Status, "status=?")
+		add(query.ModelID, "public_model=?")
+		add(query.From, "created_at>=?")
+		add(query.To, "created_at<?")
+		orderBy = "created_at,ucgid"
+	case "gateway_executions":
+		// Regional Admin intentionally exposes the identity-free local
+		// execution lifecycle. Account and API-key filters do not exist on a
+		// GizWay database because those identities belong exclusively to GizPay.
+		base = `SELECT id,public_model,model_variant_id,provider_request_id,protocol,stream_mode,
+			rate_publication_id,status,estimated_microcredits,actual_microcredits,started_at,completed_at
+			FROM gateway_executions`
+		add(query.ModelID, "public_model=?")
 		add(query.Status, "status=?")
 		add(query.From, "started_at>=?")
 		add(query.To, "started_at<?")

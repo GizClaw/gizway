@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/idy/gizway/internal/service/quotaexchange"
 	"github.com/idy/gizway/internal/timetext"
 	"github.com/jmoiron/sqlx"
 )
@@ -26,6 +27,8 @@ var (
 	ErrAccountFrozen        = errors.New("account balance is frozen")
 	ErrRealtimeSessionLimit = errors.New("realtime concurrent session limit reached")
 	ErrRateLimited          = errors.New("request rate limit exceeded")
+	ErrUCGIDConflict        = errors.New("UCGID reused with different usage")
+	ErrUnpriceableUsage     = errors.New("usage cannot be priced from the referenced publication")
 )
 
 // Store executes application queries and commands against a SQL database.
@@ -118,12 +121,20 @@ type Account struct {
 	CreatedAt string `db:"created_at" json:"created_at"`
 }
 
-// Balance is the posted Credit balance of an account.
+// Balance separates the signed posted ledger fact from nonnegative amounts a
+// caller may use. Recent regional Usage may still be pending at GizWay, so this
+// is an eventual center view, not a completeness claim.
 type Balance struct {
-	AccountID string  `db:"account_id" json:"account_id"`
-	Asset     string  `db:"asset_code" json:"asset"`
-	Amount    int64   `db:"balance_microcredits" json:"microcredits"`
-	UpdatedAt *string `db:"updated_at" json:"updated_at"`
+	AccountID          string  `db:"account_id" json:"account_id"`
+	Asset              string  `db:"asset_code" json:"asset"`
+	Amount             int64   `db:"balance_microcredits" json:"microcredits"`
+	PostedMicrocredits int64   `json:"posted_microcredits"`
+	PaymentHeld        int64   `db:"payment_held_microcredits" json:"payment_held_microcredits"`
+	AISpendable        int64   `json:"ai_spendable_microcredits"`
+	Transferable       int64   `json:"transferable_microcredits"`
+	Refundable         int64   `db:"refundable_microcredits" json:"refundable_microcredits"`
+	AsOf               string  `json:"as_of"`
+	UpdatedAt          *string `db:"updated_at" json:"updated_at"`
 }
 
 // APIKey is the public, secret-free representation of an account credential.
@@ -231,37 +242,6 @@ type PublicModel struct {
 	OwnedBy string `json:"owned_by"`
 }
 
-// AuthenticateUserKey returns the user and account bound to an active key.
-func (s *Store) AuthenticateUserKey(ctx context.Context, secret string) (string, string, error) {
-	return s.AuthenticateUserKeyAt(ctx, secret, timetext.Format(s.now()))
-}
-
-// AuthenticateUserKeyAt exposes the comparison instant for deterministic
-// fractional-second boundary tests; production callers use AuthenticateUserKey.
-func (s *Store) AuthenticateUserKeyAt(ctx context.Context, secret, at string) (string, string, error) {
-	hash := sha256.Sum256([]byte(secret))
-	var result struct {
-		UserID    string `db:"user_id"`
-		AccountID string `db:"account_id"`
-	}
-	err := s.db.GetContext(ctx, &result, `
-		SELECT a.owner_user_id AS user_id, k.account_id
-		FROM api_keys k
-		JOIN accounts a ON a.id = k.account_id
-		JOIN users u ON u.id = a.owner_user_id
-		WHERE k.secret_hash = ? AND k.status = 'active'
-		  AND a.status = 'active' AND u.status = 'active'
-		  AND (k.expires_at IS NULL OR k.expires_at > ?)
-	`, hash[:], at)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", ErrNotFound
-	}
-	if err != nil {
-		return "", "", fmt.Errorf("authenticate user key: %w", err)
-	}
-	return result.UserID, result.AccountID, nil
-}
-
 // AuthenticateUserSession returns an active user and the user's personal
 // account. Sessions are intentionally distinct from Gateway and Payment keys.
 func (s *Store) AuthenticateUserSession(ctx context.Context, secret string) (string, string, error) {
@@ -363,16 +343,30 @@ func (s *Store) ListAccounts(ctx context.Context, userID string) ([]Account, err
 func (s *Store) GetBalance(ctx context.Context, userID, accountID string) (Balance, error) {
 	var balance Balance
 	err := s.db.GetContext(ctx, &balance, `
-		SELECT b.account_id, b.asset_code, b.balance_microcredits, b.updated_at
+		SELECT b.account_id,b.asset_code,b.balance_microcredits,b.updated_at,
+		       COALESCE((SELECT SUM(r.credit_microcredits) FROM refunds r
+		                 WHERE r.account_id=b.account_id AND r.status='pending'),0) +
+		       COALESCE((SELECT SUM(h.amount_microcredits) FROM credit_holds h
+		                 WHERE h.account_id=b.account_id AND h.status='active' AND h.expires_at>?),0)
+		         AS payment_held_microcredits,
+		       COALESCE((SELECT SUM(GREATEST(l.remaining_microcredits-
+		                 COALESCE((SELECT SUM(r.credit_microcredits) FROM refunds r
+		                           WHERE r.topup_id=l.topup_id AND r.status='pending'),0),0))
+		                 FROM credit_lots l WHERE l.account_id=b.account_id),0)
+		         AS refundable_microcredits
 		FROM account_balances b JOIN accounts a ON a.id = b.account_id
 		WHERE b.account_id = ? AND a.owner_user_id = ?
-	`, accountID, userID)
+	`, timetext.Format(s.now()), accountID, userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Balance{}, ErrNotFound
 	}
 	if err != nil {
 		return Balance{}, fmt.Errorf("get balance: %w", err)
 	}
+	balance.PostedMicrocredits = balance.Amount
+	balance.AISpendable, _ = quotaexchange.CurrentQuota(balance.Amount, balance.PaymentHeld)
+	balance.Transferable = balance.AISpendable
+	balance.AsOf = timetext.Format(s.now())
 	return balance, nil
 }
 
@@ -537,60 +531,75 @@ func (s *Store) CreateMerchantAccount(ctx context.Context, userID string, mercha
 	return merchant, nil
 }
 
-// ListGatewayUsage returns persisted usage rows for an owned account.
-func (s *Store) ListGatewayUsagePage(ctx context.Context, userID, accountID, from, to string, query AccountListQuery) (AccountPage[map[string]any], error) {
-	limit, offset, err := normalizeAccountListQuery(query)
+// ListReceivedGatewayUsagePage is the GizPay account-history query. It has no
+// API-key dimension and never refers to a regional execution table: GizPay can
+// expose only Usage delivered through Quota Exchange and posted to the ledger.
+func (s *Store) ListReceivedGatewayUsagePage(ctx context.Context, userID, accountID, from, to string, query AccountListQuery) (AccountPage[map[string]any], error) {
+	limit, _, err := normalizeAccountListQuery(AccountListQuery{Limit: query.Limit})
 	if err != nil {
 		return AccountPage[map[string]any]{}, err
 	}
+	initialAsOf := query.AsOf
+	if initialAsOf == "" {
+		initialAsOf = timetext.Format(s.now())
+	}
+	offset, asOf, err := decodeReceivedUsageCursor(query.Cursor, initialAsOf)
+	if err != nil {
+		return AccountPage[map[string]any]{}, err
+	}
+	asOf, err = timetext.Normalize(asOf)
+	if err != nil {
+		return AccountPage[map[string]any]{}, errors.New("invalid received Usage cursor")
+	}
 	var owned int
-	if err := s.db.GetContext(ctx, &owned, `SELECT COUNT(*) FROM accounts WHERE id = ? AND owner_user_id = ?`, accountID, userID); err != nil {
-		return AccountPage[map[string]any]{}, fmt.Errorf("check usage account ownership: %w", err)
+	if err := s.db.GetContext(ctx, &owned, `SELECT COUNT(*) FROM accounts WHERE id=? AND owner_user_id=?`, accountID, userID); err != nil {
+		return AccountPage[map[string]any]{}, fmt.Errorf("check received usage account ownership: %w", err)
 	}
 	if owned == 0 {
 		return AccountPage[map[string]any]{}, ErrNotFound
 	}
-	filter := ""
-	args := []any{accountID, from, to}
-	if query.APIKeyID != "" {
-		filter = " AND api_key_id = ?"
-		args = append(args, query.APIKeyID)
-	}
-	args = append(args, limit+1, offset)
+
 	rows, err := s.db.QueryxContext(ctx, `
-		SELECT id, api_key_id, model_id, model_variant_id, protocol, status,
-		       input_tokens, output_tokens, cached_input_tokens,
-		       input_audio_tokens, output_audio_tokens,
-		       charged_microcredits, started_at, completed_at
-		FROM gateway_requests
-		WHERE account_id = ? AND started_at >= ? AND started_at < ?`+filter+`
-		ORDER BY started_at DESC, id
+		SELECT u.ucgid AS id,u.ucgid,u.public_model,u.model_variant_id,
+		       COALESCE(SUM(m.quantity) FILTER (WHERE m.metric='input_token'),0)::BIGINT AS input_tokens,
+		       COALESCE(SUM(m.quantity) FILTER (WHERE m.metric='output_token'),0)::BIGINT AS output_tokens,
+		       COALESCE(SUM(m.quantity) FILTER (WHERE m.metric='cached_input_token'),0)::BIGINT AS cached_input_tokens,
+		       COALESCE(SUM(m.quantity) FILTER (WHERE m.metric='input_audio_token'),0)::BIGINT AS input_audio_tokens,
+		       COALESCE(SUM(m.quantity) FILTER (WHERE m.metric='output_audio_token'),0)::BIGINT AS output_audio_tokens,
+		       u.charged_microcredits,u.started_at,u.completed_at,u.received_at
+		FROM gateway_usage_records u
+		LEFT JOIN gateway_usage_metrics m ON m.ucgid=u.ucgid
+		WHERE u.account_id=? AND u.started_at>=? AND u.started_at<? AND u.received_at<=?
+		GROUP BY u.ucgid
+		ORDER BY u.started_at DESC,u.ucgid
 		LIMIT ? OFFSET ?
-	`, args...)
+	`, accountID, from, to, asOf, limit+1, offset)
 	if err != nil {
-		return AccountPage[map[string]any]{}, fmt.Errorf("list gateway usage: %w", err)
+		return AccountPage[map[string]any]{}, fmt.Errorf("list received gateway usage: %w", err)
 	}
-	result := make([]map[string]any, 0)
+	items := make([]map[string]any, 0, limit+1)
 	for rows.Next() {
 		item := map[string]any{}
 		if err := rows.MapScan(item); err != nil {
 			_ = rows.Close()
-			return AccountPage[map[string]any]{}, fmt.Errorf("scan gateway usage: %w", err)
+			return AccountPage[map[string]any]{}, fmt.Errorf("scan received gateway usage: %w", err)
 		}
-		result = append(result, item)
+		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return AccountPage[map[string]any]{}, fmt.Errorf("iterate gateway usage: %w", err)
+		return AccountPage[map[string]any]{}, fmt.Errorf("iterate received gateway usage: %w", err)
 	}
-	// Close the outer result set before loading charge detail so connection
-	// ownership remains explicit and nested queries cannot starve the pool.
 	if err := rows.Close(); err != nil {
-		return AccountPage[map[string]any]{}, fmt.Errorf("close gateway usage rows: %w", err)
+		return AccountPage[map[string]any]{}, fmt.Errorf("close received gateway usage rows: %w", err)
 	}
-	page := accountPage(result, limit, offset)
+	page := accountPage(items, limit, offset)
+	page.AsOf = asOf
+	if page.HasMore {
+		cursor := encodeReceivedUsageCursor(offset+limit, asOf)
+		page.NextCursor = &cursor
+	}
 	for _, item := range page.Items {
-		requestID := databaseText(item["id"])
 		var charges []struct {
 			Metric         string `db:"metric" json:"metric"`
 			Quantity       int64  `db:"quantity" json:"quantity"`
@@ -600,8 +609,12 @@ func (s *Store) ListGatewayUsagePage(ctx context.Context, userID, accountID, fro
 			DiscountBPS    int    `db:"discount_bps" json:"discount_bps"`
 			Charged        int64  `db:"charged_microcredits" json:"charged_microcredits"`
 		}
-		if err := s.db.SelectContext(ctx, &charges, `SELECT metric,quantity,unit_size,base_price_microcredits,effective_price_microcredits,discount_bps,charged_microcredits FROM gateway_request_charges WHERE gateway_request_id=? ORDER BY metric`, requestID); err != nil {
-			return AccountPage[map[string]any]{}, fmt.Errorf("list gateway usage charges: %w", err)
+		if err := s.db.SelectContext(ctx, &charges, `SELECT m.metric,m.quantity,m.unit_size,
+			p.base_price_microcredits,m.price_microcredits AS effective_price_microcredits,
+			p.discount_bps,m.charged_microcredits
+			FROM gateway_usage_metrics m JOIN billing_rate_versions p ON p.id=m.rate_version_id
+			WHERE m.ucgid=? ORDER BY m.metric`, databaseText(item["ucgid"])); err != nil {
+			return AccountPage[map[string]any]{}, fmt.Errorf("list received usage charges: %w", err)
 		}
 		item["charges"] = charges
 	}
@@ -855,11 +868,6 @@ func (s *Store) ListCreditTransfersPage(ctx context.Context, userID, accountID s
 			CompletedAt: row.CompletedAt, Direction: direction})
 	}
 	return accountPage(result, limit, offset), nil
-}
-
-// ListPublicModels returns only currently routable and priced canonical models.
-func (s *Store) ListPublicModels(ctx context.Context, at time.Time) ([]PublicModel, error) {
-	return s.ListPublicModelsForAccount(ctx, "", "", at)
 }
 
 // ListPublicModelsForAccount filters both account policy and protocol
