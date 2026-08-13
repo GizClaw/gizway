@@ -59,7 +59,7 @@ func Inventory(openAPIDirectory, hurlDirectory string) ([]InventoryEntry, error)
 	entries := make([]InventoryEntry, 0, len(operations))
 	for key, operation := range operations {
 		service := "GizPay"
-		if operation.Document == "gizway-admin.yaml" {
+		if operation.Document == "gizway-admin.yaml" || operation.Document == "gizway-public.yaml" {
 			service = "GizWay"
 		}
 		files := append([]string(nil), coveredBy[key]...)
@@ -129,7 +129,7 @@ func CheckHurlCoverage(openAPIDirectory, hurlDirectory string) error {
 					break
 				}
 			}
-			if !matched && !operationalPath(request.Path) && !strings.HasPrefix(request.Path, "/test/") && !hurlOnlyProtocolPath(request.Path) {
+			if !matched && !operationalPath(request.Path) && !removedMilestone01Path(request.Path) && !strings.HasPrefix(request.Path, "/test/") {
 				return fmt.Errorf("%s: Hurl request %s %s has no OpenAPI operation", path, request.Method, request.Path)
 			}
 		}
@@ -164,24 +164,24 @@ func CheckHurlCoverage(openAPIDirectory, hurlDirectory string) error {
 	return nil
 }
 
+// These paths appear only in explicit 404 assertions proving that the
+// breaking refactor did not retain a second operational health contract.
+func removedMilestone01Path(path string) bool {
+	return path == "/livez" || path == "/readyz" || path == "/internal/v1/readyz"
+}
+
 // Hurl must name the concrete deployment it contacts. Central contracts use
 // pay_url and the regional contract uses way_url; base_url is intentionally
 // not accepted for OpenAPI ownership because the two Admin surfaces share
 // paths and operation IDs while remaining independent services.
 func requestTargetsDocument(variable, document string) bool {
 	if variable == "way_url" {
-		return document == "gizway-admin.yaml"
+		return document == "gizway-admin.yaml" || document == "gizway-public.yaml"
 	}
 	if variable == "pay_url" {
-		return document != "gizway-admin.yaml"
+		return document != "gizway-admin.yaml" && document != "gizway-public.yaml"
 	}
 	return false
-}
-
-func hurlOnlyProtocolPath(path string) bool {
-	return strings.HasPrefix(path, "/v1/") || path == "/v1/models" ||
-		strings.HasPrefix(path, "/v1beta/") || strings.HasPrefix(path, "/upload/v1beta/") ||
-		strings.HasPrefix(path, "/callbacks/")
 }
 
 type hurlRequest struct{ Variable, Method, Path string }
@@ -215,7 +215,7 @@ func openAPIOperationRoutes(directory string) (map[string]operationRoute, error)
 	}
 	operations := map[string]operationRoute{}
 	for name, document := range docs {
-		if _, isRoot := document["openapi"]; !isRoot || name == "common.yaml" {
+		if _, isRoot := document["openapi"]; !isRoot {
 			continue
 		}
 		resolved, err := bundleValue(docs, name, document, map[string]bool{})

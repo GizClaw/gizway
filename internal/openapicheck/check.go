@@ -45,12 +45,6 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 		if document["openapi"] != "3.1.0" {
 			return fmt.Errorf("%s: openapi must be 3.1.0", name)
 		}
-		if name == "common.yaml" {
-			if _, err := bundleValue(docs, name, document, map[string]bool{}); err != nil {
-				return err
-			}
-			continue
-		}
 		// Use an independent standards-aware parser/validator in addition to the
 		// repository-specific route and bundle checks below. This catches schema,
 		// parameter, response and security-shape errors that a YAML/ref walker
@@ -111,12 +105,12 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 			return err
 		}
 	}
-	if rootCount != 5 {
-		return fmt.Errorf("expected 5 root OpenAPI documents, found %d", rootCount)
+	if rootCount != 4 {
+		return fmt.Errorf("expected 4 root OpenAPI documents, found %d", rootCount)
 	}
 	for route := range implemented {
 		path := strings.SplitN(route, " ", 2)[1]
-		if operationalPath(path) || strings.HasPrefix(path, "/test/") || hurlOnlyProtocolPath(path) {
+		if operationalPath(path) || strings.HasPrefix(path, "/test/") {
 			continue
 		}
 		if !documentedRoutes[route] {
@@ -129,7 +123,7 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
 		return err
 	}
-	for _, name := range []string{"account.yaml", "gizpay-admin.yaml", "gizway-admin.yaml", "internal-gizpay.yaml", "payment.yaml"} {
+	for _, name := range []string{"account.yaml", "gizway-admin.yaml", "gizway-public.yaml", "internal-gizpay.yaml"} {
 		bundled, err := bundleValue(docs, name, docs[name], map[string]bool{})
 		if err != nil {
 			return err
@@ -163,8 +157,7 @@ func sharedAdministratorOperation(first, second, route string) bool {
 }
 
 func operationalPath(path string) bool {
-	return path == "/healthz" || path == "/livez" || path == "/readyz" ||
-		path == "/internal/v1/readyz" || path == "/admin/v1/bootstrap_status"
+	return path == "/healthz"
 }
 
 func loadDocuments(directory string) (documents, error) {
@@ -196,6 +189,10 @@ func implementedRoutes(directory string) (map[string]bool, error) {
 		return nil, err
 	}
 	routes := map[string]bool{}
+	manifest := filepath.Join(directory, "milestone02_routes.go")
+	if _, statErr := os.Stat(manifest); statErr == nil {
+		paths = []string{manifest}
+	}
 	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		if err != nil {

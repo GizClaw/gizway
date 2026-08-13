@@ -5,9 +5,9 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repository_root="$(CDPATH= cd -- "${script_dir}/../.." && pwd)"
 cd "${repository_root}"
 
-# The Go contract checker binds every document-qualified operation to a real
-# request against its owning service. Provider-compatible protocols remain a
-# product surface in Refactor 01, so an empty protocol inventory is a failure.
+# The Go contract checker binds every Milestone 02 document-qualified operation
+# to a real request against its owning service. Provider-compatible protocols
+# use stable Hurl case IDs, so an empty protocol inventory is a failure.
 for command in rg sed sort comm mktemp; do
     if ! command -v "${command}" >/dev/null 2>&1; then
         echo "${command} is required to check API contracts" >&2

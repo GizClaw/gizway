@@ -1,0 +1,78 @@
+openapi: 3.1.0
+info: {title: GizWay Public AI API, version: 2.0.0}
+servers: [{url: https://api.gizway.com}]
+security: [{subscriptionKey: []}]
+paths:
+  /v1/models:
+    get:
+      operationId: listModels
+      responses: {'200': {$ref: '#/components/responses/ModelList'}}
+  /v1/chat/completions:
+    post:
+      operationId: createChatCompletion
+      requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
+      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+  /v1/messages:
+    post:
+      operationId: createAnthropicMessage
+      requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
+      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+  /v1beta/models/{operation}:
+    parameters: [{name: operation, in: path, required: true, schema: {type: string, minLength: 1}}]
+    post:
+      operationId: generateGeminiContent
+      requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
+      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+  /v1/realtime/client_secrets:
+    post:
+      operationId: createRealtimeClientSecret
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      responses: {'201': {description: Ephemeral regional Realtime session, content: {application/json: {schema: {$ref: '#/components/schemas/RealtimeSecret'}}}}}
+  /v1/realtime:
+    get:
+      operationId: connectRealtimeWebSocket
+      security: [{realtimeSecret: []}]
+      parameters: [{name: session_id, in: query, required: true, schema: {type: string}}]
+      responses: {'101': {description: WebSocket protocol switch}}
+components:
+  securitySchemes:
+    subscriptionKey: {type: http, scheme: bearer}
+    realtimeSecret: {type: http, scheme: bearer}
+  schemas:
+    Model:
+      type: object
+      required: [id, object]
+      properties: {id: {type: string}, object: {type: string, const: model}}
+    Message:
+      type: object
+      required: [role, content]
+      properties: {role: {type: string, minLength: 1}, content: {type: string}}
+    AIResponse: {type: object, additionalProperties: true}
+    RealtimeSecret:
+      type: object
+      required: [client_secret, session]
+      properties:
+        client_secret: {type: object, required: [value], properties: {value: {type: string}}}
+        session:
+          type: object
+          required: [session_id, transport, model]
+          properties: {session_id: {type: string}, transport: {type: string, const: websocket}, model: {type: string}}
+  requestBodies:
+    ChatCompletion:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [model, messages]
+            properties:
+              model: {type: string, minLength: 1}
+              messages: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Message'}}
+              stream: {type: boolean, default: false}
+              max_tokens: {type: integer, minimum: 1}
+    GeminiContent:
+      required: true
+      content: {application/json: {schema: {type: object, required: [contents], properties: {contents: {type: array, minItems: 1, items: {type: object, additionalProperties: true}}}}}}
+  responses:
+    ModelList: {description: Regional active models, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Model'}}}}}}}
+    AIResponse: {description: Provider-compatible response, content: {application/json: {schema: {$ref: '#/components/schemas/AIResponse'}}, text/event-stream: {schema: {type: string}}}}

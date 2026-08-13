@@ -6,8 +6,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /out/gizpay ./cmd/gizpay \
  && CGO_ENABLED=0 go build -o /out/gizway ./cmd/gizway \
  && CGO_ENABLED=0 go build -o /out/fake-ai-provider ./cmd/fake-ai-provider \
- && CGO_ENABLED=0 go build -o /out/fake-payment-provider ./cmd/fake-payment-provider \
- && CGO_ENABLED=0 go build -o /out/fake-risk-provider ./cmd/fake-risk-provider \
+ && CGO_ENABLED=0 go build -o /out/fake-credit-spy ./cmd/fake-credit-spy \
+ && CGO_ENABLED=0 go build -o /out/fake-oauth-spy ./cmd/fake-oauth-spy \
  && CGO_ENABLED=0 go build -o /out/e2e-bootstrap ./tests/e2e/bootstrap
 
 FROM debian:bookworm-slim

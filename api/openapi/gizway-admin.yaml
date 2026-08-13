@@ -1,37 +1,106 @@
 openapi: 3.1.0
-info:
-  title: Regional GizWay Admin API
-  version: 1.0.0
-  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
-  description: Region-owned Catalog, Provider, pricing, and local execution operations.
-servers: [{url: https://global.gizway.com/admin/v1}]
-security:
-  - adminSessionAuth: []
-  - adminApiKeyAuth: []
+info: {title: GizWay Regional Admin API, version: 2.0.0}
+servers: [{url: https://api.gizway.com/admin/v1}]
+security: [{administratorBearer: []}]
 paths:
-  /auth/login: {$ref: './admin.yaml#/paths/~1auth~1login'}
-  /auth/refresh: {$ref: './admin.yaml#/paths/~1auth~1refresh'}
-  /auth/logout: {$ref: './admin.yaml#/paths/~1auth~1logout'}
-  /me: {$ref: './admin.yaml#/paths/~1me'}
-  /administrators: {$ref: './admin.yaml#/paths/~1administrators'}
-  /administrators/{administrator_id}: {$ref: './admin.yaml#/paths/~1administrators~1{administrator_id}'}
-  /administrators/{administrator_id}/api_keys: {$ref: './admin.yaml#/paths/~1administrators~1{administrator_id}~1api_keys'}
-  /administrators/{administrator_id}/api_keys/{admin_api_key_id}/revoke: {$ref: './admin.yaml#/paths/~1administrators~1{administrator_id}~1api_keys~1{admin_api_key_id}~1revoke'}
-  /providers: {$ref: './admin.yaml#/paths/~1providers'}
-  /providers/{provider_id}: {$ref: './admin.yaml#/paths/~1providers~1{provider_id}'}
-  /providers/{provider_id}/endpoints: {$ref: './admin.yaml#/paths/~1providers~1{provider_id}~1endpoints'}
-  /provider_endpoints/{endpoint_id}: {$ref: './admin.yaml#/paths/~1provider_endpoints~1{endpoint_id}'}
-  /provider_endpoints/{endpoint_id}/rotate_credential: {$ref: './admin.yaml#/paths/~1provider_endpoints~1{endpoint_id}~1rotate_credential'}
-  /models: {$ref: './admin.yaml#/paths/~1models'}
-  /models/{model_id}: {$ref: './admin.yaml#/paths/~1models~1{model_id}'}
-  /models/{model_id}/variants: {$ref: './admin.yaml#/paths/~1models~1{model_id}~1variants'}
-  /model_variants/{variant_id}: {$ref: './admin.yaml#/paths/~1model_variants~1{variant_id}'}
-  /model_variants/{variant_id}/prices: {$ref: './admin.yaml#/paths/~1model_variants~1{variant_id}~1prices'}
-  /rate_publications: {$ref: './admin.yaml#/paths/~1rate_publications'}
-  /usage_outbox: {$ref: './admin.yaml#/paths/~1usage_outbox'}
-  /gateway_executions: {$ref: './admin.yaml#/paths/~1gateway_executions'}
-  /gateway_executions/{execution_id}: {$ref: './admin.yaml#/paths/~1gateway_executions~1{execution_id}'}
+  /models:
+    get: {operationId: listAdminModels, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {operationId: createModel, requestBody: {$ref: '#/components/requestBodies/CreateModel'}, responses: {'201': {$ref: '#/components/responses/Model'}}}
+  /models/{model_id}:
+    parameters: [{$ref: '#/components/parameters/model_id'}]
+    get: {operationId: getModel, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    patch: {operationId: updateModel, requestBody: {$ref: '#/components/requestBodies/UpdateModel'}, responses: {'200': {$ref: '#/components/responses/Model'}}}
+  /models/{model_id}/prices:
+    parameters: [{$ref: '#/components/parameters/model_id'}]
+    get: {operationId: getModelPrices, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    put: {operationId: putModelPrices, requestBody: {$ref: '#/components/requestBodies/ModelPrices'}, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /providers:
+    get: {operationId: listProviders, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {operationId: createProvider, requestBody: {$ref: '#/components/requestBodies/CreateProvider'}, responses: {'201': {$ref: '#/components/responses/Provider'}}}
+  /providers/{provider_id}:
+    parameters: [{$ref: '#/components/parameters/provider_id'}]
+    get: {operationId: getProvider, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    patch: {operationId: updateProvider, requestBody: {$ref: '#/components/requestBodies/UpdateProvider'}, responses: {'200': {$ref: '#/components/responses/Provider'}}}
+  /providers/{provider_id}/api-keys:
+    parameters: [{$ref: '#/components/parameters/provider_id'}]
+    get: {operationId: listProviderAPIKeys, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {operationId: createProviderAPIKey, requestBody: {$ref: '#/components/requestBodies/CreateProviderKey'}, responses: {'201': {$ref: '#/components/responses/ProviderKey'}}}
+  /provider-api-keys/{bifrost_key_id}:
+    parameters: [{$ref: '#/components/parameters/bifrost_key_id'}]
+    get: {operationId: getProviderAPIKey, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    patch: {operationId: updateProviderAPIKey, requestBody: {$ref: '#/components/requestBodies/UpdateProviderKey'}, responses: {'200': {$ref: '#/components/responses/ProviderKey'}}}
+  /provider-api-keys/{bifrost_key_id}/disable:
+    parameters: [{$ref: '#/components/parameters/bifrost_key_id'}]
+    post: {operationId: disableProviderAPIKey, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /provider-api-keys/{bifrost_key_id}/billing:
+    parameters: [{$ref: '#/components/parameters/bifrost_key_id'}]
+    get: {operationId: getProviderAPIKeyBilling, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    put: {operationId: putProviderAPIKeyBilling, requestBody: {$ref: '#/components/requestBodies/ProviderKeyBilling'}, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /provider-api-keys/{bifrost_key_id}/prices:
+    parameters: [{$ref: '#/components/parameters/bifrost_key_id'}]
+    get: {operationId: getProviderAPIKeyPrices, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    put: {operationId: putProviderAPIKeyPrices, requestBody: {$ref: '#/components/requestBodies/ProviderKeyPrices'}, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /ai-orders:
+    get: {operationId: listAIOrders, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /charge-outbox:
+    get: {operationId: listChargeOutbox, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /bifrost-logs:
+    get: {operationId: listBifrostLogs, responses: {'200': {$ref: '#/components/responses/OK'}}}
 components:
   securitySchemes:
-    adminSessionAuth: {$ref: './common.yaml#/components/securitySchemes/adminSessionAuth'}
-    adminApiKeyAuth: {$ref: './common.yaml#/components/securitySchemes/adminApiKeyAuth'}
+    administratorBearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    model_id: {name: model_id, in: path, required: true, schema: {type: string}}
+    provider_id: {name: provider_id, in: path, required: true, schema: {type: string}}
+    bifrost_key_id: {name: bifrost_key_id, in: path, required: true, schema: {type: string}}
+  schemas:
+    Status: {type: string, enum: [active, inactive]}
+    Model:
+      type: object
+      required: [id, name, provider_id, provider_model, status]
+      properties: {id: {type: string}, name: {type: string, minLength: 1}, provider_id: {type: string, minLength: 1}, provider_model: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}
+    Provider:
+      type: object
+      required: [id, name, kind, base_url, status]
+      properties:
+        id: {type: string}
+        name: {type: string, minLength: 1}
+        kind: {type: string, enum: [openai, anthropic, gemini]}
+        base_url: {type: string, format: uri}
+        status: {$ref: '#/components/schemas/Status'}
+    CustomerPrice:
+      type: object
+      required: [metric, unit_size, price_microcredits]
+      properties: {metric: {type: string, enum: [input_token, output_token]}, unit_size: {type: integer, format: int64, minimum: 1}, price_microcredits: {type: integer, format: int64, minimum: 0}}
+    ProviderPrice:
+      type: object
+      required: [model_id, metric, unit_size, commission_microcredits]
+      properties: {model_id: {type: string, minLength: 1}, metric: {type: string, enum: [input_token, output_token]}, unit_size: {type: integer, format: int64, minimum: 1}, commission_microcredits: {type: integer, format: int64, minimum: 0}}
+    ProviderKey:
+      type: object
+      required: [bifrost_key_id, provider_id, name, api_key, weight, status, beneficiary_merchant_id, prices]
+      properties:
+        bifrost_key_id: {type: string}
+        provider_id: {type: string}
+        name: {type: string}
+        api_key: {type: string}
+        weight: {type: integer, minimum: 1}
+        status: {type: string, enum: [active, inactive, disabled]}
+        beneficiary_merchant_id: {type: string}
+        prices: {type: array, items: {$ref: '#/components/schemas/ProviderPrice'}}
+    Resource: {type: object, additionalProperties: true}
+  requestBodies:
+    CreateModel: {required: true, content: {application/json: {schema: {type: object, required: [name, provider_id, provider_model], properties: {name: {type: string, minLength: 1}, provider_id: {type: string, minLength: 1}, provider_model: {type: string, minLength: 1}}}}}}
+    UpdateModel: {required: true, content: {application/json: {schema: {type: object, minProperties: 1, properties: {name: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}}}}}
+    ModelPrices: {required: true, content: {application/json: {schema: {type: object, required: [prices], properties: {prices: {type: array, items: {$ref: '#/components/schemas/CustomerPrice'}}}}}}}
+    CreateProvider: {required: true, content: {application/json: {schema: {type: object, required: [name, kind, base_url], properties: {name: {type: string, minLength: 1}, kind: {type: string, enum: [openai, anthropic, gemini]}, base_url: {type: string, format: uri}}}}}}
+    UpdateProvider: {required: true, content: {application/json: {schema: {type: object, minProperties: 1, properties: {name: {type: string, minLength: 1}, base_url: {type: string, format: uri}, status: {$ref: '#/components/schemas/Status'}}}}}}
+    CreateProviderKey: {required: true, content: {application/json: {schema: {type: object, required: [name, api_key, weight, status, beneficiary_merchant_id, prices], properties: {name: {type: string, minLength: 1}, api_key: {type: string, minLength: 1}, weight: {type: integer, minimum: 1}, status: {type: string, enum: [active]}, beneficiary_merchant_id: {type: string, minLength: 1}, prices: {type: array, items: {$ref: '#/components/schemas/ProviderPrice'}}}}}}}
+    UpdateProviderKey: {required: true, content: {application/json: {schema: {type: object, minProperties: 1, properties: {api_key: {type: string, minLength: 1}, weight: {type: integer, minimum: 1}}}}}}
+    ProviderKeyBilling: {required: true, content: {application/json: {schema: {type: object, required: [beneficiary_merchant_id, status], properties: {beneficiary_merchant_id: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}}}}}
+    ProviderKeyPrices: {required: true, content: {application/json: {schema: {type: object, required: [prices], properties: {prices: {type: array, items: {$ref: '#/components/schemas/ProviderPrice'}}}}}}}
+  responses:
+    OK: {description: Success, content: {application/json: {schema: {$ref: '#/components/schemas/Resource'}}}}
+    Model: {description: Model, content: {application/json: {schema: {$ref: '#/components/schemas/Model'}}}}
+    Provider: {description: Provider, content: {application/json: {schema: {$ref: '#/components/schemas/Provider'}}}}
+    ProviderKey: {description: Provider API Key, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderKey'}}}}

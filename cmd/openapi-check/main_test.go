@@ -46,10 +46,9 @@ func TestWriteInventoryIncludesServiceScopedCoverageAndDeletionReasons(t *testin
 	text := output.String()
 	for _, expected := range []string{
 		"Final retained operation count:",
-		"gizpay-admin.yaml | GET | `/admin/v1/me` | getCurrentAdministrator | GizPay | Keep",
-		"gizway-admin.yaml | GET | `/admin/v1/me` | getCurrentAdministrator | GizWay | Keep",
-		"listAccountModels | GizPay | Delete",
-		"setAccountModelEntitlement | GizPay | Delete",
+		"account.yaml | GET | `/account/v1/accounts` | listAccounts | GizPay | Keep",
+		"gizway-admin.yaml | GET | `/admin/v1/models` | listAdminModels | GizWay | Keep",
+		"internal-gizpay.yaml | POST | `/service/v1/subscription-credit-checks` | checkSubscriptionCredit | GizPay | Keep",
 	} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("inventory missing %q", expected)

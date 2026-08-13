@@ -1,0 +1,22 @@
+FirstInstance:
+  MachineKeyPath: /fixtures/zitadel-bootstrap-machine.json
+  LoginClientPatPath: /fixtures/zitadel-login-client.pat
+  Org:
+    Name: GizWay E2E Bootstrap
+    Human:
+      Username: bootstrap-admin
+      Password: Bootstrap1!
+      PasswordChangeRequired: false
+    Machine:
+      Machine:
+        Username: bootstrap-machine
+        Name: GizWay E2E Bootstrap Machine
+      MachineKey:
+        Type: 1
+      Pat: {}
+    LoginClient:
+      Machine:
+        Username: login-client
+        Name: GizWay E2E Login Client
+      Pat:
+        ExpirationDate: "2036-01-01T00:00:00Z"

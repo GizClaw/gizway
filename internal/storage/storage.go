@@ -20,7 +20,14 @@ type Storage struct {
 
 // OpenGizPayPostgreSQL initializes a fresh control-plane-only database.
 func OpenGizPayPostgreSQL(dsn string, initialize bool) (*Storage, error) {
-	return openServicePostgreSQL(dsn, initialize, "gizpay", gizpaysql.Migrations, "")
+	storage, err := openServicePostgreSQL(dsn, initialize, "gizpay", gizpaysql.Migrations, "")
+	if err == nil && initialize {
+		err = initializeGizPaySystem(context.Background(), storage.SQL)
+	}
+	if err != nil && storage != nil {
+		_ = storage.Close()
+	}
+	return storage, err
 }
 
 // OpenGizWayPostgreSQL initializes one fresh regional data-plane database.
@@ -31,7 +38,50 @@ func OpenGizWayPostgreSQL(dsn string, initialize bool) (*Storage, error) {
 // OpenGizPayStoryPostgreSQL creates a fresh GizPay schema plus its own test
 // fixture. It never imports or executes regional SQL.
 func OpenGizPayStoryPostgreSQL(dsn string) (*Storage, error) {
-	return openServicePostgreSQL(dsn, true, "gizpay", gizpaysql.Migrations, gizpaysql.StoryBaseSeed)
+	storage, err := openServicePostgreSQL(dsn, true, "gizpay", gizpaysql.Migrations, gizpaysql.StoryBaseSeed)
+	if err == nil {
+		err = initializeGizPaySystem(context.Background(), storage.SQL)
+	}
+	if err != nil && storage != nil {
+		_ = storage.Close()
+	}
+	return storage, err
+}
+
+const (
+	PlatformUserID     = "usr_platform"
+	PlatformAccountID  = "acct_platform"
+	PlatformCreditID   = "led_acct_platform"
+	PlatformClearingID = "led_clearing"
+)
+
+// initializeGizPaySystem creates the ledger principals required for the first
+// real Charge. This is application bootstrap, not story seed data, and is
+// deliberately idempotent for retrying an empty-environment initialization.
+func initializeGizPaySystem(ctx context.Context, database *sqlx.DB) error {
+	tx, err := database.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin GizPay system initialization: %w", err)
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`INSERT INTO users(id,identity_issuer,identity_subject,status) VALUES
+		 ('usr_platform','urn:gizpay:system','platform','active') ON CONFLICT (id) DO NOTHING`,
+		`INSERT INTO accounts(id,owner_user_id,status) VALUES
+		 ('acct_platform','usr_platform','active') ON CONFLICT (id) DO NOTHING`,
+		`INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES
+		 ('led_acct_platform','acct_platform','credit','active'),
+		 ('led_clearing',NULL,'credit','active') ON CONFLICT (id) DO NOTHING`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("initialize GizPay system ledger: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit GizPay system initialization: %w", err)
+	}
+	return nil
 }
 
 // OpenGizWayStoryPostgreSQL creates a fresh regional schema plus its own test

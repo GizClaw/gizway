@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,11 +28,19 @@ func Handler(callbackSecrets ...string) http.Handler {
 // credential different from the process bootstrap provider. This prevents a
 // false-positive test where only the URL or only the credential is dynamic.
 func HandlerWithCredential(providerCredential string, callbackSecrets ...string) http.Handler {
+	credentials := map[string]bool{}
+	for credential := range strings.SplitSeq(providerCredential, ",") {
+		credentials[strings.TrimSpace(credential)] = true
+	}
+	authorized := func(r *http.Request) bool {
+		return credentials[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+	}
 	callbackSecret := ""
 	if len(callbackSecrets) > 0 {
 		callbackSecret = callbackSecrets[0]
 	}
 	mux := http.NewServeMux()
+	var totalRequests atomic.Int64
 	var calls atomic.Int64
 	var streamCalls atomic.Int64
 	var responsesCalls atomic.Int64
@@ -42,6 +51,28 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 	var realtimeCalls atomic.Int64
 	var webrtcCalls atomic.Int64
 	var realtimeAudioEvents atomic.Int64
+	type heldChatJob struct {
+		reached     chan struct{}
+		release     chan struct{}
+		done        chan struct{}
+		reachedOnce sync.Once
+		releaseOnce sync.Once
+		mu          sync.Mutex
+		status      int
+		body        string
+		err         string
+	}
+	type concurrentBarrier struct {
+		expected int64
+		arrived  atomic.Int64
+		ready    chan struct{}
+		once     sync.Once
+	}
+	var heldChatSequence atomic.Int64
+	var heldChatMu sync.Mutex
+	heldChatJobs := map[string]*heldChatJob{}
+	var activeHeldChat *heldChatJob
+	var activeConcurrentBarrier *concurrentBarrier
 	type realtimeCallbackConfig struct {
 		CallbackURL   string `json:"callback_url"`
 		SessionID     string `json:"session_id"`
@@ -49,20 +80,248 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 	}
 	var realtimeConfigMu sync.Mutex
 	realtimeConfigs := map[string]realtimeCallbackConfig{}
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	mux.HandleFunc("GET /events", func(w http.ResponseWriter, _ *http.Request) {
+	writeStats := func(w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"chat_calls": calls.Load(), "stream_calls": streamCalls.Load(),
+			"total_requests": totalRequests.Load(),
+			"chat_calls":     calls.Load(), "stream_calls": streamCalls.Load(),
 			"responses_calls": responsesCalls.Load(), "embedding_calls": embeddingCalls.Load(),
 			"speech_calls": speechCalls.Load(), "transcription_calls": transcriptionCalls.Load(),
 			"image_calls": imageCalls.Load(), "realtime_calls": realtimeCalls.Load(),
 			"webrtc_calls":          webrtcCalls.Load(),
 			"realtime_audio_events": realtimeAudioEvents.Load(),
 		})
+	}
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.HandleFunc("GET /test/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.HandleFunc("GET /events", func(w http.ResponseWriter, _ *http.Request) { writeStats(w) })
+	mux.HandleFunc("GET /test/stats", func(w http.ResponseWriter, _ *http.Request) { writeStats(w) })
+	mux.HandleFunc("POST /test/reset", func(w http.ResponseWriter, _ *http.Request) {
+		totalRequests.Store(0)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// These three endpoints are test orchestration only. They let a Hurl story
+	// start a real GizWay request, wait until it reaches the Provider, mutate
+	// prices, then release the response. That proves request-start pricing is a
+	// snapshot without adding timing sleeps or hooks to production services.
+	mux.HandleFunc("POST /drive-held-chat", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIURL string `json:"api_url"`
+			APIKey string `json:"api_key"`
+			Model  string `json:"model"`
+		}
+		if json.NewDecoder(r.Body).Decode(&request) != nil || request.APIURL == "" || request.APIKey == "" || request.Model == "" {
+			http.Error(w, "invalid held chat driver request", http.StatusBadRequest)
+			return
+		}
+		jobID := fmt.Sprintf("held-chat-%d", heldChatSequence.Add(1))
+		job := &heldChatJob{reached: make(chan struct{}), release: make(chan struct{}), done: make(chan struct{})}
+		heldChatMu.Lock()
+		heldChatJobs[jobID] = job
+		activeHeldChat = job
+		heldChatMu.Unlock()
+		go func() {
+			defer close(job.done)
+			payload := strings.NewReader(fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hold-for-price-snapshot"}],"stream":false}`, request.Model))
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			upstreamRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(request.APIURL, "/")+"/v1/chat/completions", payload)
+			if err == nil {
+				upstreamRequest.Header.Set("Authorization", "Bearer "+request.APIKey)
+				upstreamRequest.Header.Set("Content-Type", "application/json")
+				var response *http.Response
+				response, err = http.DefaultClient.Do(upstreamRequest)
+				if err == nil {
+					defer response.Body.Close()
+					raw, readErr := io.ReadAll(response.Body)
+					job.mu.Lock()
+					job.status = response.StatusCode
+					job.body = string(raw)
+					if readErr != nil {
+						job.err = readErr.Error()
+					}
+					job.mu.Unlock()
+					return
+				}
+			}
+			job.mu.Lock()
+			job.err = err.Error()
+			job.mu.Unlock()
+		}()
+		select {
+		case <-job.reached:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = fmt.Fprintf(w, `{"job_id":%q,"provider_reached":true}`, jobID)
+		case <-time.After(5 * time.Second):
+			job.releaseOnce.Do(func() { close(job.release) })
+			http.Error(w, "held chat did not reach provider", http.StatusGatewayTimeout)
+		}
+	})
+	mux.HandleFunc("POST /release-held-chat/{job_id}", func(w http.ResponseWriter, r *http.Request) {
+		heldChatMu.Lock()
+		job := heldChatJobs[r.PathValue("job_id")]
+		heldChatMu.Unlock()
+		if job == nil {
+			http.NotFound(w, r)
+			return
+		}
+		job.releaseOnce.Do(func() { close(job.release) })
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /held-chat/{job_id}", func(w http.ResponseWriter, r *http.Request) {
+		heldChatMu.Lock()
+		job := heldChatJobs[r.PathValue("job_id")]
+		heldChatMu.Unlock()
+		if job == nil {
+			http.NotFound(w, r)
+			return
+		}
+		select {
+		case <-job.done:
+			job.mu.Lock()
+			defer job.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"done": true, "status": job.status, "body": job.body, "error": job.err})
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"done":false}`)
+		}
+	})
+	// Hurl is sequential, so this driver originates simultaneous customer calls
+	// to verify per-HMAC Credit Check singleflight and atomic local deduction.
+	mux.HandleFunc("POST /drive-concurrent-chat", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIURL  string `json:"api_url"`
+			APIKey  string `json:"api_key"`
+			Model   string `json:"model"`
+			Message string `json:"message"`
+			Count   int    `json:"count"`
+		}
+		if json.NewDecoder(r.Body).Decode(&request) != nil || request.APIURL == "" || request.APIKey == "" || request.Model == "" || request.Count < 2 || request.Count > 64 {
+			http.Error(w, "invalid concurrent chat driver request", http.StatusBadRequest)
+			return
+		}
+		var successes atomic.Int64
+		var failures atomic.Int64
+		var group sync.WaitGroup
+		start := make(chan struct{})
+		if request.Message == "concurrent-barrier" {
+			heldChatMu.Lock()
+			activeConcurrentBarrier = &concurrentBarrier{expected: int64(request.Count), ready: make(chan struct{})}
+			heldChatMu.Unlock()
+		}
+		for range request.Count {
+			group.Go(func() {
+				<-start
+				payload := strings.NewReader(fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":%q}],"stream":false}`, request.Model, request.Message))
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				customerRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(request.APIURL, "/")+"/v1/chat/completions", payload)
+				if err == nil {
+					customerRequest.Header.Set("Authorization", "Bearer "+request.APIKey)
+					customerRequest.Header.Set("Content-Type", "application/json")
+					var response *http.Response
+					response, err = http.DefaultClient.Do(customerRequest)
+					if err == nil {
+						response.Body.Close()
+						if response.StatusCode == http.StatusOK {
+							successes.Add(1)
+							return
+						}
+					}
+				}
+				failures.Add(1)
+			})
+		}
+		close(start)
+		group.Wait()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"requested": request.Count, "succeeded": successes.Load(), "failed": failures.Load(),
+		})
+	})
+	// This driver starts simultaneous first authenticated requests for the same
+	// Human identity. Every response must expose the same single Personal
+	// Account and its single GIZ_CREDIT Ledger Account.
+	mux.HandleFunc("POST /drive-concurrent-account-login", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			PayURL     string `json:"pay_url"`
+			HumanToken string `json:"human_token"`
+			Count      int    `json:"count"`
+		}
+		if json.NewDecoder(r.Body).Decode(&request) != nil || request.PayURL == "" || request.HumanToken == "" || request.Count < 2 || request.Count > 64 {
+			http.Error(w, "invalid concurrent account login driver request", http.StatusBadRequest)
+			return
+		}
+		type account struct {
+			ID    string `json:"id"`
+			Kind  string `json:"kind"`
+			Asset string `json:"asset"`
+		}
+		type accountResponse struct {
+			Data []account `json:"data"`
+		}
+		var successes atomic.Int64
+		var failures atomic.Int64
+		var personal atomic.Int64
+		var creditLedger atomic.Int64
+		accountIDs := map[string]bool{}
+		var accountIDsMu sync.Mutex
+		var group sync.WaitGroup
+		start := make(chan struct{})
+		for range request.Count {
+			group.Go(func() {
+				<-start
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				loginRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(request.PayURL, "/")+"/account/v1/accounts", nil)
+				if err != nil {
+					failures.Add(1)
+					return
+				}
+				loginRequest.Header.Set("Authorization", "Bearer "+request.HumanToken)
+				response, err := http.DefaultClient.Do(loginRequest)
+				if err != nil {
+					failures.Add(1)
+					return
+				}
+				defer response.Body.Close()
+				var body accountResponse
+				if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&body) != nil || len(body.Data) != 1 || body.Data[0].ID == "" {
+					failures.Add(1)
+					return
+				}
+				successes.Add(1)
+				if body.Data[0].Kind == "personal" {
+					personal.Add(1)
+				}
+				if body.Data[0].Asset == "GIZ_CREDIT" {
+					creditLedger.Add(1)
+				}
+				accountIDsMu.Lock()
+				accountIDs[body.Data[0].ID] = true
+				accountIDsMu.Unlock()
+			})
+		}
+		close(start)
+		group.Wait()
+		ids := make([]string, 0, len(accountIDs))
+		for id := range accountIDs {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"requested": request.Count, "succeeded": successes.Load(), "failed": failures.Load(),
+			"account_ids":                          ids,
+			"responses_with_one_personal_account":  personal.Load(),
+			"responses_with_one_giz_credit_ledger": creditLedger.Load(),
+		})
 	})
 	checkAuthorization := func(w http.ResponseWriter, r *http.Request) bool {
-		if r.Header.Get("Authorization") == "Bearer "+providerCredential {
+		if authorized(r) {
 			return true
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -250,7 +509,7 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 		})
 	})
 	mux.HandleFunc("GET /v1/realtime", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+providerCredential {
+		if !authorized(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -362,7 +621,7 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 		_, _ = io.WriteString(w, `{"driven":true}`)
 	})
 	mux.HandleFunc("POST /v1/realtime/calls", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+providerCredential {
+		if !authorized(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -457,7 +716,7 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 		_, _ = fmt.Fprintf(w, `{"callback_status":%d}`, response.StatusCode)
 	})
 	mux.HandleFunc("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+providerCredential {
+		if !authorized(r) {
 			http.Error(w, `{"error":{"message":"unauthorized"}}`, http.StatusUnauthorized)
 			return
 		}
@@ -476,6 +735,11 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			return
 		}
 		cachedUsage := false
+		actualGrossSeven := false
+		invalidConversion := false
+		streamFailureAfterFirstDelta := false
+		var heldJob *heldChatJob
+		var barrier *concurrentBarrier
 		if request.Model == "fake-fallback-primary" {
 			http.Error(w, `{"error":{"message":"primary fixture variant unavailable"}}`, http.StatusInternalServerError)
 			return
@@ -486,12 +750,49 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			if text == "cached chat" || text == "cached stream" {
 				cachedUsage = true
 			}
+			if strings.Contains(text, "actual gross seven") {
+				actualGrossSeven = true
+			}
 			if text == "provider-error" {
 				http.Error(w, `{"error":{"message":"fixture failure"}}`, http.StatusInternalServerError)
 				return
 			}
+			if text == "invalid-conversion" {
+				invalidConversion = true
+			}
+			if text == "stream-error-after-first-delta" {
+				streamFailureAfterFirstDelta = true
+			}
+			if text == "hold-for-price-snapshot" {
+				heldChatMu.Lock()
+				heldJob = activeHeldChat
+				heldChatMu.Unlock()
+			}
+			if text == "concurrent-barrier" {
+				heldChatMu.Lock()
+				barrier = activeConcurrentBarrier
+				heldChatMu.Unlock()
+			}
 			if text == "fallback-required" && request.Model == "fake-text-v1" {
 				http.Error(w, `{"error":{"message":"primary fixture variant unavailable"}}`, http.StatusInternalServerError)
+				return
+			}
+		}
+		if heldJob != nil {
+			heldJob.reachedOnce.Do(func() { close(heldJob.reached) })
+			select {
+			case <-heldJob.release:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		if barrier != nil {
+			if barrier.arrived.Add(1) == barrier.expected {
+				barrier.once.Do(func() { close(barrier.ready) })
+			}
+			select {
+			case <-barrier.ready:
+			case <-r.Context().Done():
 				return
 			}
 		}
@@ -508,6 +809,14 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 				`{"id":"fake-stream-001","object":"chat.completion.chunk","created":1786320000,"model":"` + request.Model + `","choices":[{"index":0,"delta":{"content":"stream response"},"finish_reason":"stop"}]}`,
 				`{"id":"fake-stream-001","object":"chat.completion.chunk","created":1786320000,"model":"` + request.Model + `","choices":[],"usage":` + usage + `}`,
 			}
+			if streamFailureAfterFirstDelta {
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", chunks[0])
+				if flusher != nil {
+					flusher.Flush()
+				}
+				_, _ = io.WriteString(w, `data: {"error":{"message":"fixture failed after first delta"}}`+"\n\n")
+				return
+			}
 			for _, chunk := range chunks {
 				_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
 				if flusher != nil {
@@ -520,7 +829,9 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 		w.Header().Set("Content-Type", "application/json")
 		message := map[string]any{"role": "assistant", "content": "deterministic story response"}
 		finishReason := "stop"
-		if len(request.Tools) > 0 {
+		if invalidConversion {
+			message = map[string]any{"role": "assistant", "content": nil}
+		} else if len(request.Tools) > 0 {
 			message = map[string]any{"role": "assistant", "content": nil, "tool_calls": []any{map[string]any{
 				"id": "call_weather_001", "type": "function", "function": map[string]any{"name": "get_weather", "arguments": `{"city":"Shanghai"}`},
 			}}}
@@ -529,6 +840,9 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			message["content"] = `{"answer":"deterministic"}`
 		}
 		usage := map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		if actualGrossSeven {
+			usage = map[string]any{"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19}
+		}
 		if cachedUsage {
 			usage["prompt_tokens_details"] = map[string]any{"cached_tokens": 4}
 		}
@@ -538,5 +852,16 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			"usage":   usage,
 		})
 	})
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isProviderTestControlRequest(r.URL.Path) {
+			totalRequests.Add(1)
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+func isProviderTestControlRequest(path string) bool {
+	return path == "/events" || strings.HasPrefix(path, "/test/") ||
+		strings.HasPrefix(path, "/drive-") || strings.HasPrefix(path, "/held-chat/") ||
+		strings.HasPrefix(path, "/release-held-chat/") || path == "/complete-realtime"
 }

@@ -4,6 +4,7 @@ package bifrost
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -23,6 +24,14 @@ func bifrostContext(ctx context.Context, deadline time.Time) *schemas.BifrostCon
 	return schemas.NewBifrostContext(ctx, deadline)
 }
 
+func (a *Adapter) requestContext(ctx context.Context) *schemas.BifrostContext {
+	deadline := time.Now().Add(a.requestTimeout)
+	if parentDeadline, ok := ctx.Deadline(); ok && parentDeadline.Before(deadline) {
+		deadline = parentDeadline
+	}
+	return bifrostContext(ctx, deadline)
+}
+
 type account struct {
 	providers []schemas.ModelProvider
 	keys      map[schemas.ModelProvider][]schemas.Key
@@ -34,7 +43,7 @@ func (a *Adapter) realtimeProvider(ctx context.Context, target store.ProviderExe
 	if err != nil {
 		return nil, schemas.Key{}, nil, nil, err
 	}
-	bfctx := bifrostContext(ctx, time.Now().Add(2*time.Minute))
+	bfctx := a.requestContext(ctx)
 	key, err := client.SelectKeyForProviderRequestType(bfctx, schemas.RealtimeRequest, schemas.OpenAI, target.Model)
 	if err != nil {
 		bfctx.Cancel()
@@ -68,6 +77,36 @@ func (a *Adapter) RealtimeWebSocketRoute(ctx context.Context, target store.Provi
 		httpHeaders.Set(name, value)
 	}
 	return provider.RealtimeWebSocketURL(key, target.Model), httpHeaders, nil
+}
+
+// RealtimeWebSocketRouteCandidates lets Bifrost select one key from the
+// Model's unique Provider pool and returns the stable selected key ID needed by
+// GizWay's payment mapping.
+func (a *Adapter) RealtimeWebSocketRouteCandidates(ctx context.Context, targets []store.ProviderExecutionTarget) (string, http.Header, string, error) {
+	client, targets, release, err := a.clientForCandidates(ctx, targets)
+	if err != nil {
+		return "", nil, "", err
+	}
+	defer release()
+	bfctx := a.requestContext(ctx)
+	defer bfctx.Cancel()
+	key, err := client.SelectKeyForProviderRequestType(bfctx, schemas.RealtimeRequest, schemas.OpenAI, targets[0].Model)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("select Bifrost Realtime key: %w", err)
+	}
+	provider, ok := client.GetProviderByKey(schemas.OpenAI).(schemas.RealtimeProvider)
+	if !ok || !provider.SupportsRealtimeAPI() {
+		return "", nil, "", errors.New("bifrost provider does not support realtime")
+	}
+	headers, bfErr := provider.RealtimeHeaders(bfctx, key)
+	if bfErr != nil {
+		return "", nil, "", fmt.Errorf("bifrost realtime headers: %s", bfErr.Error.Message)
+	}
+	httpHeaders := make(http.Header, len(headers))
+	for name, value := range headers {
+		httpHeaders.Set(name, value)
+	}
+	return provider.RealtimeWebSocketURL(key, targets[0].Model), httpHeaders, key.ID, nil
 }
 
 // RealtimeClientEvent validates and translates one client event with the
@@ -157,10 +196,13 @@ func (a *account) GetConfigForProvider(provider schemas.ModelProvider) (*schemas
 // cached per endpoint+credential pair so database catalog changes drive real
 // routing without rebuilding Bifrost on every request.
 type Adapter struct {
-	mu            sync.Mutex
-	defaultTarget store.ProviderExecutionTarget
-	clients       map[string]cachedClient
-	clientClock   uint64
+	mu              sync.Mutex
+	defaultTarget   store.ProviderExecutionTarget
+	clients         map[string]cachedClient
+	clientClock     uint64
+	maxRetries      int
+	requestTimeout  time.Duration
+	providerHeaders map[string]string
 }
 
 type cachedClient struct {
@@ -175,11 +217,11 @@ const maxCachedBifrostClients = 32
 // NewOpenAI constructs the pinned OpenAI execution slice.
 func NewOpenAI(ctx context.Context, baseURL, credential string) (*Adapter, error) {
 	target := store.ProviderExecutionTarget{Endpoint: baseURL, Credential: credential}
-	client, err := newOpenAIClient(ctx, target)
+	client, err := newOpenAIClient(ctx, target, 1, 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	return &Adapter{defaultTarget: target, clientClock: 1, clients: map[string]cachedClient{targetKey(target): {client: client, lastUsed: 1, pinned: true}}}, nil
+	return &Adapter{defaultTarget: target, clientClock: 1, maxRetries: 1, requestTimeout: 10 * time.Second, clients: map[string]cachedClient{targetKey(target): {client: client, lastUsed: 1, pinned: true}}}, nil
 }
 
 // NewLazy creates an execution engine with no process-global provider. The
@@ -187,21 +229,73 @@ func NewOpenAI(ctx context.Context, baseURL, credential string) (*Adapter, error
 // client, making provider_endpoints and encrypted credentials the production
 // source of truth.
 func NewLazy() *Adapter {
-	return &Adapter{clients: make(map[string]cachedClient)}
+	return NewLazyWithExecution(1, 10*time.Second)
 }
 
-func newOpenAIClient(ctx context.Context, target store.ProviderExecutionTarget) (*bf.Bifrost, error) {
+// NewLazyWithExecution applies the configured retry and request timeout to
+// every Bifrost client created from database candidates.
+func NewLazyWithExecution(maxRetries int, requestTimeout time.Duration) *Adapter {
+	if maxRetries < 0 {
+		maxRetries = 0
+	}
+	if requestTimeout <= 0 {
+		requestTimeout = 10 * time.Second
+	}
+	return &Adapter{clients: make(map[string]cachedClient), maxRetries: maxRetries, requestTimeout: requestTimeout}
+}
+
+// ConfigureProviderCallbacks attaches the configured public callback identity
+// to subsequent Provider requests without exposing the callback Secret.
+func (a *Adapter) ConfigureProviderCallbacks(publicBaseURL string, secret []byte) {
+	a.providerHeaders = nil
+	if publicBaseURL == "" || len(secret) == 0 {
+		return
+	}
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(publicBaseURL))
+	a.providerHeaders = map[string]string{
+		"X-Gizway-Public-Base-URL":    publicBaseURL,
+		"X-Gizway-Callback-Signature": "v1=" + hex.EncodeToString(mac.Sum(nil)),
+	}
+}
+
+func newOpenAIClient(ctx context.Context, target store.ProviderExecutionTarget, maxRetries int, requestTimeout time.Duration) (*bf.Bifrost, error) {
+	target.Provider = string(schemas.OpenAI)
+	return newProviderClient(ctx, target, maxRetries, requestTimeout)
+}
+
+func providerForTarget(target store.ProviderExecutionTarget) (schemas.ModelProvider, error) {
+	provider := schemas.ModelProvider(target.Provider)
+	if provider == "" {
+		provider = schemas.OpenAI
+	}
+	switch provider {
+	case schemas.OpenAI, schemas.Anthropic, schemas.Gemini:
+		return provider, nil
+	default:
+		return "", fmt.Errorf("unsupported Milestone 02 Provider kind %q", target.Provider)
+	}
+}
+
+func newProviderClient(ctx context.Context, target store.ProviderExecutionTarget, maxRetries int, requestTimeout time.Duration, extraHeaders ...map[string]string) (*bf.Bifrost, error) {
+	provider, err := providerForTarget(target)
+	if err != nil {
+		return nil, err
+	}
 	enabled := true
 	config := &schemas.ProviderConfig{NetworkConfig: schemas.NetworkConfig{
-		BaseURL: target.Endpoint, DefaultRequestTimeoutInSeconds: 10,
-		MaxRetries: 1, AllowPrivateNetwork: true,
+		BaseURL: target.Endpoint, DefaultRequestTimeoutInSeconds: max(1, int(requestTimeout.Seconds())),
+		MaxRetries: maxRetries, AllowPrivateNetwork: true,
 	}}
+	if len(extraHeaders) != 0 {
+		config.NetworkConfig.ExtraHeaders = extraHeaders[0]
+	}
 	client, err := bf.Init(ctx, schemas.BifrostConfig{
-		Account: &account{providers: []schemas.ModelProvider{schemas.OpenAI}, keys: map[schemas.ModelProvider][]schemas.Key{schemas.OpenAI: {{
+		Account: &account{providers: []schemas.ModelProvider{provider}, keys: map[schemas.ModelProvider][]schemas.Key{provider: {{
 			ID: "gizway-openai", Name: "Gizway OpenAI endpoint",
 			Value: *schemas.NewSecretVar(target.Credential), Models: schemas.WhiteList{"*"},
 			Weight: 1, Enabled: &enabled,
-		}}}, configs: map[schemas.ModelProvider]*schemas.ProviderConfig{schemas.OpenAI: config}},
+		}}}, configs: map[schemas.ModelProvider]*schemas.ProviderConfig{provider: config}},
 		Logger: bf.NewNoOpLogger(), InitialPoolSize: 8,
 	})
 	if err != nil {
@@ -219,41 +313,55 @@ func normalizeTarget(target, fallback store.ProviderExecutionTarget) store.Provi
 	return target
 }
 
-func providerKey(target store.ProviderExecutionTarget, index int) schemas.ModelProvider {
-	if target.RouteKey != "" {
-		return schemas.ModelProvider("gizway-" + target.RouteKey)
+// newCandidateClient represents all active keys of one logical Provider as one
+// native Bifrost key pool. Mixed endpoints or models are rejected so rotation
+// cannot silently become cross-Provider or cross-Model fallback.
+func newCandidateClient(ctx context.Context, targets []store.ProviderExecutionTarget, maxRetries int, requestTimeout time.Duration, extraHeaders ...map[string]string) (*bf.Bifrost, []store.ProviderExecutionTarget, error) {
+	if len(targets) == 0 {
+		return nil, nil, errors.New("no provider execution candidates")
 	}
-	return schemas.ModelProvider(fmt.Sprintf("gizway-candidate-%d", index))
-}
-
-// newCandidateClient represents every database-authorized candidate as a
-// separate Bifrost custom OpenAI provider. This is what permits native Bifrost
-// fallback across distinct base URLs and credentials without flattening or
-// leaking provider configuration into the API layer.
-func newCandidateClient(ctx context.Context, targets []store.ProviderExecutionTarget) (*bf.Bifrost, []store.ProviderExecutionTarget, error) {
-	providers := make([]schemas.ModelProvider, 0, len(targets))
-	keys := make(map[schemas.ModelProvider][]schemas.Key, len(targets))
-	configs := make(map[schemas.ModelProvider]*schemas.ProviderConfig, len(targets))
+	provider, err := providerForTarget(targets[0])
+	if err != nil {
+		return nil, nil, err
+	}
+	keys := make([]schemas.Key, 0, len(targets))
 	enabled := true
 	for index, target := range targets {
-		provider := providerKey(target, index)
-		providers = append(providers, provider)
-		keys[provider] = []schemas.Key{{
-			ID: string(provider) + "-key", Name: "Gizway database candidate",
-			Value: *schemas.NewSecretVar(target.Credential), Models: schemas.WhiteList{"*"},
-			Weight: 1, Enabled: &enabled,
-		}}
-		configs[provider] = &schemas.ProviderConfig{
-			NetworkConfig: schemas.NetworkConfig{
-				BaseURL: target.Endpoint, DefaultRequestTimeoutInSeconds: 10,
-				MaxRetries: 1, AllowPrivateNetwork: true,
-			},
-			CustomProviderConfig: &schemas.CustomProviderConfig{BaseProviderType: schemas.OpenAI},
+		candidateProvider, providerErr := providerForTarget(target)
+		if providerErr != nil {
+			return nil, nil, providerErr
 		}
+		if candidateProvider != provider || target.Endpoint != targets[0].Endpoint || target.Model != targets[0].Model {
+			return nil, nil, errors.New("bifrost key pool cannot cross Provider endpoint or Model")
+		}
+		keyID := target.RouteKey
+		if keyID == "" {
+			keyID = fmt.Sprintf("gizway-key-%d", index)
+		}
+		weight := target.Weight
+		if weight <= 0 {
+			weight = 1
+		}
+		keys = append(keys, schemas.Key{
+			ID: keyID, Name: keyID,
+			Value: *schemas.NewSecretVar(target.Credential), Models: schemas.WhiteList{"*"},
+			Weight: float64(weight), Enabled: &enabled,
+		})
+	}
+	config := &schemas.ProviderConfig{NetworkConfig: schemas.NetworkConfig{
+		BaseURL: targets[0].Endpoint, DefaultRequestTimeoutInSeconds: max(1, int(requestTimeout.Seconds())),
+		MaxRetries: maxRetries, AllowPrivateNetwork: true,
+	}}
+	if len(extraHeaders) != 0 {
+		config.NetworkConfig.ExtraHeaders = extraHeaders[0]
 	}
 	client, err := bf.Init(ctx, schemas.BifrostConfig{
-		Account: &account{providers: providers, keys: keys, configs: configs},
-		Logger:  bf.NewNoOpLogger(), InitialPoolSize: 8,
+		Account: &account{
+			providers: []schemas.ModelProvider{provider},
+			keys:      map[schemas.ModelProvider][]schemas.Key{provider: keys},
+			configs:   map[schemas.ModelProvider]*schemas.ProviderConfig{provider: config},
+		},
+		Logger: bf.NewNoOpLogger(), InitialPoolSize: 8,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("initialize Bifrost candidates: %w", err)
@@ -263,12 +371,14 @@ func newCandidateClient(ctx context.Context, targets []store.ProviderExecutionTa
 
 func targetKey(target store.ProviderExecutionTarget) string {
 	hash := sha256.Sum256([]byte(target.Credential))
-	return target.Endpoint + "\x00" + hex.EncodeToString(hash[:])
+	return target.Provider + "\x00" + target.Endpoint + "\x00" + hex.EncodeToString(hash[:])
 }
 
 func targetsKey(targets []store.ProviderExecutionTarget) string {
 	hash := sha256.New()
 	for _, target := range targets {
+		_, _ = hash.Write([]byte(target.Provider))
+		_, _ = hash.Write([]byte{0})
 		_, _ = hash.Write([]byte(target.Endpoint))
 		_, _ = hash.Write([]byte{0})
 		_, _ = hash.Write([]byte(target.Credential))
@@ -276,6 +386,8 @@ func targetsKey(targets []store.ProviderExecutionTarget) string {
 		_, _ = hash.Write([]byte(target.Model))
 		_, _ = hash.Write([]byte{0})
 		_, _ = hash.Write([]byte(target.RouteKey))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(fmt.Sprintf("%d", target.Weight)))
 		_, _ = hash.Write([]byte{0})
 	}
 	return "candidates:" + hex.EncodeToString(hash.Sum(nil))
@@ -296,7 +408,7 @@ func (a *Adapter) clientFor(ctx context.Context, target store.ProviderExecutionT
 		a.mu.Unlock()
 		return entry.client, target, a.releaseClient(key, entry.client), nil
 	}
-	client, err := newOpenAIClient(ctx, target)
+	client, err := newProviderClient(ctx, target, a.maxRetries, a.requestTimeout, a.providerHeaders)
 	if err != nil {
 		a.mu.Unlock()
 		return nil, target, nil, err
@@ -328,7 +440,7 @@ func (a *Adapter) clientForCandidates(ctx context.Context, targets []store.Provi
 		a.mu.Unlock()
 		return entry.client, normalized, a.releaseClient(key, entry.client), nil
 	}
-	client, normalized, err := newCandidateClient(ctx, normalized)
+	client, normalized, err := newCandidateClient(ctx, normalized, a.maxRetries, a.requestTimeout, a.providerHeaders)
 	if err != nil {
 		a.mu.Unlock()
 		return nil, nil, nil, err
@@ -418,13 +530,11 @@ func (a *Adapter) ChatCompletionCandidates(ctx context.Context, targets []store.
 		return nil, err
 	}
 	defer release()
-	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(ctx)
 	defer bfctx.Cancel()
+	provider, _ := providerForTarget(targets[0])
 	request := &schemas.BifrostChatRequest{
-		Provider: providerKey(targets[0], 0), Model: targets[0].Model, Input: messages, Params: params,
-	}
-	for index, fallback := range targets[1:] {
-		request.Fallbacks = append(request.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+		Provider: provider, Model: targets[0].Model, Input: messages, Params: params,
 	}
 	response, bfErr := client.ChatCompletionRequest(bfctx, request)
 	if bfErr != nil {
@@ -441,14 +551,12 @@ func (a *Adapter) ChatCompletionStreamCandidates(ctx context.Context, targets []
 	if err != nil {
 		return nil, nil, err
 	}
+	provider, _ := providerForTarget(targets[0])
 	request := &schemas.BifrostChatRequest{
-		Provider: providerKey(targets[0], 0), Model: targets[0].Model, Input: messages, Params: params,
-	}
-	for index, fallback := range targets[1:] {
-		request.Fallbacks = append(request.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
+		Provider: provider, Model: targets[0].Model, Input: messages, Params: params,
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	bfctx := bifrostContext(streamCtx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(streamCtx)
 	chunks, bfErr := client.ChatCompletionStreamRequest(bfctx, request)
 	if bfErr != nil {
 		cancel()
@@ -473,14 +581,12 @@ func (a *Adapter) ResponsesCandidates(ctx context.Context, targets []store.Provi
 	}
 	defer release()
 	requestCopy := *request
-	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Provider, _ = providerForTarget(targets[0])
+	requestCopy.Model = targets[0].Model
 	// Caller-provided fallbacks are untrusted protocol input. Only the ordered
 	// candidates resolved from Gizway's database may reach Bifrost.
 	requestCopy.Fallbacks = nil
-	for index, fallback := range targets[1:] {
-		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
-	}
-	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(ctx)
 	defer bfctx.Cancel()
 	response, bfErr := client.ResponsesRequest(bfctx, &requestCopy)
 	if bfErr != nil {
@@ -497,13 +603,11 @@ func (a *Adapter) ResponsesStreamCandidates(ctx context.Context, targets []store
 		return nil, nil, err
 	}
 	requestCopy := *request
-	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Provider, _ = providerForTarget(targets[0])
+	requestCopy.Model = targets[0].Model
 	requestCopy.Fallbacks = nil
-	for index, fallback := range targets[1:] {
-		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
-	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	bfctx := bifrostContext(streamCtx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(streamCtx)
 	chunks, bfErr := client.ResponsesStreamRequest(bfctx, &requestCopy)
 	if bfErr != nil {
 		cancel()
@@ -528,12 +632,10 @@ func (a *Adapter) EmbeddingCandidates(ctx context.Context, targets []store.Provi
 	}
 	defer release()
 	requestCopy := *request
-	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Provider, _ = providerForTarget(targets[0])
+	requestCopy.Model = targets[0].Model
 	requestCopy.Fallbacks = nil
-	for index, fallback := range targets[1:] {
-		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
-	}
-	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(ctx)
 	defer bfctx.Cancel()
 	response, bfErr := client.EmbeddingRequest(bfctx, &requestCopy)
 	if bfErr != nil {
@@ -551,12 +653,10 @@ func (a *Adapter) SpeechCandidates(ctx context.Context, targets []store.Provider
 	}
 	defer release()
 	requestCopy := *request
-	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Provider, _ = providerForTarget(targets[0])
+	requestCopy.Model = targets[0].Model
 	requestCopy.Fallbacks = nil
-	for index, fallback := range targets[1:] {
-		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
-	}
-	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(ctx)
 	defer bfctx.Cancel()
 	response, bfErr := client.SpeechRequest(bfctx, &requestCopy)
 	if bfErr != nil {
@@ -574,12 +674,10 @@ func (a *Adapter) TranscriptionCandidates(ctx context.Context, targets []store.P
 	}
 	defer release()
 	requestCopy := *request
-	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Provider, _ = providerForTarget(targets[0])
+	requestCopy.Model = targets[0].Model
 	requestCopy.Fallbacks = nil
-	for index, fallback := range targets[1:] {
-		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
-	}
-	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(ctx)
 	defer bfctx.Cancel()
 	response, bfErr := client.TranscriptionRequest(bfctx, &requestCopy)
 	if bfErr != nil {
@@ -597,12 +695,10 @@ func (a *Adapter) ImageGenerationCandidates(ctx context.Context, targets []store
 	}
 	defer release()
 	requestCopy := *request
-	requestCopy.Provider, requestCopy.Model = providerKey(targets[0], 0), targets[0].Model
+	requestCopy.Provider, _ = providerForTarget(targets[0])
+	requestCopy.Model = targets[0].Model
 	requestCopy.Fallbacks = nil
-	for index, fallback := range targets[1:] {
-		requestCopy.Fallbacks = append(requestCopy.Fallbacks, schemas.Fallback{Provider: providerKey(fallback, index+1), Model: fallback.Model})
-	}
-	bfctx := bifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfctx := a.requestContext(ctx)
 	defer bfctx.Cancel()
 	response, bfErr := client.ImageGenerationRequest(bfctx, &requestCopy)
 	if bfErr != nil {
