@@ -1,15 +1,12 @@
-name: gizway-refactor-e2e
+name: gizway-milestone-02-e2e
 
 x-postgres: &postgres
   image: postgres:17.10-bookworm
   environment:
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: postgres
-    POSTGRES_DB: gizway
   healthcheck:
-    # The official image briefly starts a child postmaster while initdb runs.
-    # Require the final PID-1 server so dependants cannot race that shutdown.
-    test: [CMD-SHELL, 'test "$$(head -n 1 /var/lib/postgresql/data/postmaster.pid 2>/dev/null)" = 1 && pg_isready -U postgres -d gizway']
+    test: [CMD-SHELL, 'pg_isready -U postgres -d "$${POSTGRES_DB}"']
     interval: 1s
     timeout: 3s
     retries: 60
@@ -18,56 +15,115 @@ x-app: &app
   build:
     context: ../..
     dockerfile: tests/e2e/Dockerfile
-  environment:
-    GIZWAY_SECRET_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-    GIZPAY_SECRET_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+
+x-hurl: &hurl
+  image: ghcr.io/orange-opensource/hurl:7.0.0
+  profiles: [hurl]
+  volumes:
+    - ./hurl:/tests:ro
+    - fixtures:/fixtures:ro
 
 services:
-  pki-init:
-    image: alpine:3.22
-    volumes:
-      - pki:/pki
-      - ./pki/generate.sh:/generate.sh:ro
-    command: [sh, -c, apk add --no-cache openssl >/dev/null && sh /generate.sh /pki]
+  postgres-zitadel:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: zitadel
+    volumes: [postgres-zitadel:/var/lib/postgresql/data]
 
   postgres-gizpay:
     <<: *postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gizpay
     volumes: [postgres-gizpay:/var/lib/postgresql/data]
+
   postgres-cn:
     <<: *postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gizway
     volumes: [postgres-cn:/var/lib/postgresql/data]
+
   postgres-global:
     <<: *postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gizway
     volumes: [postgres-global:/var/lib/postgresql/data]
+
+  zitadel-fixtures-init:
+    image: busybox:1.37.0
+    user: "0:0"
+    volumes: [fixtures:/fixtures]
+    command: [sh, -ec, "chown 1000:1000 /fixtures && chmod 700 /fixtures"]
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.16.2
+    restart: on-failure:5
+    depends_on:
+      postgres-zitadel: {condition: service_healthy}
+      zitadel-fixtures-init: {condition: service_completed_successfully}
+    command:
+      - start-from-init
+      - --config
+      - /config/zitadel.config.yaml
+      - --config
+      - /config/zitadel.secrets.yaml
+      - --steps
+      - /config/zitadel.init-steps.yaml
+      - --masterkey
+      - Milestone02MasterKeyMustBe32Byte
+      - --tlsMode
+      - disabled
+    volumes:
+      - ./zitadel:/config:ro
+      - fixtures:/fixtures
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          for attempt in $$(seq 1 60); do
+            /app/zitadel ready --config /config/zitadel.config.yaml --config /config/zitadel.secrets.yaml && exit 0;
+            sleep 1;
+          done;
+          exit 1
+      interval: 2s
+      timeout: 75s
+      retries: 3
+
+  zitadel-bootstrap:
+    <<: *app
+    depends_on:
+      zitadel: {condition: service_started}
+    volumes: [fixtures:/fixtures]
+    command:
+      - e2e-bootstrap
+      - --mode=zitadel
+      - --zitadel-url=http://zitadel:8080
+      - --output-directory=/fixtures
 
   fake-provider-cn:
     <<: *app
-    command: [fake-ai-provider, -address, 0.0.0.0:19000, -credential, story-provider-key]
+    command:
+      - fake-ai-provider
+      - --address=0.0.0.0:19000
+      - --credential=cn-provider-secret,cn-provider-secret-replacement,cn-provider-secret-two,cn-provider-secret-three
     healthcheck:
-      test: [CMD-SHELL, curl --fail --silent http://localhost:19000/healthz >/dev/null]
+      test: [CMD-SHELL, curl --fail --silent http://localhost:19000/test/healthz]
       interval: 1s
       timeout: 3s
       retries: 60
+
   fake-provider-global:
     <<: *app
-    command: [fake-ai-provider, -address, 0.0.0.0:19000, -credential, story-provider-key]
+    command: [fake-ai-provider, --address=0.0.0.0:19000, --credential=global-provider-secret]
     healthcheck:
-      test: [CMD-SHELL, curl --fail --silent http://localhost:19000/healthz >/dev/null]
-      interval: 1s
-      timeout: 3s
-      retries: 60
-
-  fake-payment-provider:
-    <<: *app
-    depends_on: {pki-init: {condition: service_completed_successfully}}
-    volumes: [pki:/pki:ro]
-    command: [fake-payment-provider, -address, 0.0.0.0:19100, -callback-secret, e2e-callback-secret, -callback-ca, /pki/ca.crt]
-
-  fake-risk-provider:
-    <<: *app
-    command: [fake-risk-provider, -address, 0.0.0.0:19300, -credential, e2e-risk-key]
-    healthcheck:
-      test: [CMD-SHELL, curl --fail --silent http://localhost:19300/healthz >/dev/null]
+      test: [CMD-SHELL, curl --fail --silent http://localhost:19000/test/healthz]
       interval: 1s
       timeout: 3s
       retries: 60
@@ -75,34 +131,25 @@ services:
   gizpay:
     <<: *app
     depends_on:
-      pki-init: {condition: service_completed_successfully}
       postgres-gizpay: {condition: service_healthy}
-      fake-risk-provider: {condition: service_healthy}
-    environment:
-      GIZPAY_SECRET_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      GIZPAY_PAYMENT_PROVIDER_CREDENTIAL: story-payment-key
-      GIZPAY_PAYMENT_CALLBACK_SECRET: e2e-callback-secret
-      GIZPAY_RISK_PROVIDER_CREDENTIAL: e2e-risk-key
-      GIZPAY_DEFAULT_QUOTA_RECHECK_INTERVAL: 1s
-      GIZPAY_DEFAULT_DENIED_RECHECK_INTERVAL: 1s
-    volumes: [pki:/pki:ro]
-    command:
-      - gizpay
-      - -address=0.0.0.0:8443
-      - -postgres-dsn=postgres://postgres:postgres@postgres-gizpay/gizway?sslmode=disable
-      - -initialize
-      - -payment-provider-base-url=http://fake-payment-provider:19100
-      - -risk-provider-base-url=http://fake-risk-provider:19300
-      - -checkout-base-url=https://checkout.e2e.invalid
-      - -tls-cert-file=/pki/gizpay.crt
-      - -tls-key-file=/pki/gizpay.key
-      - -gateway-client-ca-file=/pki/ca.crt
+      zitadel-bootstrap: {condition: service_completed_successfully}
+      oauth-spy: {condition: service_started}
+    volumes:
+      - ./config/gizpay.yaml:/config/gizpay.yaml:ro
+      - ./secrets:/secrets:ro
+      - fixtures:/fixtures:ro
+    command: [gizpay, --config=/config/gizpay.yaml, --initialize]
     healthcheck:
-      test: [CMD-SHELL, curl --fail --silent --cacert /pki/ca.crt https://gizpay:8443/livez >/dev/null]
+      test: [CMD-SHELL, curl --fail --silent http://localhost:8081/healthz]
       interval: 1s
       timeout: 3s
       retries: 60
-    ports: [127.0.0.1::8443]
+
+  credit-spy:
+    <<: *app
+    depends_on:
+      gizpay: {condition: service_healthy}
+    command: [fake-credit-spy, --address=0.0.0.0:19400, --upstream=http://gizpay:8081]
 
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.12.0
@@ -110,7 +157,7 @@ services:
   toxiproxy-init:
     image: curlimages/curl:8.15.0
     depends_on:
-      gizpay: {condition: service_healthy}
+      credit-spy: {condition: service_started}
       toxiproxy: {condition: service_started}
     command:
       - sh
@@ -118,148 +165,174 @@ services:
       - >-
         curl --fail --silent --show-error -X POST http://toxiproxy:8474/proxies
         -H 'Content-Type: application/json'
-        -d '{"name":"gizpay","listen":"0.0.0.0:8666","upstream":"gizpay:8443"}'
+        -d '{"name":"gizpay","listen":"0.0.0.0:8666","upstream":"credit-spy:19400"}'
 
-  bootstrap-central:
+  oauth-spy:
     <<: *app
-    depends_on: {gizpay: {condition: service_healthy}}
-    volumes: [pki:/pki:ro]
-    command:
-      - e2e-bootstrap
-      - -mode=central
-      - -postgres-dsn=postgres://postgres:postgres@postgres-gizpay/gizway?sslmode=disable
-      - -pki-dir=/pki
+    depends_on:
+      zitadel: {condition: service_started}
+    command: [fake-oauth-spy, --address=0.0.0.0:19500, --upstream=http://zitadel:8080]
 
   gizway-cn:
     <<: *app
     depends_on:
-      bootstrap-central: {condition: service_completed_successfully}
-      toxiproxy-init: {condition: service_completed_successfully}
       postgres-cn: {condition: service_healthy}
       fake-provider-cn: {condition: service_healthy}
-    environment:
-      GIZWAY_SECRET_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      GIZPAY_INTERNAL_BASE_URL: https://toxiproxy:8666
-      GIZPAY_MTLS_CERT_FILE: /pki/gizway-cn.crt
-      GIZPAY_MTLS_KEY_FILE: /pki/gizway-cn.key
-      GIZPAY_MTLS_CA_FILE: /pki/ca.crt
-      GIZWAY_NODE_ID: gw-cn-e2e
-      GIZWAY_REGION: cn
-    volumes: [pki:/pki:ro]
-    command: [gizway, -address=0.0.0.0:8080, -postgres-dsn=postgres://postgres:postgres@postgres-cn/gizway?sslmode=disable, -initialize]
+      toxiproxy-init: {condition: service_completed_successfully}
+      oauth-spy: {condition: service_started}
+      zitadel-bootstrap: {condition: service_completed_successfully}
+    volumes:
+      - ./config/gizway-cn.yaml:/config/gizway.yaml:ro
+      - ./secrets:/secrets:ro
+      - fixtures:/fixtures:ro
+    command: [gizway, --config=/config/gizway.yaml, --initialize]
     healthcheck:
-      test: [CMD-SHELL, curl --fail --silent http://localhost:8080/livez >/dev/null]
+      test: [CMD-SHELL, curl --fail --silent http://localhost:8080/healthz]
       interval: 1s
       timeout: 3s
       retries: 60
-    ports: [127.0.0.1::8080]
 
   gizway-global:
     <<: *app
     depends_on:
-      bootstrap-central: {condition: service_completed_successfully}
-      toxiproxy-init: {condition: service_completed_successfully}
       postgres-global: {condition: service_healthy}
       fake-provider-global: {condition: service_healthy}
-    environment:
-      GIZWAY_SECRET_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      GIZPAY_INTERNAL_BASE_URL: https://toxiproxy:8666
-      GIZPAY_MTLS_CERT_FILE: /pki/gizway-global.crt
-      GIZPAY_MTLS_KEY_FILE: /pki/gizway-global.key
-      GIZPAY_MTLS_CA_FILE: /pki/ca.crt
-      GIZWAY_NODE_ID: gw-global-e2e
-      GIZWAY_REGION: global
-    volumes: [pki:/pki:ro]
-    command: [gizway, -address=0.0.0.0:8080, -postgres-dsn=postgres://postgres:postgres@postgres-global/gizway?sslmode=disable, -initialize]
+      toxiproxy-init: {condition: service_completed_successfully}
+      oauth-spy: {condition: service_started}
+      zitadel-bootstrap: {condition: service_completed_successfully}
+    volumes:
+      - ./config/gizway-global.yaml:/config/gizway.yaml:ro
+      - ./secrets:/secrets:ro
+      - fixtures:/fixtures:ro
+    command: [gizway, --config=/config/gizway.yaml, --initialize]
     healthcheck:
-      test: [CMD-SHELL, curl --fail --silent http://localhost:8080/livez >/dev/null]
+      test: [CMD-SHELL, curl --fail --silent http://localhost:8080/healthz]
       interval: 1s
       timeout: 3s
       retries: 60
-    ports: [127.0.0.1::8080]
 
-  bootstrap-cn:
+  # This instance deliberately receives no Model, Provider Key, or price seed.
+  gizway-incomplete:
     <<: *app
-    depends_on: {gizway-cn: {condition: service_healthy}}
-    command: [e2e-bootstrap, -mode=cn, -postgres-dsn=postgres://postgres:postgres@postgres-cn/gizway?sslmode=disable, -provider-url=http://fake-provider-cn:19000]
-  bootstrap-global:
+    depends_on:
+      gizway-global: {condition: service_healthy}
+    volumes:
+      - ./config/gizway-incomplete.yaml:/config/gizway.yaml:ro
+      - ./secrets:/secrets:ro
+      - fixtures:/fixtures:ro
+    command: [gizway, --config=/config/gizway.yaml, --initialize]
+    healthcheck:
+      test: [CMD-SHELL, curl --fail --silent http://localhost:8082/healthz]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
+  bootstrap-empty-api:
     <<: *app
-    depends_on: {gizway-global: {condition: service_healthy}}
-    command: [e2e-bootstrap, -mode=global, -postgres-dsn=postgres://postgres:postgres@postgres-global/gizway?sslmode=disable, -provider-url=http://fake-provider-global:19000]
-
-  hurl-quota:
-    image: ghcr.io/orange-opensource/hurl:7.0.0
-    profiles: [quota]
+    profiles: [empty-api]
     depends_on:
-      bootstrap-cn: {condition: service_completed_successfully}
-      bootstrap-global: {condition: service_completed_successfully}
+      gizpay: {condition: service_healthy}
     volumes:
-      - pki:/pki:ro
-      - ./hurl:/tests:ro
+      - fixtures:/fixtures
     command:
-      - --test
-      - --delay=1500
-      - --cacert=/pki/ca.crt
-      - --cert=/pki/gizway-global.crt
-      - --key=/pki/gizway-global.key
-      - --variable=pay_url=https://gizpay:8443
-      - --variable=cn_url=http://gizway-cn:8080
-      - --variable=global_url=http://gizway-global:8080
-      - /tests/quota/01-two-region-exchange.hurl
+      - e2e-bootstrap
+      - --mode=milestone-02-empty-api
+      - --gizpay-url=http://gizpay:8081
+      - --cn-url=http://gizway-empty:8083
+      - --fixture-file=/fixtures/empty-api.vars
+      - --identity-file=/fixtures/identity.vars
+      - --output-directory=/fixtures
+      - --gizpay-dsn=postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable
+      - --cn-dsn=postgres://postgres:postgres@postgres-cn:5432/gizway?sslmode=disable
+      - --cn-provider-url=http://fake-provider-cn:19000
 
-  hurl-product:
-    image: ghcr.io/orange-opensource/hurl:7.0.0
-    profiles: [product]
+  gizway-empty:
+    <<: *app
+    profiles: [empty-api]
     depends_on:
-      bootstrap-cn: {condition: service_completed_successfully}
-      bootstrap-global: {condition: service_completed_successfully}
-      fake-payment-provider: {condition: service_started}
+      postgres-cn: {condition: service_healthy}
+      fake-provider-cn: {condition: service_healthy}
+      toxiproxy-init: {condition: service_completed_successfully}
+      oauth-spy: {condition: service_started}
+      bootstrap-empty-api: {condition: service_completed_successfully}
     volumes:
-      - pki:/pki:ro
-      - ./hurl:/tests:ro
-    command:
-      - --test
-      - --delay=1100
-      - --cacert=/pki/ca.crt
-      - --variable=pay_url=https://gizpay:8443
-      - --variable=global_url=http://gizway-global:8080
-      - --variable=payment_url=http://fake-payment-provider:19100
-      - --variable=risk_url=http://fake-risk-provider:19300
-      - /tests/product/01-product-loop.hurl
+      - ./config/gizway-empty.yaml:/config/gizway.yaml:ro
+      - ./secrets:/secrets:ro
+      - fixtures:/fixtures:ro
+    command: [gizway, --config=/config/gizway.yaml, --initialize]
+    healthcheck:
+      test: [CMD-SHELL, curl --fail --silent http://localhost:8083/healthz]
+      interval: 1s
+      timeout: 3s
+      retries: 60
 
-  hurl-failure-pre:
-    image: ghcr.io/orange-opensource/hurl:7.0.0
-    profiles: [failure]
+  bootstrap-milestone-02:
+    <<: *app
     depends_on:
-      bootstrap-global: {condition: service_completed_successfully}
+      gizpay: {condition: service_healthy}
+      gizway-cn: {condition: service_healthy}
+      gizway-global: {condition: service_healthy}
+      gizway-incomplete: {condition: service_healthy}
     volumes:
-      - pki:/pki:ro
-      - ./hurl:/tests:ro
+      - fixtures:/fixtures
+      - ./secrets:/secrets:ro
     command:
-      - --test
-      - --delay=1100
-      - --cacert=/pki/ca.crt
-      - --variable=pay_url=https://gizpay:8443
-      - --variable=global_url=http://gizway-global:8080
-      - --variable=toxiproxy_url=http://toxiproxy:8474
-      - /tests/failure/01-network-and-response-loss.hurl
+      - e2e-bootstrap
+      - --mode=milestone-02
+      - --zitadel-url=http://zitadel:8080
+      - --gizpay-url=http://gizpay:8081
+      - --cn-url=http://gizway-cn:8080
+      - --global-url=http://gizway-global:8080
+      - --fixture-file=/fixtures/e2e.vars
+      - --identity-file=/fixtures/identity.vars
+      - --story=${MILESTONE02_STORY:-e2e}
+      - --gizpay-dsn=postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable
+      - --cn-dsn=postgres://postgres:postgres@postgres-cn:5432/gizway?sslmode=disable&search_path=gizway
+      - --global-dsn=postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable&search_path=gizway
+      - --hmac-secret-file=/secrets/subscription-api-key-hmac
+      - --cn-provider-url=http://fake-provider-cn:19000
+      - --global-provider-url=http://fake-provider-global:19000
 
-  hurl-failure-post:
+  hurl-regional-isolation:
+    <<: *hurl
+    command: [--test, --variables-file=/fixtures/e2e.vars, /tests/milestone-02/01-shared-key-regional-isolation.hurl]
+
+  hurl-restart-credit-warmup:
+    <<: *hurl
+    command: [--test, --variables-file=/fixtures/e2e.vars, /tests/milestone-02/02-restart-credit-warmup.hurl]
+
+  hurl-restart-rechecks-credit:
+    <<: *hurl
+    command: [--test, --variables-file=/fixtures/e2e.vars, /tests/milestone-02/02-restart-rechecks-credit.hurl]
+
+  hurl-outbox-response-loss:
+    <<: *hurl
+    command: [--test, --variables-file=/fixtures/e2e.vars, /tests/milestone-02/03-outbox-response-loss-recovery.hurl]
+
+  hurl-health-no-remote-fanout:
+    <<: *hurl
+    command: [--test, --variables-file=/fixtures/e2e.vars, /tests/milestone-02/04-health-no-remote-fanout.hurl]
+
+  hurl-health-database-down:
+    <<: *hurl
+    command: [--test, --variables-file=/fixtures/e2e.vars, /tests/milestone-02/05-health-database-down.hurl]
+
+  hurl-empty-api-closure:
+    <<: *hurl
+    profiles: [empty-api]
+    command: [--test, --variables-file=/fixtures/empty-api.vars, /tests/milestone-02/06-empty-database-api-closure.hurl]
+
+  hurl-api:
     image: ghcr.io/orange-opensource/hurl:7.0.0
-    profiles: [failure-post]
+    profiles: [milestone-02-api]
     volumes:
-      - pki:/pki:ro
-      - ./hurl:/tests:ro
-    command:
-      - --test
-      - --delay=1100
-      - --cacert=/pki/ca.crt
-      - --variable=pay_url=https://gizpay:8443
-      - --variable=global_url=http://gizway-global:8080
-      - /tests/failure/02-gateway-restart-requery.hurl
+      - ../..:/workspace:ro
+      - fixtures:/fixtures:ro
+    command: [--version]
 
 volumes:
-  pki:
+  fixtures:
+  postgres-zitadel:
   postgres-gizpay:
   postgres-cn:
   postgres-global:

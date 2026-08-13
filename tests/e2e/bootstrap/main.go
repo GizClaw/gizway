@@ -1,293 +1,624 @@
-// Command bootstrap prepares deterministic identities and product fixtures for
-// the disposable three-database E2E environment. The central-nodes mode is
-// intentionally narrower: API story tests already own their account fixtures,
-// so it registers only the mTLS Gateway identities required by Internal APIs.
+// Command e2e-bootstrap prepares ZITADEL identities and disposable Milestone 02 data.
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/hex"
+	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/idy/gizway/internal/storage"
-	"github.com/idy/gizway/internal/store"
-	"github.com/idy/gizway/internal/timetext"
+	"github.com/golang-jwt/jwt/v5"
 )
 
-const (
-	fixtureAt             = "2026-08-12T12:00:00.000000000Z"
-	fixtureKey            = "giz_e2e_customer_key"
-	fixtureUserSession    = "gzs_e2e_customer_session"
-	fixtureSecondSession  = "gzs_e2e_customer_two_session"
-	fixtureSecondKey      = "giz_e2e_customer_two_key"
-	fixtureSecondUserID   = "e2e-user-two"
-	fixtureSecondAccount  = "e2e-account-two"
-	fixtureMerchant       = "e2e-merchant"
-	fixtureMerchantLedger = "e2e-merchant-ledger"
-)
+const zitadelAPIScope = "urn:zitadel:iam:org:project:id:zitadel:aud"
+
+type options struct {
+	mode, zitadelURL, outputDirectory, fixtureFile   string
+	gizpayURL, cnURL, globalURL                      string
+	identityFile, story                              string
+	gizpayDSN, cnDSN, globalDSN                      string
+	hmacSecretFile, cnProviderURL, globalProviderURL string
+}
 
 func main() {
-	mode := flag.String("mode", "", "central, central-nodes, cn, or global")
-	dsn := flag.String("postgres-dsn", "", "initialized service database")
-	pki := flag.String("pki-dir", "/pki", "generated certificate directory")
-	providerURL := flag.String("provider-url", "", "regional fake provider URL")
+	var options options
+	flag.StringVar(&options.mode, "mode", "", "zitadel, milestone-02, or milestone-02-empty-api")
+	flag.StringVar(&options.zitadelURL, "zitadel-url", "", "ZITADEL base URL")
+	flag.StringVar(&options.outputDirectory, "output-directory", "/fixtures", "identity fixture directory")
+	flag.StringVar(&options.fixtureFile, "fixture-file", "/fixtures/e2e.vars", "Hurl variables file")
+	flag.StringVar(&options.gizpayURL, "gizpay-url", "", "GizPay base URL")
+	flag.StringVar(&options.cnURL, "cn-url", "", "CN GizWay base URL")
+	flag.StringVar(&options.globalURL, "global-url", "", "Global GizWay base URL")
+	flag.StringVar(&options.identityFile, "identity-file", "/fixtures/identity.vars", "identity variables file")
+	flag.StringVar(&options.story, "story", "e2e", "isolated API story name")
+	flag.StringVar(&options.gizpayDSN, "gizpay-dsn", "", "GizPay PostgreSQL DSN")
+	flag.StringVar(&options.cnDSN, "cn-dsn", "", "CN PostgreSQL DSN")
+	flag.StringVar(&options.globalDSN, "global-dsn", "", "Global PostgreSQL DSN")
+	flag.StringVar(&options.hmacSecretFile, "hmac-secret-file", "", "shared HMAC Secret file")
+	flag.StringVar(&options.cnProviderURL, "cn-provider-url", "", "CN fake Provider URL")
+	flag.StringVar(&options.globalProviderURL, "global-provider-url", "", "Global fake Provider URL")
 	flag.Parse()
-	if err := run(*mode, *dsn, *pki, *providerURL); err != nil {
+	var err error
+	switch options.mode {
+	case "zitadel":
+		err = bootstrapZITADEL(options)
+	case "milestone-02":
+		err = bootstrapMilestone02(options)
+	case "milestone-02-empty-api":
+		err = bootstrapEmptyAPI(options)
+	default:
+		err = errors.New("mode must be zitadel, milestone-02, or milestone-02-empty-api")
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(mode, dsn, pki, providerURL string) error {
-	if dsn == "" {
-		return errors.New("postgres DSN is required")
-	}
-	if err := waitForSchema(dsn, mode); err != nil {
-		return err
-	}
-	if mode == "central" {
-		return bootstrapCentral(dsn, pki)
-	}
-	if mode == "central-nodes" {
-		return bootstrapCentralNodes(dsn, pki)
-	}
-	if (mode == "cn" || mode == "global") && providerURL != "" {
-		return bootstrapRegion(dsn, mode, providerURL)
-	}
-	return errors.New("mode must be central, central-nodes, cn, or global; regional mode requires provider URL")
+type machineKey struct {
+	Type   string `json:"type"`
+	KeyID  string `json:"keyId"`
+	Key    string `json:"key"`
+	UserID string `json:"userId"`
 }
 
-func bootstrapCentralNodes(dsn, pki string) error {
-	database, err := storage.OpenGizPayPostgreSQL(dsn, false)
+type zitadelClient struct {
+	baseURL    string
+	token      string
+	loginToken string
+	orgID      string
+	http       *http.Client
+}
+
+func bootstrapZITADEL(options options) error {
+	if options.zitadelURL == "" || options.outputDirectory == "" {
+		return errors.New("zitadel-url and output-directory are required")
+	}
+	bootstrapKeyPath := filepath.Join(options.outputDirectory, "zitadel-bootstrap-machine.json")
+	var bootstrapKey machineKey
+	var err error
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		bootstrapKey, err = readMachineKey(bootstrapKeyPath)
+		if err == nil {
+			break
+		}
+		// start-from-init writes the key file into the shared volume. It can be
+		// observed between create and close, so retry parse errors as well as an
+		// absent file until initialization has had a fair chance to finish.
+		if time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(time.Second)
+	}
+	var token string
+	deadline = time.Now().Add(90 * time.Second)
+	for {
+		token, err = exchangeJWTBearer(context.Background(), options.zitadelURL, bootstrapKey, []string{"openid", zitadelAPIScope})
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("bootstrap ZITADEL token: %w", err)
+		}
+		time.Sleep(time.Second)
+	}
+	pat, err := os.ReadFile(filepath.Join(options.outputDirectory, "zitadel-login-client.pat"))
+	if err != nil {
+		return fmt.Errorf("read bootstrap Human PAT: %w", err)
+	}
+	client := &zitadelClient{baseURL: strings.TrimRight(options.zitadelURL, "/"), token: token, loginToken: strings.TrimSpace(string(pat)), http: &http.Client{Timeout: 15 * time.Second}}
+	if err := client.lookupOrgID(); err != nil {
+		return err
+	}
+	projects := []projectFixture{
+		{ID: "386000000000000001", Name: "GizPay Account", Roles: nil},
+		{ID: "386000000000000002", Name: "GizPay Service", Roles: []string{"account_reader", "account_payer", "merchant_operator", "account_admin", "subscription_credit_reader", "subscription_charger"}},
+		{ID: "386000000000000003", Name: "GizWay CN Admin", Roles: []string{"administrator"}},
+		{ID: "386000000000000004", Name: "GizWay Global Admin", Roles: []string{"administrator"}},
+	}
+	for _, project := range projects {
+		if err := client.createProject(project); err != nil {
+			return err
+		}
+	}
+	applications := make([]string, len(projects))
+	for index, project := range projects {
+		clientID, err := client.createOIDCApplication(project.ID, project.Name+" E2E")
+		if err != nil {
+			return err
+		}
+		applications[index] = clientID
+	}
+	identities := []identityFixture{
+		{ID: "human-primary", Human: true, Audiences: []string{projects[0].ID}},
+		{ID: "human-two", Human: true, Audiences: []string{projects[0].ID}},
+		{ID: "provider-merchant-human", Human: true, Audiences: []string{projects[0].ID}},
+		{ID: "provider-merchant-human-two", Human: true, Audiences: []string{projects[0].ID}},
+		{ID: "gizpay-service-account-manager", File: "gizpay-service-account-manager.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "gizway-cn-service", File: "gizway-cn-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "gizway-global-service", File: "gizway-global-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "service-charger", File: "service-charger.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_charger"}},
+		{ID: "service-reader", File: "service-reader.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader"}},
+		{ID: "service-rotated", File: "service-rotated.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "service-other-user", File: "service-other-user.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "service-revoked", File: "service-revoked.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "cn-administrator", Human: true, Audiences: []string{projects[2].ID, projects[3].ID}, Roles: []string{"administrator"}},
+		{ID: "global-administrator", Human: true, Audiences: []string{projects[3].ID}, Roles: []string{"administrator"}},
+		{ID: "wrong-project-administrator", Human: true, Audiences: []string{projects[2].ID}, GrantProjects: []string{projects[3].ID}, Roles: []string{"administrator"}},
+		{ID: "revoked-administrator", Human: true, Audiences: []string{projects[2].ID}, Roles: []string{"administrator"}},
+	}
+	variables := map[string]string{}
+	identityKeys := map[string]machineKey{}
+	for _, identity := range identities {
+		if identity.Human {
+			userID, password, err := client.createHumanIdentity(identity)
+			if err != nil {
+				return err
+			}
+			variables[identity.ID+"@subject"] = userID
+			for _, audience := range identity.Audiences {
+				projectIndex := 0
+				for index := range projects {
+					if projects[index].ID == audience {
+						projectIndex = index
+						break
+					}
+				}
+				accessToken, err := client.issueHumanToken(userID, password, applications[projectIndex], audience)
+				if err != nil {
+					return fmt.Errorf("issue Human %s token: %w", identity.ID, err)
+				}
+				variables[identity.ID+"@"+audience] = accessToken
+			}
+			continue
+		}
+		key, err := client.createIdentity(identity, options.outputDirectory)
+		if err != nil {
+			return err
+		}
+		identityKeys[identity.ID] = key
+		for _, audience := range identity.Audiences {
+			accessToken, err := exchangeJWTBearer(context.Background(), options.zitadelURL, key, []string{"openid", "urn:zitadel:iam:org:projects:roles", projectAudienceScope(audience)})
+			if err != nil {
+				return fmt.Errorf("issue %s token: %w", identity.ID, err)
+			}
+			variables[identity.ID+"@"+audience] = accessToken
+		}
+	}
+	mapIdentityVariables(variables, projects, identityKeys)
+	return writeVariables(filepath.Join(options.outputDirectory, "identity.vars"), variables)
+}
+
+type projectFixture struct {
+	ID, Name string
+	Roles    []string
+}
+
+type identityFixture struct {
+	ID, File      string
+	Audiences     []string
+	GrantProjects []string
+	Roles         []string
+	Human         bool
+}
+
+func (c *zitadelClient) createOIDCApplication(projectID, name string) (string, error) {
+	payload := map[string]any{
+		"name": name, "redirectUris": []string{"http://127.0.0.1:18999/callback"},
+		"responseTypes": []string{"OIDC_RESPONSE_TYPE_CODE"}, "grantTypes": []string{"OIDC_GRANT_TYPE_AUTHORIZATION_CODE"},
+		"appType": "OIDC_APP_TYPE_NATIVE", "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
+		"accessTokenType": "OIDC_TOKEN_TYPE_JWT", "accessTokenRoleAssertion": true, "devMode": true,
+	}
+	var response struct {
+		ClientID string `json:"clientId"`
+	}
+	if err := c.call(http.MethodPost, "/management/v1/projects/"+projectID+"/apps/oidc", payload, &response, false); err != nil {
+		return "", fmt.Errorf("create OIDC application for %s: %w", projectID, err)
+	}
+	if response.ClientID == "" {
+		return "", errors.New("ZITADEL OIDC application response has no clientId")
+	}
+	return response.ClientID, nil
+}
+
+func (c *zitadelClient) createHumanIdentity(identity identityFixture) (string, string, error) {
+	password := "Milestone02!" + strings.ReplaceAll(identity.ID, "-", "")
+	payload := map[string]any{
+		"userName": identity.ID, "profile": map[string]any{"firstName": identity.ID, "lastName": "E2E", "displayName": identity.ID},
+		"email":    map[string]any{"email": identity.ID + "@example.test", "isEmailVerified": true},
+		"password": password, "passwordChangeRequired": false,
+	}
+	var created struct {
+		UserID string `json:"userId"`
+	}
+	if err := c.call(http.MethodPost, "/management/v1/users/human/_import", payload, &created, false); err != nil {
+		return "", "", fmt.Errorf("create Human %s: %w", identity.ID, err)
+	}
+	grantProjects := identity.GrantProjects
+	if len(grantProjects) == 0 {
+		grantProjects = identity.Audiences
+	}
+	for _, projectID := range grantProjects {
+		grant := map[string]any{"projectId": projectID, "roleKeys": identity.Roles}
+		if err := c.call(http.MethodPost, "/management/v1/users/"+created.UserID+"/grants", grant, nil, false); err != nil {
+			return "", "", fmt.Errorf("grant Human %s: %w", identity.ID, err)
+		}
+	}
+	return created.UserID, password, nil
+}
+
+func (c *zitadelClient) issueHumanToken(userID, password, clientID, audience string) (string, error) {
+	verifierBytes := make([]byte, 32)
+	if _, err := rand.Read(verifierBytes); err != nil {
+		return "", err
+	}
+	verifier := base64.RawURLEncoding.EncodeToString(verifierBytes)
+	challenge := sha256.Sum256([]byte(verifier))
+	state := "m02-" + base64.RawURLEncoding.EncodeToString(verifierBytes[:8])
+	redirectURI := "http://127.0.0.1:18999/callback"
+	query := url.Values{
+		"client_id": {clientID}, "redirect_uri": {redirectURI}, "response_type": {"code"},
+		"scope":          {"openid urn:zitadel:iam:org:projects:roles urn:zitadel:iam:org:project:role:administrator " + projectAudienceScope(audience)},
+		"code_challenge": {base64.RawURLEncoding.EncodeToString(challenge[:])}, "code_challenge_method": {"S256"}, "state": {state},
+	}
+	redirectClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := redirectClient.Get(c.baseURL + "/oauth/v2/authorize?" + query.Encode())
+	if err != nil {
+		return "", err
+	}
+	response.Body.Close()
+	location := response.Header.Get("Location")
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return "", err
+	}
+	authRequestID := parsed.Query().Get("authRequest")
+	if authRequestID == "" {
+		authRequestID = parsed.Query().Get("authRequestID")
+	}
+	if authRequestID == "" {
+		return "", fmt.Errorf("authorize did not return auth request: %s", location)
+	}
+	var session struct {
+		SessionID    string `json:"sessionId"`
+		SessionToken string `json:"sessionToken"`
+	}
+	checks := map[string]any{"checks": map[string]any{"user": map[string]any{"userId": userID}, "password": map[string]any{"password": password}}}
+	if err := c.loginCall(http.MethodPost, "/v2/sessions", checks, &session); err != nil {
+		return "", fmt.Errorf("create Human session: %w", err)
+	}
+	var callback struct {
+		CallbackURL string `json:"callbackUrl"`
+	}
+	if err := c.loginCall(http.MethodPost, "/v2/oidc/auth_requests/"+url.PathEscape(authRequestID), map[string]any{"session": map[string]any{"sessionId": session.SessionID, "sessionToken": session.SessionToken}}, &callback); err != nil {
+		return "", err
+	}
+	callbackURL, err := url.Parse(callback.CallbackURL)
+	if err != nil {
+		return "", err
+	}
+	if callbackURL.Query().Get("state") != state {
+		return "", errors.New("OIDC state mismatch")
+	}
+	code := callbackURL.Query().Get("code")
+	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID}, "code": {code}, "redirect_uri": {redirectURI}, "code_verifier": {verifier}}
+	tokenRequest, _ := http.NewRequest(http.MethodPost, c.baseURL+"/oauth/v2/token", strings.NewReader(form.Encode()))
+	tokenRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenResponse, err := c.http.Do(tokenRequest)
+	if err != nil {
+		return "", err
+	}
+	defer tokenResponse.Body.Close()
+	var token struct {
+		AccessToken string `json:"access_token"`
+	}
+	raw, _ := io.ReadAll(io.LimitReader(tokenResponse.Body, 1<<20))
+	if tokenResponse.StatusCode != http.StatusOK || json.Unmarshal(raw, &token) != nil || token.AccessToken == "" {
+		return "", fmt.Errorf("OIDC token exchange returned %d: %s", tokenResponse.StatusCode, raw)
+	}
+	return token.AccessToken, nil
+}
+
+func (c *zitadelClient) loginCall(method, path string, body, result any) error {
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	defer database.Close()
-	repository := store.New(database.SQL)
-	for _, region := range []string{"cn", "global"} {
-		if err := registerNode(repository, region, pki+"/gizway-"+region+".crt"); err != nil {
-			return fmt.Errorf("register %s node: %w", region, err)
+	request, err := http.NewRequest(method, c.baseURL+path, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+c.loginToken)
+	response, err := c.http.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	responseRaw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("status %d: %s", response.StatusCode, strings.TrimSpace(string(responseRaw)))
+	}
+	if result != nil && len(responseRaw) != 0 {
+		return json.Unmarshal(responseRaw, result)
+	}
+	return nil
+}
+
+func (c *zitadelClient) createProject(project projectFixture) error {
+	body := map[string]any{"organizationId": c.orgID, "projectId": project.ID, "name": project.Name, "projectRoleAssertion": true, "authorizationRequired": false}
+	if err := c.call(http.MethodPost, "/zitadel.project.v2.ProjectService/CreateProject", body, nil, true); err != nil && !strings.Contains(err.Error(), "already_exists") {
+		return fmt.Errorf("create project %s: %w", project.ID, err)
+	}
+	for _, role := range project.Roles {
+		payload := map[string]any{"roleKey": role, "displayName": role, "group": "milestone-02"}
+		if err := c.call(http.MethodPost, "/management/v1/projects/"+project.ID+"/roles", payload, nil, false); err != nil && !strings.Contains(err.Error(), "already") {
+			return fmt.Errorf("create role %s: %w", role, err)
 		}
 	}
 	return nil
 }
 
-func waitForSchema(dsn, mode string) error {
-	service := "gizway"
-	if mode == "central" || mode == "central-nodes" {
-		service = "gizpay"
+func (c *zitadelClient) lookupOrgID() error {
+	var response struct {
+		Org struct {
+			ID string `json:"id"`
+		} `json:"org"`
 	}
-	deadline := time.Now().Add(90 * time.Second)
-	for time.Now().Before(deadline) {
-		database, err := storage.OpenExistingPostgreSQL(dsn)
-		if err == nil {
-			var ready bool
-			err = database.SQL.Get(&ready, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE service=$1 AND version=1)`, service)
-			_ = database.Close()
-			if err == nil && ready {
+	if err := c.call(http.MethodGet, "/management/v1/orgs/me", nil, &response, false); err != nil {
+		return fmt.Errorf("get bootstrap organization: %w", err)
+	}
+	if response.Org.ID == "" {
+		return errors.New("bootstrap organization response has no id")
+	}
+	c.orgID = response.Org.ID
+	return nil
+}
+
+func (c *zitadelClient) createIdentity(identity identityFixture, outputDirectory string) (machineKey, error) {
+	var created struct {
+		UserID string `json:"userId"`
+	}
+	payload := map[string]any{"userId": identity.ID, "userName": identity.ID, "name": identity.ID, "accessTokenType": "ACCESS_TOKEN_TYPE_JWT"}
+	if err := c.call(http.MethodPost, "/management/v1/users/machine", payload, &created, false); err != nil {
+		return machineKey{}, fmt.Errorf("create identity %s: %w", identity.ID, err)
+	}
+	for _, projectID := range identity.Audiences {
+		grant := map[string]any{"projectId": projectID, "roleKeys": identity.Roles}
+		if err := c.call(http.MethodPost, "/management/v1/users/"+identity.ID+"/grants", grant, nil, false); err != nil {
+			return machineKey{}, fmt.Errorf("grant identity %s: %w", identity.ID, err)
+		}
+	}
+	var response struct {
+		KeyID      string `json:"keyId"`
+		KeyDetails string `json:"keyDetails"`
+	}
+	if err := c.call(http.MethodPost, "/management/v1/users/"+identity.ID+"/keys", map[string]any{"type": "KEY_TYPE_JSON"}, &response, false); err != nil {
+		return machineKey{}, fmt.Errorf("create key %s: %w", identity.ID, err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(response.KeyDetails)
+	if err != nil {
+		raw = []byte(response.KeyDetails)
+	}
+	var key machineKey
+	if err := json.Unmarshal(raw, &key); err != nil {
+		return machineKey{}, fmt.Errorf("decode key %s: %w", identity.ID, err)
+	}
+	if err := os.WriteFile(filepath.Join(outputDirectory, identity.File), raw, 0600); err != nil {
+		return machineKey{}, err
+	}
+	return key, nil
+}
+
+func (c *zitadelClient) call(method, path string, body any, result any, connect bool) error {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	var lastError error
+	for range 80 {
+		request, requestErr := http.NewRequest(method, c.baseURL+path, bytes.NewReader(raw))
+		if requestErr != nil {
+			return requestErr
+		}
+		request.Header.Set("Authorization", "Bearer "+c.token)
+		request.Header.Set("Content-Type", "application/json")
+		if connect {
+			request.Header.Set("Connect-Protocol-Version", "1")
+		}
+		response, requestErr := c.http.Do(request)
+		if requestErr != nil {
+			lastError = requestErr
+		} else {
+			responseRaw, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+			response.Body.Close()
+			if readErr != nil {
+				return readErr
+			}
+			if response.StatusCode >= 200 && response.StatusCode < 300 {
+				if result != nil && len(responseRaw) != 0 {
+					return json.Unmarshal(responseRaw, result)
+				}
 				return nil
+			}
+			lastError = fmt.Errorf("status %d: %s", response.StatusCode, strings.TrimSpace(string(responseRaw)))
+			if response.StatusCode < 500 {
+				return lastError
 			}
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	return fmt.Errorf("%s schema did not become ready", service)
+	return lastError
 }
 
-func bootstrapCentral(dsn, pki string) error {
-	database, err := storage.OpenGizPayPostgreSQL(dsn, false)
+func exchangeJWTBearer(ctx context.Context, baseURL string, key machineKey, scopes []string) (string, error) {
+	privateKey, err := parsePrivateKey(key.Key)
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer database.Close()
-	repository := store.New(database.SQL)
-	var administratorCount int
-	if err := database.SQL.Get(&administratorCount, `SELECT COUNT(*) FROM administrators`); err != nil {
-		return fmt.Errorf("count central administrators: %w", err)
-	}
-	if administratorCount == 0 {
-		if _, _, err := repository.BootstrapAdministrator(context.Background(), "admin@e2e.invalid", "E2E Administrator", "e2e-password", fixtureAt); err != nil {
-			return fmt.Errorf("bootstrap central administrator: %w", err)
-		}
-	}
-	for _, region := range []string{"cn", "global"} {
-		if err := registerNode(repository, region, pki+"/gizway-"+region+".crt"); err != nil {
-			return fmt.Errorf("register %s node: %w", region, err)
-		}
-	}
-	ctx := context.Background()
-	if _, err := database.SQL.Exec(`INSERT INTO users(id,email,display_name,status,created_at,updated_at)
-		VALUES ('e2e-user','customer@e2e.invalid','E2E Customer','active',$1,$1)
-		ON CONFLICT (id) DO NOTHING`, fixtureAt); err != nil {
-		return err
-	}
-	if _, err := database.SQL.Exec(`INSERT INTO accounts(id,owner_user_id,kind,name,status,created_at,updated_at)
-		VALUES ('e2e-account','e2e-user','personal','E2E Customer','active',$1,$1)
-		ON CONFLICT (id) DO NOTHING`, fixtureAt); err != nil {
-		return err
-	}
-	if _, err := database.SQL.Exec(`INSERT INTO ledger_accounts(id,owner_account_id,code,kind,asset_code,normal_balance,status,created_at,updated_at)
-		VALUES ('e2e-ledger','e2e-account','USER:e2e-account','user_credit','GIZ_CREDIT','credit','active',$1,$1)
-		ON CONFLICT (code) DO NOTHING`, fixtureAt); err != nil {
-		return err
-	}
-	secretHash := sha256.Sum256([]byte(fixtureKey))
-	if _, _, err := repository.CreateAPIKey(ctx, "e2e-user", "e2e-key", []byte("e2e-key"), secretHash[:], store.APIKey{
-		ID: "e2e-key", AccountID: "e2e-account", Kind: "gateway", Name: "E2E Gateway",
-		KeyPrefix: fixtureKey[:12], Scopes: store.JSON(`["account:self","gateway:invoke","gateway:usage:read"]`), CreatedAt: fixtureAt,
-	}); err != nil && !errors.Is(err, store.ErrIdempotencyConflict) {
-		return err
-	}
-	if err := bootstrapProductIdentities(database, repository); err != nil {
-		return err
-	}
-	checkout := "https://checkout.e2e.invalid/topup"
-	topup := store.Topup{
-		ID: "e2e-topup", AccountID: "e2e-account", PaymentProvider: "e2e", ProviderReference: "e2e-provider-topup",
-		FiatCurrency: "USD", FiatAmountMinor: 100, Rate: store.TopupRateSnapshot{
-			Base:      store.TopupRate{FiatMinor: 100, CreditMicrocredits: 100_000_000},
-			Effective: store.TopupRate{FiatMinor: 100, CreditMicrocredits: 100_000_000},
-		}, CreditAmount: store.CreditAmount{Asset: "GIZ_CREDIT", Microcredits: 100_000_000},
-		Status: "pending", CheckoutURL: &checkout, CreatedAt: fixtureAt,
-	}
-	if _, _, err := repository.CreateTopup(ctx, "e2e-user", "e2e-topup", []byte("e2e-topup"), topup); err != nil && !errors.Is(err, store.ErrIdempotencyConflict) {
-		return err
-	}
-	_, _, err = repository.CompleteTopupEvent(ctx, "e2e-topup-event", topup.ProviderReference, "USD", 100, []byte("e2e-topup-event"), fixtureAt)
-	return err
-}
-
-func bootstrapProductIdentities(database *storage.Storage, repository *store.Store) error {
-	ctx := context.Background()
-	statements := []struct {
-		query string
-		args  []any
-	}{
-		{`INSERT INTO users(id,email,display_name,status,created_at,updated_at)
-		 VALUES ($1,'customer-two@e2e.invalid','E2E Customer Two','active',$2,$2) ON CONFLICT (id) DO NOTHING`, []any{fixtureSecondUserID, fixtureAt}},
-		{`INSERT INTO accounts(id,owner_user_id,kind,name,status,created_at,updated_at)
-		 VALUES ($1,$2,'personal','E2E Customer Two','active',$3,$3) ON CONFLICT (id) DO NOTHING`, []any{fixtureSecondAccount, fixtureSecondUserID, fixtureAt}},
-		{`INSERT INTO accounts(id,owner_user_id,kind,name,status,created_at,updated_at)
-		 VALUES ($1,'e2e-user','merchant','E2E Merchant','active',$2,$2) ON CONFLICT (id) DO NOTHING`, []any{fixtureMerchant, fixtureAt}},
-		{`INSERT INTO merchant_accounts(account_id,owner_user_id,legal_name,public_name,review_level,merchant_status,country_code,created_at,updated_at)
-		 VALUES ($1,'e2e-user','E2E Merchant LLC','E2E Merchant','enhanced','approved','US',$2,$2) ON CONFLICT (account_id) DO NOTHING`, []any{fixtureMerchant, fixtureAt}},
-		{`INSERT INTO ledger_accounts(id,owner_account_id,code,kind,asset_code,normal_balance,status,created_at,updated_at)
-		 VALUES ('e2e-ledger-two',$1,'USER:e2e-account-two','user_credit','GIZ_CREDIT','credit','active',$2,$2),
-		        ($3,$4,'MERCHANT:e2e-merchant','merchant_credit','GIZ_CREDIT','credit','active',$2,$2)
-		 ON CONFLICT (id) DO NOTHING`, []any{fixtureSecondAccount, fixtureAt, fixtureMerchantLedger, fixtureMerchant}},
-	}
-	for _, statement := range statements {
-		if _, err := database.SQL.ExecContext(ctx, statement.query, statement.args...); err != nil {
-			return err
-		}
-	}
-	for _, session := range []struct{ id, userID, raw string }{
-		{"e2e-session", "e2e-user", fixtureUserSession},
-		{"e2e-session-two", fixtureSecondUserID, fixtureSecondSession},
-	} {
-		digest := sha256.Sum256([]byte(session.raw))
-		if _, err := database.SQL.ExecContext(ctx, `INSERT INTO user_sessions(id,user_id,secret_hash,status,expires_at,created_at)
-			VALUES ($1,$2,$3,'active','2027-08-12T00:00:00.000000000Z',$4) ON CONFLICT (id) DO NOTHING`,
-			session.id, session.userID, digest[:], fixtureAt); err != nil {
-			return err
-		}
-	}
-	secondKeyHash := sha256.Sum256([]byte(fixtureSecondKey))
-	if _, _, err := repository.CreateAPIKey(ctx, fixtureSecondUserID, "e2e-key-two", []byte("e2e-key-two"), secondKeyHash[:], store.APIKey{
-		ID: "e2e-key-two", AccountID: fixtureSecondAccount, Kind: "gateway", Name: "E2E Gateway Two",
-		KeyPrefix: "giz_e2e_two_", Scopes: store.JSON(`["account:self","gateway:invoke","gateway:usage:read"]`), CreatedAt: fixtureAt,
-	}); err != nil && !errors.Is(err, store.ErrIdempotencyConflict) {
-		return err
-	}
-	return nil
-}
-
-func registerNode(repository *store.Store, region, certificatePath string) error {
-	certificatePEM, err := os.ReadFile(certificatePath)
+	now := time.Now().UTC()
+	claims := jwt.MapClaims{"iss": key.UserID, "sub": key.UserID, "aud": strings.TrimRight(baseURL, "/"), "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix()}
+	assertion := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	assertion.Header["kid"] = key.KeyID
+	signed, err := assertion.SignedString(privateKey)
 	if err != nil {
-		return err
+		return "", err
 	}
-	block, _ := pem.Decode(certificatePEM)
+	form := url.Values{"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"}, "assertion": {signed}, "scope": {strings.Join(scopes, " ")}}
+	var lastError error
+	for range 40 {
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/oauth/v2/token", strings.NewReader(form.Encode()))
+		if err != nil {
+			return "", err
+		}
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			lastError = err
+		} else {
+			raw, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+			response.Body.Close()
+			if readErr != nil {
+				return "", readErr
+			}
+			var result struct {
+				AccessToken string `json:"access_token"`
+			}
+			if json.Unmarshal(raw, &result) == nil && response.StatusCode == http.StatusOK && result.AccessToken != "" {
+				return result.AccessToken, nil
+			}
+			lastError = fmt.Errorf("token endpoint returned %d: %s", response.StatusCode, strings.TrimSpace(string(raw)))
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return "", lastError
+}
+
+func readMachineKey(path string) (machineKey, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return machineKey{}, err
+	}
+	var key machineKey
+	return key, json.Unmarshal(raw, &key)
+}
+
+func parsePrivateKey(value string) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(value))
 	if block == nil {
-		return fmt.Errorf("decode %s", certificatePath)
+		return nil, errors.New("private key is not PEM")
 	}
-	certificate, err := x509.ParseCertificate(block.Bytes)
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	nodeID := "gw-" + region + "-e2e"
-	if _, _, err := repository.CreateGatewayNode(context.Background(), nodeID, region, strings.ToUpper(region)+" E2E", fixtureAt); err != nil && !errors.Is(err, store.ErrIdempotencyConflict) {
-		return fmt.Errorf("create Gateway node: %w", err)
-	} else if errors.Is(err, store.ErrIdempotencyConflict) {
-		return fmt.Errorf("existing Gateway node metadata differs: %w", err)
+	key, ok := parsed.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("private key is not RSA")
 	}
-	fingerprint := sha256.Sum256(certificate.Raw)
-	san := ""
-	if len(certificate.URIs) != 0 {
-		san = certificate.URIs[0].String()
-	}
-	registered, _, err := repository.RegisterGatewayNodeCertificate(context.Background(), nodeID, hex.EncodeToString(fingerprint[:]),
-		certificate.SerialNumber.String(), certificate.Subject.String(), san, timetext.Format(certificate.NotBefore), timetext.Format(certificate.NotAfter), fixtureAt)
-	if err != nil {
-		return fmt.Errorf("register Gateway certificate: %w", err)
-	}
-	_, err = repository.ActivateGatewayNodeCertificate(context.Background(), nodeID, registered.ID, fixtureAt)
-	if err != nil {
-		return fmt.Errorf("activate Gateway certificate: %w", err)
-	}
-	return nil
+	return key, nil
 }
 
-func bootstrapRegion(dsn, region, providerURL string) error {
-	database, err := storage.OpenGizWayPostgreSQL(dsn, false)
+func projectAudienceScope(projectID string) string {
+	return "urn:zitadel:iam:org:project:id:" + projectID + ":aud"
+}
+
+func mapIdentityVariables(values map[string]string, projects []projectFixture, keys map[string]machineKey) {
+	lookup := func(identity string, project int) string { return values[identity+"@"+projects[project].ID] }
+	values["human_subject"] = values["human-primary@subject"]
+	values["human_two_subject"] = values["human-two@subject"]
+	values["provider_merchant_human_subject"] = values["provider-merchant-human@subject"]
+	values["provider_merchant_human_two_subject"] = values["provider-merchant-human-two@subject"]
+	values["cn_admin_subject"] = values["cn-administrator@subject"]
+	values["global_admin_subject"] = values["global-administrator@subject"]
+	values["revoked_admin_subject"] = values["revoked-administrator@subject"]
+	values["human_token"] = lookup("human-primary", 0)
+	values["human_token_same_subject_changed_email"] = values["human_token"]
+	values["human_token_two"] = lookup("human-two", 0)
+	values["provider_merchant_human_token"] = lookup("provider-merchant-human", 0)
+	values["provider_merchant_human_token_two"] = lookup("provider-merchant-human-two", 0)
+	values["service_token"] = lookup("gizway-cn-service", 1)
+	values["service_token_charger"] = lookup("service-charger", 1)
+	values["service_token_reader_only"] = lookup("service-reader", 1)
+	values["service_token_rotated"] = lookup("service-rotated", 1)
+	values["service_token_other_user"] = lookup("service-other-user", 1)
+	values["revoked_service_token"] = lookup("service-revoked", 1)
+	values["cn_admin_token"] = lookup("cn-administrator", 2)
+	values["admin_token"] = values["cn_admin_token"]
+	values["global_admin_token"] = lookup("global-administrator", 3)
+	values["other_region_admin_token"] = lookup("global-administrator", 3)
+	values["wrong_project_admin_token"] = lookup("wrong-project-administrator", 2)
+	values["wrong_audience_admin_token"] = lookup("cn-administrator", 3)
+	values["revoked_admin_token"] = lookup("revoked-administrator", 2)
+	values["wrong_audience_service_token"] = values["global_admin_token"]
+	values["wrong_issuer_service_token"] = signedFixtureToken(keys["gizway-cn-service"], "https://wrong-issuer.invalid", projects[1].ID, false)
+	values["wrong_issuer_admin_token"] = signedInvalidToken("https://wrong-issuer.invalid", projects[2].ID, false)
+	values["wrong_signature_service_token"] = signedInvalidToken("http://zitadel:8080", projects[1].ID, false)
+	values["expired_service_token"] = signedFixtureToken(keys["gizway-cn-service"], "http://zitadel:8080", projects[1].ID, true)
+}
+
+func signedFixtureToken(key machineKey, issuer, audience string, expired bool) string {
+	privateKey, err := parsePrivateKey(key.Key)
 	if err != nil {
-		return err
+		return ""
 	}
-	defer database.Close()
-	repository, err := store.NewWithSecretKey(database.SQL, []byte("0123456789abcdef0123456789abcdef"))
-	if err != nil {
-		return err
+	now := time.Now().UTC()
+	expires := now.Add(5 * time.Minute)
+	if expired {
+		expires = now.Add(-time.Minute)
 	}
-	repository.ConfigureClock(func() time.Time { return time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC) })
-	administrator, _, err := repository.BootstrapRegionalAdministrator(context.Background(), region+"-admin@e2e.invalid", strings.ToUpper(region)+" Operator", "e2e-password", fixtureAt)
-	if err != nil {
-		return err
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": issuer, "sub": key.UserID, "aud": audience, "iat": now.Add(-2 * time.Minute).Unix(), "exp": expires.Unix()})
+	token.Header["kid"] = key.KeyID
+	signed, _ := token.SignedString(privateKey)
+	return signed
+}
+
+func signedInvalidToken(issuer, audience string, expired bool) string {
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	now := time.Now().UTC()
+	expires := now.Add(5 * time.Minute)
+	if expired {
+		expires = now.Add(-time.Minute)
 	}
-	provider, err := repository.CreateProvider(context.Background(), administrator.ID, region+"-provider", strings.ToUpper(region)+" Provider", fixtureAt)
-	if err != nil {
-		return err
-	}
-	endpoint, err := repository.CreateProviderEndpoint(context.Background(), administrator.ID, provider.ID, "primary", providerURL, "story-provider-key", &region, 1, 100, fixtureAt)
-	if err != nil {
-		return err
-	}
-	model, err := repository.CreateModel(context.Background(), administrator.ID, store.Model{Slug: region + "-model", Name: strings.ToUpper(region) + " Model", Modality: store.JSON(`["text"]`)})
-	if err != nil {
-		return err
-	}
-	contextWindow, maxOutput := int64(8192), int64(2048)
-	variant, err := repository.CreateModelVariant(context.Background(), administrator.ID, store.ModelVariant{
-		ModelID: model.ID, ProviderEndpointID: endpoint.ID, ProviderModelName: "story-text", VariantSlug: "primary",
-		Capabilities: store.JSON(`{"responses":true,"chat":true}`), ContextWindow: &contextWindow, MaxOutputTokens: &maxOutput,
-	})
-	if err != nil {
-		return err
-	}
-	for _, metric := range []string{"input_token", "cached_input_token", "output_token"} {
-		if _, err := repository.CreateModelPrice(context.Background(), administrator.ID, store.ModelPrice{
-			ModelVariantID: variant.ID, Metric: metric, UnitSize: 1000,
-			UpstreamCostMicrocredits: 1, BaseCustomerPriceMicrocredits: 10, CustomerPriceMicrocredits: 10,
-			ValidFrom: "2026-01-01T00:00:00.000000000Z",
-		}); err != nil {
-			return err
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": issuer, "sub": "invalid-fixture", "aud": audience, "iat": now.Add(-2 * time.Minute).Unix(), "exp": expires.Unix()})
+	token.Header["kid"] = "wrong-signature"
+	signed, _ := token.SignedString(key)
+	return signed
+}
+
+func writeVariables(path string, values map[string]string) error {
+	var builder strings.Builder
+	for key, value := range values {
+		if strings.Contains(key, "@") {
+			continue
 		}
+		fmt.Fprintf(&builder, "%s=%s\n", key, value)
 	}
-	return nil
+	return os.WriteFile(path, []byte(builder.String()), 0600)
 }

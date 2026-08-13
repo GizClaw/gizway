@@ -1,0 +1,21 @@
+Log:
+  Level: info
+
+ExternalDomain: zitadel
+ExternalPort: 8080
+ExternalSecure: false
+
+TLS:
+  Enabled: false
+
+Database:
+  postgres:
+    Host: postgres-zitadel
+    Port: 5432
+    Database: zitadel
+    User:
+      SSL:
+        Mode: disable
+    Admin:
+      SSL:
+        Mode: disable

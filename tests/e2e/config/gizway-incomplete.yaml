@@ -1,0 +1,33 @@
+version: 1
+server:
+  name: incomplete.e2e.gizway.test
+  listen_address: 0.0.0.0:8082
+database:
+  dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+  schema: gizway_incomplete
+authentication:
+  zitadel:
+    issuer: http://zitadel:8080
+    jwks_url: http://oauth-spy:19500/oauth/v2/keys
+    admin_audience: gizway-incomplete-admin
+  service_account:
+    token_url: http://oauth-spy:19500/oauth/v2/token
+    subject: gizway-global-service
+    private_key_file: /fixtures/gizway-global-service.json
+    audience: "386000000000000002"
+    requested_scopes: [openid]
+    required_roles: [subscription_credit_reader, subscription_charger]
+subscription_api_keys:
+  hmac:
+    secret_file: /secrets/subscription-api-key-hmac
+gizpay:
+  service_dsn: http://credit-spy:19400
+bifrost:
+  config_store:
+    type: postgresql
+    dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+    schema: bifrost_config_incomplete
+  log_store:
+    type: postgresql
+    dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+    schema: bifrost_logs_incomplete

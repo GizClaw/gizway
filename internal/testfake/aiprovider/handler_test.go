@@ -107,6 +107,24 @@ func TestProviderHTTPProtocols(t *testing.T) {
 	}
 }
 
+func TestProviderCountsEveryNonTestRequestIncludingHealth(t *testing.T) {
+	server := httptest.NewServer(HandlerWithCredential("test-provider-key"))
+	defer server.Close()
+	client := server.Client()
+
+	requireStatus(t, fakeRequest(t, client, http.MethodPost, server.URL+"/test/reset", "", nil), http.StatusNoContent)
+	requireStatus(t, fakeRequest(t, client, http.MethodGet, server.URL+"/healthz", "", nil), http.StatusNoContent)
+	requireStatus(t, fakeRequest(t, client, http.MethodPost, server.URL+"/v1/responses", "application/json", strings.NewReader(`{"model":"m"}`)), http.StatusOK)
+	stats := requireStatus(t, fakeRequest(t, client, http.MethodGet, server.URL+"/test/stats", "", nil), http.StatusOK)
+	var counters map[string]int64
+	if err := json.Unmarshal(stats, &counters); err != nil {
+		t.Fatal(err)
+	}
+	if counters["total_requests"] != 2 {
+		t.Fatalf("total_requests=%d, want health plus AI request", counters["total_requests"])
+	}
+}
+
 func TestProviderRealtimeWebSocket(t *testing.T) {
 	server := httptest.NewServer(HandlerWithCredential("test-provider-key"))
 	defer server.Close()

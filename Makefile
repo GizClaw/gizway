@@ -33,11 +33,11 @@ help:
 		'  build               compile every Go package and command' \
 		'  test                run the complete local unit-test gate' \
 		'  test-unit           run every local test without real external services' \
-		'  test-unit-go        run Go tests and enforce module coverage above 80 percent' \
+		'  test-unit-go        run Go tests and enforce the current instrumented coverage floor' \
 		'  test-unit-go-race   run all Go tests with the race detector' \
 		'  test-unit-api       validate contracts and run fake-provider Hurl stories' \
 		'  test-unit-postgresql run production-dialect tests on local PostgreSQL' \
-		'  test-e2e            run quota, product, and failure Compose acceptance profiles'
+		'  test-e2e            run Milestone 02 Compose acceptance scenarios'
 
 fmt: fmt-go fmt-hurl fmt-module
 

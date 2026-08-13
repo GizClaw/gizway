@@ -16,30 +16,13 @@ func TestRepositoryOpenAPIContractsResolveBundleAndMatchRoutes(t *testing.T) {
 	if err := CheckHurlCoverage(filepath.Join(root, "api", "openapi"), filepath.Join(root, "tests", "api", "stories")); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"account.json", "gizpay-admin.json", "gizway-admin.json", "internal-gizpay.json", "payment.json"} {
+	for _, name := range []string{"account.json", "gizway-admin.json", "internal-gizpay.json"} {
 		raw, err := os.ReadFile(filepath.Join(output, name))
 		if err != nil || len(raw) == 0 {
 			t.Fatalf("bundle %s: bytes=%d err=%v", name, len(raw), err)
 		}
 		if containsExternalRef(raw) {
 			t.Fatalf("bundle %s retained an external YAML reference", name)
-		}
-	}
-}
-
-func TestSharedAdministratorOperationIsLimitedToIndependentAdminRoots(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		first, second, route string
-		want                 bool
-	}{
-		{"gizpay-admin.yaml", "gizway-admin.yaml", "POST /admin/v1/auth/login", true},
-		{"gizway-admin.yaml", "gizpay-admin.yaml", "POST /admin/v1/administrators/id/api_keys", true},
-		{"gizpay-admin.yaml", "gizway-admin.yaml", "POST /admin/v1/rate_publications", false},
-		{"account.yaml", "gizway-admin.yaml", "POST /admin/v1/auth/login", false},
-	} {
-		if got := sharedAdministratorOperation(test.first, test.second, test.route); got != test.want {
-			t.Errorf("sharedAdministratorOperation(%q, %q, %q) = %t, want %t", test.first, test.second, test.route, got, test.want)
 		}
 	}
 }
