@@ -1,8 +1,13 @@
 openapi: 3.1.0
-info: {title: GizPay Account API, version: 2.0.0}
+info: {title: GizPay Account API, version: 3.0.0}
 servers: [{url: https://pay.gizway.com/account/v1}]
 security: [{humanBearer: []}]
 paths:
+  /initialize:
+    post:
+      operationId: initializeUser
+      responses:
+        '200': {description: "Stable User, Account, Ledger Account, and default Merchant IDs", content: {application/json: {schema: {$ref: '#/components/schemas/Initialization'}}}}
   /accounts:
     get: {operationId: listAccounts, responses: {'200': {$ref: '#/components/responses/AccountList'}}}
   /accounts/{account_id}/balance:
@@ -17,6 +22,13 @@ paths:
   /accounts/{account_id}/charges:
     parameters: [{$ref: '#/components/parameters/account_id'}]
     get: {operationId: listAccountCharges, responses: {'200': {$ref: '#/components/responses/ResourceList'}}}
+  /accounts/{account_id}/topups:
+    parameters: [{$ref: '#/components/parameters/account_id'}]
+    get: {operationId: listAccountTopups, responses: {'200': {$ref: '#/components/responses/ResourceList'}}}
+    post:
+      operationId: createAccountTopup
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateTopup'}}}}
+      responses: {'201': {description: Posted Top-up, content: {application/json: {schema: {$ref: '#/components/schemas/Topup'}}}}}
   /service-accounts:
     get: {operationId: listServiceAccounts, responses: {'200': {$ref: '#/components/responses/ServiceAccountList'}}}
     post:
@@ -46,6 +58,8 @@ paths:
       operationId: createMerchantProduct
       requestBody: {$ref: '#/components/requestBodies/CreateProduct'}
       responses: {'201': {$ref: '#/components/responses/Product'}}
+  /products:
+    get: {operationId: listProducts, responses: {'200': {$ref: '#/components/responses/ProductList'}}}
   /products/{product_id}:
     parameters: [{$ref: '#/components/parameters/product_id'}]
     get: {operationId: getProduct, responses: {'200': {$ref: '#/components/responses/Product'}}}
@@ -68,16 +82,16 @@ paths:
       operationId: updateSubscription
       requestBody: {$ref: '#/components/requestBodies/UpdateSubscription'}
       responses: {'200': {$ref: '#/components/responses/Subscription'}}
-  /subscriptions/{subscription_id}/api-keys:
+  /subscriptions/{subscription_id}/keys:
     parameters: [{$ref: '#/components/parameters/subscription_id'}]
-    get: {operationId: listSubscriptionAPIKeys, responses: {'200': {$ref: '#/components/responses/APIKeyList'}}}
-    post: {operationId: createSubscriptionAPIKey, responses: {'201': {$ref: '#/components/responses/APIKey'}}}
-  /subscriptions/{subscription_id}/api-keys/{api_key_id}:
-    parameters: [{$ref: '#/components/parameters/subscription_id'}, {$ref: '#/components/parameters/api_key_id'}]
-    get: {operationId: getSubscriptionAPIKey, responses: {'200': {$ref: '#/components/responses/APIKey'}}}
-  /subscriptions/{subscription_id}/api-keys/{api_key_id}/revoke:
-    parameters: [{$ref: '#/components/parameters/subscription_id'}, {$ref: '#/components/parameters/api_key_id'}]
-    post: {operationId: revokeSubscriptionAPIKey, responses: {'200': {$ref: '#/components/responses/APIKey'}}}
+    get: {operationId: listSubscriptionKeys, responses: {'200': {$ref: '#/components/responses/KeyList'}}}
+    post: {operationId: createSubscriptionKey, responses: {'201': {$ref: '#/components/responses/Key'}}}
+  /subscriptions/{subscription_id}/keys/{subscription_key_id}:
+    parameters: [{$ref: '#/components/parameters/subscription_id'}, {$ref: '#/components/parameters/subscription_key_id'}]
+    get: {operationId: getSubscriptionKey, responses: {'200': {$ref: '#/components/responses/Key'}}}
+  /subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke:
+    parameters: [{$ref: '#/components/parameters/subscription_id'}, {$ref: '#/components/parameters/subscription_key_id'}]
+    post: {operationId: revokeSubscriptionKey, responses: {'200': {$ref: '#/components/responses/Key'}}}
 components:
   securitySchemes:
     humanBearer: {type: http, scheme: bearer, bearerFormat: JWT}
@@ -87,7 +101,7 @@ components:
     merchant_id: {name: merchant_id, in: path, required: true, schema: {type: string}}
     product_id: {name: product_id, in: path, required: true, schema: {type: string}}
     subscription_id: {name: subscription_id, in: path, required: true, schema: {type: string}}
-    api_key_id: {name: api_key_id, in: path, required: true, schema: {type: string}}
+    subscription_key_id: {name: subscription_key_id, in: path, required: true, schema: {type: string}}
   schemas:
     Status: {type: string, enum: [active, inactive]}
     Account:
@@ -100,16 +114,24 @@ components:
         asset: {type: string, const: GIZ_CREDIT}
         created_at: {type: string, format: date-time}
         ledger_accounts: {type: array, items: {type: object, additionalProperties: true}}
+    Initialization:
+      type: object
+      required: [user_id, account_id, ledger_account_id, default_merchant_id]
+      properties:
+        user_id: {type: string}
+        account_id: {type: string}
+        ledger_account_id: {type: string}
+        default_merchant_id: {type: string}
     Merchant:
       type: object
-      required: [id, settlement_account_id, legal_name, public_name, status]
+      required: [id, settlement_account_id, legal_name, public_name, is_default, status]
       properties:
         id: {type: string}
         settlement_account_id: {type: string}
         legal_name: {type: string, minLength: 1}
         public_name: {type: string, minLength: 1}
+        is_default: {type: boolean}
         status: {$ref: '#/components/schemas/Status'}
-        review_level: {type: string}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     Product:
@@ -134,13 +156,13 @@ components:
         accepted_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
         canceled_at: {type: [string, 'null'], format: date-time}
-    SubscriptionAPIKey:
+    SubscriptionKey:
       type: object
-      required: [id, subscription_id, api_key, status]
+      required: [id, subscription_id, key, status]
       properties:
         id: {type: string}
         subscription_id: {type: string}
-        api_key: {type: string, minLength: 32, writeOnly: false}
+        key: {type: string, minLength: 32, writeOnly: false}
         status: {type: string, enum: [active, revoked]}
         created_at: {type: string, format: date-time}
         revoked_at: {type: [string, 'null'], format: date-time}
@@ -164,10 +186,21 @@ components:
       type: object
       required: [account_id, balance_microcredits]
       properties: {account_id: {type: string}, balance_microcredits: {type: integer, format: int64}}
+    CreateTopup:
+      type: object
+      required: [channel, external_reference, amount_microcredits]
+      properties:
+        channel: {type: string, const: fake}
+        external_reference: {type: string, minLength: 1}
+        amount_microcredits: {type: integer, format: int64, minimum: 1}
+    Topup:
+      allOf:
+        - {$ref: '#/components/schemas/CreateTopup'}
+        - {type: object, required: [id, account_id, status, credited_at], properties: {id: {type: string}, account_id: {type: string}, status: {type: string, const: succeeded}, credited_at: {type: string, format: date-time}}}
   requestBodies:
     CreateServiceAccount: {required: true, content: {application/json: {schema: {type: object, required: [name, roles], properties: {name: {type: string, minLength: 1}, roles: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}}}}}}
     CreateMerchant: {required: true, content: {application/json: {schema: {type: object, required: [settlement_account_id, legal_name, public_name], properties: {settlement_account_id: {type: string}, legal_name: {type: string, minLength: 1}, public_name: {type: string, minLength: 1}}}}}}
-    UpdateMerchant: {required: true, content: {application/json: {schema: {type: object, required: [public_name], properties: {public_name: {type: string, minLength: 1}}}}}}
+    UpdateMerchant: {required: true, content: {application/json: {schema: {type: object, minProperties: 1, properties: {public_name: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}}}}}
     CreateProduct: {required: true, content: {application/json: {schema: {type: object, required: [name, billing_mode, terms_version], properties: {name: {type: string, minLength: 1}, billing_mode: {type: string, const: pay_as_you_go}, terms_version: {type: string, minLength: 1}}}}}}
     UpdateProduct: {required: true, content: {application/json: {schema: {type: object, properties: {name: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}}}}}
     CreateSubscription: {required: true, content: {application/json: {schema: {type: object, required: [account_id, terms_version], properties: {account_id: {type: string}, terms_version: {type: string, minLength: 1}}}}}}
@@ -182,7 +215,7 @@ components:
     ProductList: {description: Products, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Product'}}}}}}}
     Subscription: {description: Subscription, content: {application/json: {schema: {$ref: '#/components/schemas/Subscription'}}}}
     SubscriptionList: {description: Subscriptions, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Subscription'}}}}}}}
-    APIKey: {description: Subscription API Key, content: {application/json: {schema: {$ref: '#/components/schemas/SubscriptionAPIKey'}}}}
-    APIKeyList: {description: Subscription API Keys, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/SubscriptionAPIKey'}}}}}}}
+    Key: {description: Subscription Key, content: {application/json: {schema: {$ref: '#/components/schemas/SubscriptionKey'}}}}
+    KeyList: {description: Subscription Keys, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/SubscriptionKey'}}}}}}}
     ServiceAccountList: {description: Service Accounts, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/ServiceAccount'}}}}}}}
     ServiceAccountCreated: {description: Service Account credential is returned once, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceAccount'}}}}

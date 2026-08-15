@@ -4,7 +4,7 @@ set -eu
 # Instrument the entire module even when another package's tests execute the
 # code. Deterministic OpenAPI generated packages are excluded from the
 # denominator; their source contract and regeneration drift have a separate
-# gate. Milestone 02 deliberately puts most business coverage in isolated Hurl
+# gate. Milestone 03 deliberately puts most business coverage in isolated Hurl
 # and PostgreSQL contracts, which Go's cover profile cannot observe across the
 # Compose process boundary. This floor catches accidental loss of the focused
 # Go tests; test-unit.sh separately requires every API story and SQL contract.

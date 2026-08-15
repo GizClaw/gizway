@@ -1,5 +1,5 @@
 // Package subscriptionkey owns the stable cross-region identity derived from
-// an exact Subscription API Key value.
+// an exact Subscription Key value.
 package subscriptionkey
 
 import (

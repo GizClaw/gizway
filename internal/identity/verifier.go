@@ -24,9 +24,18 @@ var (
 type Principal struct {
 	Issuer         string
 	Subject        string
+	Name           string
+	PreferredName  string
 	Roles          map[string]bool
 	RolesByProject map[string]map[string]bool
 	Audiences      map[string]bool
+}
+
+func (p Principal) DisplayName() string {
+	if name := strings.TrimSpace(p.Name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(p.PreferredName)
 }
 
 func (p Principal) HasRole(projectID, role string) bool {
@@ -140,7 +149,16 @@ func (v *Verifier) authenticate(r *http.Request, audience string) (Principal, er
 		}
 	}
 	rolesByProject := claimRolesByProject(claims)
-	return Principal{Issuer: issuer, Subject: subject, Roles: rolesByProject[audience], RolesByProject: rolesByProject, Audiences: audiences}, nil
+	return Principal{
+		Issuer: issuer, Subject: subject,
+		Name: claimString(claims, "name"), PreferredName: claimString(claims, "preferred_username"),
+		Roles: rolesByProject[audience], RolesByProject: rolesByProject, Audiences: audiences,
+	}, nil
+}
+
+func claimString(claims jwt.MapClaims, name string) string {
+	value, _ := claims[name].(string)
+	return strings.TrimSpace(value)
 }
 
 func (v *Verifier) key(ctx context.Context, kid string) (any, error) {

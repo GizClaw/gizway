@@ -1,0 +1,23 @@
+# Runner-owned values. Every story starts with fresh Milestone 03 databases.
+variables:
+  pay_url: GizPay base URL
+  way_url: GizWay base URL for the selected region
+  human_token: primary ZITADEL human JWT
+  human_token_two: second ZITADEL human JWT
+  service_token: GizWay Service Account token with Credit Check role
+  service_token_charger: GizWay Service Account token with Charge role
+  raw_subscription_key: active Subscription Key
+  active_subscription_hmac: HMAC of the active Subscription Key
+  revoked_subscription_hmac: HMAC of a revoked Subscription Key
+  revoked_at: revocation timestamp for the revoked Subscription Key
+  after_revocation_time: timestamp strictly after revoked_at
+  negative_balance_hmac: HMAC of the low-balance second-user Subscription Key
+  account_id_two: initialized Account owned by human_token_two
+  seeded_subscription_id: active PAYG Subscription owned by human_token
+  hidden_product_id: active but unpublished PAYG Product
+  seeded_model_id: active regional Bifrost Model ID
+  seeded_model_name: public regional Model name
+  provider_id: seeded regional Bifrost Provider ID
+  provider_key_secret: raw Provider Key contributed by human_token
+  provider_key_secret_two: replacement raw Provider Key
+  gemini_operation: story-text:generateContent

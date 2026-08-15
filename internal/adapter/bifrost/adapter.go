@@ -32,6 +32,37 @@ func (a *Adapter) requestContext(ctx context.Context) *schemas.BifrostContext {
 	return bifrostContext(ctx, deadline)
 }
 
+func (a *Adapter) requestContextWithHeaders(ctx context.Context, headers map[string][]string) *schemas.BifrostContext {
+	bfctx := a.requestContext(ctx)
+	// GizWay populates ExtraParams only from explicitly allowlisted public
+	// fields. Bifrost currently rebuilds OpenAI stream_options internally, so
+	// the controlled extra-parameter merge preserves options it does not copy.
+	bfctx.SetValue(schemas.BifrostContextKeyPassthroughExtraParams, true)
+	if len(headers) != 0 {
+		bfctx.SetValue(schemas.BifrostContextKeyPassthroughHeaders, headers)
+	}
+	return bfctx
+}
+
+// ExecutionError retains the private Bifrost routing identity for a failed
+// Provider attempt so GizWay can write an accurate execution log without
+// exposing the Provider Key to the public response.
+type ExecutionError struct {
+	SelectedKeyID string
+	Cause         error
+}
+
+func (e *ExecutionError) Error() string { return e.Cause.Error() }
+func (e *ExecutionError) Unwrap() error { return e.Cause }
+
+// SelectedKeyID returns the Bifrost-selected Provider Key carried by an error.
+func SelectedKeyID(err error) string {
+	if executionError, ok := errors.AsType[*ExecutionError](err); ok {
+		return executionError.SelectedKeyID
+	}
+	return ""
+}
+
 type account struct {
 	providers []schemas.ModelProvider
 	keys      map[schemas.ModelProvider][]schemas.Key
@@ -273,7 +304,7 @@ func providerForTarget(target store.ProviderExecutionTarget) (schemas.ModelProvi
 	case schemas.OpenAI, schemas.Anthropic, schemas.Gemini:
 		return provider, nil
 	default:
-		return "", fmt.Errorf("unsupported Milestone 02 Provider kind %q", target.Provider)
+		return "", fmt.Errorf("unsupported Milestone 03 Provider kind %q", target.Provider)
 	}
 }
 
@@ -525,12 +556,18 @@ func shutdownClient(client *bf.Bifrost) {
 // models as native fallbacks. Each candidate becomes its own custom provider,
 // so candidates may use different database-selected endpoints and credentials.
 func (a *Adapter) ChatCompletionCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, messages []schemas.ChatMessage, params *schemas.ChatParameters) (*schemas.BifrostChatResponse, error) {
+	return a.ChatCompletionCandidatesWithHeaders(ctx, targets, messages, params, nil)
+}
+
+// ChatCompletionCandidatesWithHeaders forwards only the public-protocol
+// headers explicitly allowlisted by the caller.
+func (a *Adapter) ChatCompletionCandidatesWithHeaders(ctx context.Context, targets []store.ProviderExecutionTarget, messages []schemas.ChatMessage, params *schemas.ChatParameters, headers map[string][]string) (*schemas.BifrostChatResponse, error) {
 	client, targets, release, err := a.clientForCandidates(ctx, targets)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	bfctx := a.requestContext(ctx)
+	bfctx := a.requestContextWithHeaders(ctx, headers)
 	defer bfctx.Cancel()
 	provider, _ := providerForTarget(targets[0])
 	request := &schemas.BifrostChatRequest{
@@ -538,7 +575,7 @@ func (a *Adapter) ChatCompletionCandidates(ctx context.Context, targets []store.
 	}
 	response, bfErr := client.ChatCompletionRequest(bfctx, request)
 	if bfErr != nil {
-		return nil, fmt.Errorf("bifrost chat completion: %s", bfErr.Error.Message)
+		return nil, &ExecutionError{SelectedKeyID: bfErr.ExtraFields.RoutingInfo.Key, Cause: fmt.Errorf("bifrost chat completion: %s", bfErr.Error.Message)}
 	}
 	return response, nil
 }
@@ -547,6 +584,12 @@ func (a *Adapter) ChatCompletionCandidates(ctx context.Context, targets []store.
 // ChatCompletionCandidates. Bifrost performs retry/fallback before emitting a
 // successful stream; each chunk retains the winning private routing identity.
 func (a *Adapter) ChatCompletionStreamCandidates(ctx context.Context, targets []store.ProviderExecutionTarget, messages []schemas.ChatMessage, params *schemas.ChatParameters) (<-chan *schemas.BifrostStreamChunk, context.CancelFunc, error) {
+	return a.ChatCompletionStreamCandidatesWithHeaders(ctx, targets, messages, params, nil)
+}
+
+// ChatCompletionStreamCandidatesWithHeaders is the streaming equivalent of
+// ChatCompletionCandidatesWithHeaders.
+func (a *Adapter) ChatCompletionStreamCandidatesWithHeaders(ctx context.Context, targets []store.ProviderExecutionTarget, messages []schemas.ChatMessage, params *schemas.ChatParameters, headers map[string][]string) (<-chan *schemas.BifrostStreamChunk, context.CancelFunc, error) {
 	client, targets, release, err := a.clientForCandidates(ctx, targets)
 	if err != nil {
 		return nil, nil, err
@@ -556,13 +599,13 @@ func (a *Adapter) ChatCompletionStreamCandidates(ctx context.Context, targets []
 		Provider: provider, Model: targets[0].Model, Input: messages, Params: params,
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	bfctx := a.requestContext(streamCtx)
+	bfctx := a.requestContextWithHeaders(streamCtx, headers)
 	chunks, bfErr := client.ChatCompletionStreamRequest(bfctx, request)
 	if bfErr != nil {
 		cancel()
 		bfctx.Cancel()
 		release()
-		return nil, nil, fmt.Errorf("bifrost chat completion stream: %s", bfErr.Error.Message)
+		return nil, nil, &ExecutionError{SelectedKeyID: bfErr.ExtraFields.RoutingInfo.Key, Cause: fmt.Errorf("bifrost chat completion stream: %s", bfErr.Error.Message)}
 	}
 	return chunks, func() {
 		cancel()

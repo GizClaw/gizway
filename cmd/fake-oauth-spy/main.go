@@ -1,5 +1,5 @@
 // Command fake-oauth-spy runs the transparent ZITADEL token observer used by
-// Milestone 02 Hurl and E2E contracts.
+// Milestone 03 Hurl and E2E contracts.
 package main
 
 import (

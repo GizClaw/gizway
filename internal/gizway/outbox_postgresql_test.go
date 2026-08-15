@@ -21,10 +21,8 @@ func TestReportOutboxDoesNotSendWhenSendingStateCannotBePersisted(t *testing.T) 
 	database := testdb.OpenGizWay(t)
 	db := database.SQL
 	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO models(id,name,provider_id,provider_model,status)
-		VALUES ('model-outbox-send','Outbox Send Model','provider-outbox-send','upstream-model','active');
-		INSERT INTO ai_orders(id,external_order_id,key_hmac,product_id,model_id,provider_id,bifrost_key_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
-		VALUES ('ai-order-outbox-send','order-outbox-send','hmac-outbox-send','product-outbox-send','model-outbox-send','provider-outbox-send','key-outbox-send',10,1,'{}','{}','pending');
+		INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
+		VALUES ('ai-order-outbox-send','order-outbox-send','key-outbox-send','hmac-outbox-send','account-outbox-send','subscription-outbox-send','product-outbox-send','issuer','subject','model-outbox-send','provider-outbox-send',10,1,'{}','{}','pending');
 		INSERT INTO charge_outbox(id,external_order_id,ai_order_id,payload,status,recover_duplicate)
 		VALUES ('outbox-send','order-outbox-send','ai-order-outbox-send','{}','pending',false);
 		CREATE FUNCTION reject_outbox_sending() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -106,7 +104,7 @@ func TestOutboxWorkerReclaimsSendingRowsWithoutRestart(t *testing.T) {
 		},
 		stop: make(chan struct{}), done: make(chan struct{}),
 	}
-	go handler.runOutbox()
+	go handler.runBackgroundWorkers()
 	t.Cleanup(func() { _ = handler.Close() })
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -126,17 +124,14 @@ func TestOutboxWorkerReclaimsSendingRowsWithoutRestart(t *testing.T) {
 func insertOutboxFixture(t *testing.T, db *sqlx.DB, suffix string) {
 	t.Helper()
 	_, err := db.ExecContext(t.Context(), `
-		WITH inserted_model AS (
-			INSERT INTO models(id,name,provider_id,provider_model,status)
-			VALUES ($1,$2,$3,'upstream-model','active') RETURNING id
-		), inserted_order AS (
-			INSERT INTO ai_orders(id,external_order_id,key_hmac,product_id,model_id,provider_id,bifrost_key_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
-			SELECT $4,$5,'hmac-outbox','product-outbox',id,$3,'key-outbox',10,1,'{}','{}','pending' FROM inserted_model
+		WITH inserted_order AS (
+			INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
+			VALUES ($3,$4,'key-outbox','hmac-outbox','account-outbox','subscription-outbox','product-outbox','issuer','subject',$1,$2,10,1,'{}','{}','pending')
 			RETURNING id
 		)
 		INSERT INTO charge_outbox(id,external_order_id,ai_order_id,payload,status,recover_duplicate)
-		SELECT $6,$5,id,'{}','pending',false FROM inserted_order
-	`, "model-"+suffix, "Outbox "+suffix, "provider-"+suffix, "ai-order-"+suffix, "order-"+suffix, "outbox-"+suffix)
+		SELECT $5,$4,id,'{}','pending',false FROM inserted_order
+	`, "model-"+suffix, "provider-"+suffix, "ai-order-"+suffix, "order-"+suffix, "outbox-"+suffix)
 	if err != nil {
 		t.Fatalf("insert Outbox fixture: %v", err)
 	}

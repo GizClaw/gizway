@@ -1,5 +1,5 @@
 // Package creditspy provides a transparent counting reverse proxy used only by
-// Milestone 02 black-box tests. It observes whether GizWay contacted GizPay;
+// Milestone 03 black-box tests. It observes whether GizWay contacted GizPay;
 // it never interprets or changes business payloads.
 package creditspy
 

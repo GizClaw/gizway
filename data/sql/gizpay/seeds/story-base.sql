@@ -1,2 +1,2 @@
--- Milestone 02 stories bootstrap identities and business data through APIs.
+-- Milestone 03 stories bootstrap identities and business data through APIs.
 SELECT 1;

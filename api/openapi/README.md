@@ -1,27 +1,15 @@
 # OpenAPI contracts
 
-This directory contains only versioned, Gizway-owned API specifications:
+Milestone 03 has exactly four root OpenAPI documents:
 
-- `common.yaml` for shared authentication, errors, pagination, and Credit amounts.
-- `payment.yaml` for merchant payment intents, transactions, and webhooks.
-- `account.yaml` for profile, accounts, API keys, balances, top-ups,
-  original-route refunds, transfers, usage, merchants, and transaction history.
-- `admin.yaml` for audited operations over users, merchant reviews, providers,
-  model variants, effective pricing, usage, payments, ledger, and webhooks.
+- `account.yaml`
+- `internal-gizpay.yaml`
+- `gizway-user.yaml`
+- `gizway-public.yaml`
 
-Provider-owned protocol schemas remain upstream-owned. Gizway should test its
-compatibility against those schemas instead of maintaining divergent copies.
+Run `./scripts/generate-openapi.sh` after changing a document. The repository
+check validates OpenAPI 3.1, route ownership, unique operation IDs, generated
+bundles, generated Go code, and Hurl coverage for every operation.
 
-Bifrost's native HTTP API is an internal implementation detail and is not a
-public Gizway surface. OpenAI, Anthropic, and Gemini clients use their respective
-compatible endpoints and official SDKs; their schemas are intentionally absent
-from this directory.
-
-The Admin API intentionally does not expose raw table CRUD. Historical prices
-are append-only, provider credentials are write-only, and posted ledger changes
-use balanced adjustments or compensating reversals.
-
-Administration uses a flat account model rather than RBAC. Every active
-administrator has the same authority and may authenticate with a short-lived
-web session or a separately stored Admin API Key. Customer API keys cannot call
-Admin endpoints.
+These documents, their generated Go bindings, and the Hurl coverage are the
+current executable API contract.

@@ -1,5 +1,5 @@
 // Command fake-credit-spy runs the transparent GizPay request counter used by
-// Milestone 02 Hurl and E2E contracts.
+// Milestone 03 Hurl and E2E contracts.
 package main
 
 import (

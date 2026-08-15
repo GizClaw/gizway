@@ -19,7 +19,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-var routePattern = regexp.MustCompile(`(?:mux|server)\.Handle(?:Func)?\("([A-Z]+) ([^"]+)"`)
+var routePattern = regexp.MustCompile(`"(GET|POST|PUT|PATCH|DELETE) ([^"]+)"`)
 
 type documents map[string]map[string]any
 
@@ -91,7 +91,7 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 					return fmt.Errorf("%s: %s %s lacks operationId", name, upper, path)
 				}
 				route := upper + " " + strings.TrimSuffix(basePath, "/") + path
-				if previous := operationIDs[operationID]; previous != "" && !sharedAdministratorOperation(previous, name, route) {
+				if previous := operationIDs[operationID]; previous != "" {
 					return fmt.Errorf("duplicate operationId %s in %s and %s", operationID, previous, name)
 				}
 				operationIDs[operationID] = name
@@ -123,7 +123,7 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
 		return err
 	}
-	for _, name := range []string{"account.yaml", "gizway-admin.yaml", "gizway-public.yaml", "internal-gizpay.yaml"} {
+	for _, name := range []string{"account.yaml", "gizway-user.yaml", "gizway-public.yaml", "internal-gizpay.yaml"} {
 		bundled, err := bundleValue(docs, name, docs[name], map[string]bool{})
 		if err != nil {
 			return err
@@ -138,22 +138,6 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 		}
 	}
 	return nil
-}
-
-// GizPay and every regional GizWay deployment have independent administrator
-// databases but intentionally implement the same identity API. The two root
-// contracts are deployed at different servers, so OpenAPI requires operationId
-// uniqueness inside each document, not across those documents. Keep this
-// exception narrow: Catalog and center-only operations must remain globally
-// distinct so accidental cross-surface ownership still fails the contract gate.
-func sharedAdministratorOperation(first, second, route string) bool {
-	if !((first == "gizpay-admin.yaml" && second == "gizway-admin.yaml") ||
-		(first == "gizway-admin.yaml" && second == "gizpay-admin.yaml")) {
-		return false
-	}
-	path := strings.SplitN(route, " ", 2)[1]
-	return strings.HasPrefix(path, "/admin/v1/auth/") || path == "/admin/v1/me" ||
-		strings.HasPrefix(path, "/admin/v1/administrators")
 }
 
 func operationalPath(path string) bool {
@@ -189,7 +173,7 @@ func implementedRoutes(directory string) (map[string]bool, error) {
 		return nil, err
 	}
 	routes := map[string]bool{}
-	manifest := filepath.Join(directory, "milestone02_routes.go")
+	manifest := filepath.Join(directory, "milestone03_routes.go")
 	if _, statErr := os.Stat(manifest); statErr == nil {
 		paths = []string{manifest}
 	}

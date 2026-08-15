@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: {title: GizPay Service API, version: 2.0.0}
+info: {title: GizPay Service API, version: 3.0.0}
 servers: [{url: https://pay.gizway.com/service/v1}]
 security: [{serviceBearer: []}]
 paths:
@@ -25,15 +25,19 @@ components:
   schemas:
     CreditCheckRequest:
       type: object
-      required: [api_key_hmac]
-      properties: {api_key_hmac: {type: string, minLength: 43, maxLength: 43}}
+      required: [subscription_key_hmac]
+      properties: {subscription_key_hmac: {type: string, minLength: 43, maxLength: 64}}
     CreditCheckResponse:
       type: object
-      required: [status, available_microcredits, checked_at, recheck_after_seconds]
+      required: [status, available_microcredits, account_id, subscription_id, product_id, billing_mode, owner_identity_issuer, owner_identity_subject, checked_at, recheck_after_seconds]
       properties:
         status: {type: string, enum: [allowed, denied]}
+        account_id: {type: string}
+        subscription_id: {type: string}
         product_id: {type: string}
         billing_mode: {type: string, const: pay_as_you_go}
+        owner_identity_issuer: {type: string}
+        owner_identity_subject: {type: string}
         available_microcredits: {type: integer, format: int64}
         checked_at: {type: string, format: date-time}
         recheck_after_seconds: {type: integer, format: int64, minimum: 1}
@@ -43,10 +47,10 @@ components:
       properties: {merchant_id: {type: string}, amount_microcredits: {type: integer, format: int64, minimum: 0}}
     ChargeRequest:
       type: object
-      required: [external_order_id, api_key_hmac, gross_microcredits, commissions, order, service_started_at, service_completed_at]
+      required: [external_order_id, subscription_key_hmac, gross_microcredits, commissions, order, service_started_at, service_completed_at]
       properties:
         external_order_id: {type: string, minLength: 1}
-        api_key_hmac: {type: string, minLength: 43, maxLength: 43}
+        subscription_key_hmac: {type: string, minLength: 43, maxLength: 64}
         gross_microcredits: {type: integer, format: int64, minimum: 1}
         commissions: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/Commission'}}
         order: {type: object, additionalProperties: true}

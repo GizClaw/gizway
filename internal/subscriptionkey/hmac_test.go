@@ -8,7 +8,7 @@ import (
 )
 
 func TestHMACUsesExactBytesAndBase64URLWithoutPadding(t *testing.T) {
-	secret := []byte("milestone-02-shared-secret")
+	secret := []byte("milestone-03-shared-secret")
 	raw := "  Giz_Key-MixedCase  "
 	mac := hmac.New(sha256.New, secret)
 	_, _ = mac.Write([]byte(raw))
@@ -21,6 +21,6 @@ func TestHMACUsesExactBytesAndBase64URLWithoutPadding(t *testing.T) {
 		t.Fatalf("SHA-256 Base64URL digest length = %d, want 43", len(want))
 	}
 	if HMAC(secret, raw) == HMAC(secret, raw+"\n") {
-		t.Fatal("HMAC normalized exact API Key bytes")
+		t.Fatal("HMAC normalized exact Subscription Key bytes")
 	}
 }

@@ -1,4 +1,4 @@
-// Command e2e-bootstrap prepares ZITADEL identities and disposable Milestone 02 data.
+// Command e2e-bootstrap prepares ZITADEL identities and disposable Milestone 03 data.
 package main
 
 import (
@@ -37,7 +37,7 @@ type options struct {
 
 func main() {
 	var options options
-	flag.StringVar(&options.mode, "mode", "", "zitadel, milestone-02, or milestone-02-empty-api")
+	flag.StringVar(&options.mode, "mode", "", "zitadel or milestone-03")
 	flag.StringVar(&options.zitadelURL, "zitadel-url", "", "ZITADEL base URL")
 	flag.StringVar(&options.outputDirectory, "output-directory", "/fixtures", "identity fixture directory")
 	flag.StringVar(&options.fixtureFile, "fixture-file", "/fixtures/e2e.vars", "Hurl variables file")
@@ -57,12 +57,10 @@ func main() {
 	switch options.mode {
 	case "zitadel":
 		err = bootstrapZITADEL(options)
-	case "milestone-02":
-		err = bootstrapMilestone02(options)
-	case "milestone-02-empty-api":
-		err = bootstrapEmptyAPI(options)
+	case "milestone-03":
+		err = bootstrapMilestone03(options)
 	default:
-		err = errors.New("mode must be zitadel, milestone-02, or milestone-02-empty-api")
+		err = errors.New("mode must be zitadel or milestone-03")
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -128,7 +126,7 @@ func bootstrapZITADEL(options options) error {
 	}
 	projects := []projectFixture{
 		{ID: "386000000000000001", Name: "GizPay Account", Roles: nil},
-		{ID: "386000000000000002", Name: "GizPay Service", Roles: []string{"account_reader", "account_payer", "merchant_operator", "account_admin", "subscription_credit_reader", "subscription_charger"}},
+		{ID: "386000000000000002", Name: "GizPay Service", Roles: []string{"credit_check", "charge"}},
 		{ID: "386000000000000003", Name: "GizWay CN Admin", Roles: []string{"administrator"}},
 		{ID: "386000000000000004", Name: "GizWay Global Admin", Roles: []string{"administrator"}},
 	}
@@ -150,14 +148,14 @@ func bootstrapZITADEL(options options) error {
 		{ID: "human-two", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "provider-merchant-human", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "provider-merchant-human-two", Human: true, Audiences: []string{projects[0].ID}},
-		{ID: "gizpay-service-account-manager", File: "gizpay-service-account-manager.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
-		{ID: "gizway-cn-service", File: "gizway-cn-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
-		{ID: "gizway-global-service", File: "gizway-global-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
-		{ID: "service-charger", File: "service-charger.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_charger"}},
-		{ID: "service-reader", File: "service-reader.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader"}},
-		{ID: "service-rotated", File: "service-rotated.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
-		{ID: "service-other-user", File: "service-other-user.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
-		{ID: "service-revoked", File: "service-revoked.json", Audiences: []string{projects[1].ID}, Roles: []string{"subscription_credit_reader", "subscription_charger"}},
+		{ID: "gizpay-service-account-manager", File: "gizpay-service-account-manager.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
+		{ID: "gizway-cn-service", File: "gizway-cn-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
+		{ID: "gizway-global-service", File: "gizway-global-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
+		{ID: "service-charger", File: "service-charger.json", Audiences: []string{projects[1].ID}, Roles: []string{"charge"}},
+		{ID: "service-reader", File: "service-reader.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check"}},
+		{ID: "service-rotated", File: "service-rotated.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
+		{ID: "service-other-user", File: "service-other-user.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
+		{ID: "service-revoked", File: "service-revoked.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
 		{ID: "cn-administrator", Human: true, Audiences: []string{projects[2].ID, projects[3].ID}, Roles: []string{"administrator"}},
 		{ID: "global-administrator", Human: true, Audiences: []string{projects[3].ID}, Roles: []string{"administrator"}},
 		{ID: "wrong-project-administrator", Human: true, Audiences: []string{projects[2].ID}, GrantProjects: []string{projects[3].ID}, Roles: []string{"administrator"}},
@@ -193,6 +191,7 @@ func bootstrapZITADEL(options options) error {
 			return err
 		}
 		identityKeys[identity.ID] = key
+		variables[identity.ID+"@subject"] = key.UserID
 		for _, audience := range identity.Audiences {
 			accessToken, err := exchangeJWTBearer(context.Background(), options.zitadelURL, key, []string{"openid", "urn:zitadel:iam:org:projects:roles", projectAudienceScope(audience)})
 			if err != nil {
@@ -238,7 +237,7 @@ func (c *zitadelClient) createOIDCApplication(projectID, name string) (string, e
 }
 
 func (c *zitadelClient) createHumanIdentity(identity identityFixture) (string, string, error) {
-	password := "Milestone02!" + strings.ReplaceAll(identity.ID, "-", "")
+	password := "Milestone03!" + strings.ReplaceAll(identity.ID, "-", "")
 	payload := map[string]any{
 		"userName": identity.ID, "profile": map[string]any{"firstName": identity.ID, "lastName": "E2E", "displayName": identity.ID},
 		"email":    map[string]any{"email": identity.ID + "@example.test", "isEmailVerified": true},
@@ -270,7 +269,7 @@ func (c *zitadelClient) issueHumanToken(userID, password, clientID, audience str
 	}
 	verifier := base64.RawURLEncoding.EncodeToString(verifierBytes)
 	challenge := sha256.Sum256([]byte(verifier))
-	state := "m02-" + base64.RawURLEncoding.EncodeToString(verifierBytes[:8])
+	state := "m03-" + base64.RawURLEncoding.EncodeToString(verifierBytes[:8])
 	redirectURI := "http://127.0.0.1:18999/callback"
 	query := url.Values{
 		"client_id": {clientID}, "redirect_uri": {redirectURI}, "response_type": {"code"},
@@ -370,7 +369,7 @@ func (c *zitadelClient) createProject(project projectFixture) error {
 		return fmt.Errorf("create project %s: %w", project.ID, err)
 	}
 	for _, role := range project.Roles {
-		payload := map[string]any{"roleKey": role, "displayName": role, "group": "milestone-02"}
+		payload := map[string]any{"roleKey": role, "displayName": role, "group": "milestone-03"}
 		if err := c.call(http.MethodPost, "/management/v1/projects/"+project.ID+"/roles", payload, nil, false); err != nil && !strings.Contains(err.Error(), "already") {
 			return fmt.Errorf("create role %s: %w", role, err)
 		}
@@ -569,6 +568,9 @@ func mapIdentityVariables(values map[string]string, projects []projectFixture, k
 	values["service_token_rotated"] = lookup("service-rotated", 1)
 	values["service_token_other_user"] = lookup("service-other-user", 1)
 	values["revoked_service_token"] = lookup("service-revoked", 1)
+	values["service_subject"] = values["gizway-cn-service@subject"]
+	values["global_service_subject"] = values["gizway-global-service@subject"]
+	values["service_charger_subject"] = values["service-charger@subject"]
 	values["cn_admin_token"] = lookup("cn-administrator", 2)
 	values["admin_token"] = values["cn_admin_token"]
 	values["global_admin_token"] = lookup("global-administrator", 3)

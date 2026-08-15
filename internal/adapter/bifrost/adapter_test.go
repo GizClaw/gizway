@@ -2,6 +2,7 @@ package bifrost
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,58 @@ import (
 	"github.com/idy/gizway/internal/store"
 	"github.com/idy/gizway/internal/testfake/aiprovider"
 )
+
+func TestCandidateExecutionForwardsMaxTokens(t *testing.T) {
+	var gotMaxTokens int
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			MaxTokens           int `json:"max_tokens"`
+			MaxCompletionTokens int `json:"max_completion_tokens"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		gotMaxTokens = max(body.MaxTokens, body.MaxCompletionTokens)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"id":"chat-1","object":"chat.completion","model":"model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+	}))
+	defer provider.Close()
+	adapter := NewLazyWithExecution(0, time.Second)
+	defer adapter.Shutdown()
+	maxTokens := 37
+	message := "parameter passthrough"
+	_, err := adapter.ChatCompletionCandidates(t.Context(), []store.ProviderExecutionTarget{{
+		Provider: "openai", Endpoint: provider.URL, Credential: "secret", Model: "model", RouteKey: "key",
+	}}, []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: &message}}}, &schemas.ChatParameters{MaxCompletionTokens: &maxTokens})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMaxTokens != maxTokens {
+		t.Fatalf("Provider max_tokens = %d, want %d", gotMaxTokens, maxTokens)
+	}
+}
+
+func TestAnthropicVersionUsesPerRequestPassthrough(t *testing.T) {
+	var gotVersion string
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotVersion = r.Header.Get("anthropic-version")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"id":"msg-1","type":"message","role":"assistant","model":"model","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`)
+	}))
+	defer provider.Close()
+	adapter := NewLazyWithExecution(0, time.Second)
+	defer adapter.Shutdown()
+	message := "header passthrough"
+	_, err := adapter.ChatCompletionCandidatesWithHeaders(t.Context(), []store.ProviderExecutionTarget{{
+		Provider: "anthropic", Endpoint: provider.URL, Credential: "secret", Model: "model", RouteKey: "key",
+	}}, []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: &message}}}, &schemas.ChatParameters{}, map[string][]string{"anthropic-version": {"2023-06-01"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotVersion != "2023-06-01" {
+		t.Fatalf("Provider anthropic-version = %q", gotVersion)
+	}
+}
 
 func TestConfiguredExecutionPolicyIsRetainedForLazyClients(t *testing.T) {
 	adapter := NewLazyWithExecution(2, 120*time.Second)
@@ -127,7 +180,7 @@ func TestBifrostKeyPoolRejectsCrossProviderOrModelCandidates(t *testing.T) {
 	}
 }
 
-func TestMilestone02ProviderKinds(t *testing.T) {
+func TestMilestone03ProviderKinds(t *testing.T) {
 	for _, kind := range []string{"openai", "anthropic", "gemini"} {
 		provider, err := providerForTarget(store.ProviderExecutionTarget{Provider: kind})
 		if err != nil || string(provider) != kind {
@@ -141,7 +194,7 @@ func TestMilestone02ProviderKinds(t *testing.T) {
 
 // These tests cover generic embedded-client lifecycle and Realtime codec
 // behavior. The former cross-Provider/credential fallback test was removed
-// because Milestone 02 explicitly forbids that business contract.
+// because Milestone 03 explicitly forbids that business contract.
 func TestClientCacheDoesNotEvictAnActiveClient(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer upstream.Close()

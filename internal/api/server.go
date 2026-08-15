@@ -1,11 +1,11 @@
-// Package api owns the Milestone 02 HTTP transport.
+// Package api owns the Milestone 03 HTTP transport.
 package api
 
 import (
 	"context"
 	"encoding/json"
-	"maps"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -21,25 +21,25 @@ const (
 // Server is intentionally small: authentication and business handlers are
 // composed behind the route manifest without retaining the pre-refactor API.
 type Server struct {
-	handler   http.Handler
-	business  http.Handler
-	surface   Surface
-	name      string
-	now       func() time.Time
-	advance   func(time.Duration) time.Time
-	readiness func(context.Context, bool) (map[string]any, error)
+	handler  http.Handler
+	business http.Handler
+	surface  Surface
+	name     string
+	version  string
+	now      func() time.Time
+	advance  func(time.Duration) time.Time
 }
 
-// NewMilestone02 composes a service-owned business handler behind the single
+// NewMilestone03 composes a service-owned business handler behind the single
 // route manifest and the local-only health probe.
-func NewMilestone02(surface Surface, name string, business http.Handler, advance func(time.Duration) time.Time) *Server {
-	server := &Server{surface: surface, name: name, business: business, now: time.Now, advance: advance}
+func NewMilestone03(surface Surface, name string, business http.Handler, advance func(time.Duration) time.Time) *Server {
+	server := &Server{surface: surface, name: name, version: currentBuildVersion(), business: business, now: time.Now, advance: advance}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", server.milestone02Health)
+	mux.HandleFunc("GET /healthz", server.milestone03Health)
 	if advance != nil {
 		mux.HandleFunc("POST /test/v1/clock/advance", server.advanceStoryClock)
 	}
-	server.registerMilestone02Routes(mux)
+	server.registerMilestone03Routes(mux)
 	server.handler = recoverMiddleware(requestIDMiddleware(surfaceHandler(surface, mux)))
 	return server
 }
@@ -49,33 +49,26 @@ func (s *Server) Handler() http.Handler { return s.handler }
 func (s *Server) Shutdown(context.Context) error                 { return nil }
 func (s *Server) CloseRealtimeConnections(context.Context) error { return nil }
 
-func (s *Server) ConfigureReadiness(check func(context.Context, bool) (map[string]any, error)) {
-	s.readiness = check
+func (s *Server) milestone03Health(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "healthy", "service": s.surface.String(), "version": s.version,
+		"server_time": s.now().UTC().Format(time.RFC3339),
+	})
 }
 
-func (s *Server) milestone02Health(w http.ResponseWriter, r *http.Request) {
-	result := map[string]any{"status": "degraded", "service": map[string]any{"kind": s.surface.String()}, "server": map[string]any{"name": s.name}}
-	if s.readiness != nil {
-		checks, err := s.readiness(r.Context(), false)
-		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-				"status":  "unhealthy",
-				"service": map[string]any{"kind": s.surface.String()},
-				"server":  map[string]any{"name": s.name},
-			})
-			return
-		}
-		maps.Copy(result, checks)
+func currentBuildVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
 	}
-	writeJSON(w, http.StatusOK, result)
+	return "unknown"
 }
 
-func (s *Server) milestone02NotImplemented(w http.ResponseWriter, r *http.Request) {
+func (s *Server) milestone03NotImplemented(w http.ResponseWriter, r *http.Request) {
 	if s.business != nil {
 		s.business.ServeHTTP(w, r)
 		return
 	}
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Milestone 02 handler is not implemented yet")
+	writeError(w, http.StatusNotImplemented, "not_implemented", "Milestone 03 handler is not implemented yet")
 }
 
 func (s *Server) advanceStoryClock(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +104,7 @@ func surfaceHandler(surface Surface, next http.Handler) http.Handler {
 		if surface == SurfaceGizPay {
 			allowed = allowed || strings.HasPrefix(path, "/account/") || strings.HasPrefix(path, "/service/")
 		} else {
-			allowed = allowed || strings.HasPrefix(path, "/admin/") || strings.HasPrefix(path, "/v1/") ||
+			allowed = allowed || strings.HasPrefix(path, "/user/") || strings.HasPrefix(path, "/v1/") ||
 				strings.HasPrefix(path, "/v1beta/")
 		}
 		if !allowed {

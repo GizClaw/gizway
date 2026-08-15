@@ -1,4 +1,4 @@
-// Command gizway runs one Milestone 02 regional AI service.
+// Command gizway runs one Milestone 03 regional AI service.
 package main
 
 import (
