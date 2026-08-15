@@ -9,8 +9,8 @@ import (
 func TestRequireTokenRolesUsesConfiguredProjectAndEveryRequiredRole(t *testing.T) {
 	claims := jwt.MapClaims{
 		"urn:zitadel:iam:org:project:gateway-project:roles": map[string]any{
-			"subscription_credit_reader": map[string]any{},
-			"subscription_charger":       map[string]any{},
+			"credit_check": map[string]any{},
+			"charge":       map[string]any{},
 		},
 		"urn:zitadel:iam:org:project:other-project:roles": map[string]any{
 			"account_admin": map[string]any{},
@@ -20,7 +20,7 @@ func TestRequireTokenRolesUsesConfiguredProjectAndEveryRequiredRole(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := RequireTokenRoles(raw, "gateway-project", []string{"subscription_credit_reader", "subscription_charger"}); err != nil {
+	if err := RequireTokenRoles(raw, "gateway-project", []string{"credit_check", "charge"}); err != nil {
 		t.Fatalf("configured roles rejected: %v", err)
 	}
 	if err := RequireTokenRoles(raw, "gateway-project", []string{"account_admin"}); err == nil {

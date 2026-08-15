@@ -1,63 +1,34 @@
 # Project structure
 
-Gizway is a Go service with provider-compatible AI protocols and Gizway-owned
-Account, Pay, and Admin APIs. Package boundaries follow runtime ownership rather
-than protocol names alone.
+All development milestones follow the repository-wide
+[development-stage breaking refactor policy](./development-stage-breaking-refactors.md): there is no production
+data migration or legacy compatibility surface, and each milestone leaves one current Schema, API, Config, and
+test contract.
+
+Milestone 03 is implemented as two Go processes plus three PowerSync services:
 
 ```text
-gizway/
-├── .github/workflows/     # CI and reusable Codex review entrypoints
-├── Makefile               # Canonical local and CI quality-gate commands
-├── scripts/
-│   ├── lint/              # Language-oriented static-analysis entrypoints
-│   └── test-unit/         # Local test runners named after Make targets
-├── api/openapi/          # Gizway-owned wire contracts
-├── cmd/gizway/           # Minimal executable entrypoint
-├── data/
-│   └── sql/
-│       ├── migrations/   # Canonical PostgreSQL schema
-│       └── seeds/        # Explicit non-production development fixtures
-├── internal/
-│   ├── app/              # Process composition and lifecycle
-│   ├── api/              # HTTP routing, authentication, codecs, handlers
-│   ├── service/          # State machines and transaction boundaries
-│   ├── adapter/          # Bifrost, payment, risk, webhook external boundaries
-│   ├── storage/          # Direct sqlx PostgreSQL connection and schema setup
-│   └── store/            # SQLx queries and transactional persistence
-└── tests/api/            # Hurl data and black-box acceptance contracts
+cmd/gizpay     -> internal/app -> internal/gizpay -> GizPay PostgreSQL -> GizPay PowerSync
+cmd/gizway     -> internal/app -> internal/gizway -> regional PostgreSQL -> regional PowerSync
+                                            |----> embedded Bifrost
+                                            |----> central GizPay APIs
 ```
 
-## Dependency direction
+- `api/openapi`: the four Milestone 03 wire contracts.
+- `data/sql/gizpay`: central identity, Account, Merchant, Product,
+  Subscription, Key, Top-up, Charge, Commission, and ledger schema.
+- `data/sql/gizway`: regional Model, Provider Key billing/prices, AI Order,
+  Usage, and Charge Outbox schema.
+- `internal/adapter/bifrost`: embedded Bifrost execution and transactional
+  Config Store integration.
+- `internal/identity`: ZITADEL OIDC, JWKS, Private Key JWT, and project-scoped
+  role verification.
+- `tests/api/stories/24-milestone-03`: current API contract stories.
+- `tests/sdk`: pinned official OpenAI, Anthropic, and Gemini SDK acceptance.
+- `tests/powersync`: independent GizPay and regional PowerSync client contracts.
+- `tests/e2e`: disposable ZITADEL, PostgreSQL, GizPay, CN/Global GizWay,
+  PowerSync, and Fake Provider composition.
 
-```text
-cmd -> app -> api/service -> store -> storage -> sqlx -> PostgreSQL
-                         -> adapter -> external/fake dependency
-```
-
-- `cmd` parses process flags and owns no application behavior.
-- `app` wires dependencies and owns startup and shutdown.
-- `api` owns HTTP behavior but not SQL.
-- `api` owns credential parsing, verification, and scope decisions; `store`
-  owns persisted session and key state transitions.
-- `service` owns state machines, idempotency, audit, and transaction boundaries.
-- `adapter` owns Bifrost and other external protocols but never posts ledger entries.
-- `store` owns SQL queries and transactions but not database construction.
-- `storage` owns the direct `sqlx` PostgreSQL connection and schema bootstrap.
-- `data/sql` is the SQL schema and fixture source of truth.
-- `scripts` owns executable local and CI automation; `tests` contains test
-  inputs and contracts rather than runner scripts.
-- `Makefile` is the command source of truth shared by local development and CI;
-  workflows compose its focused formatting, lint, build, and test targets.
-
-Business packages such as payment settlement and ledger posting live under
-`internal/service/<domain>`. Empty domain layers and one-method interfaces are
-not created in advance. Externally visible behavior is specified only by the
-executable Hurl stories under `tests/api/stories/`.
-
-## Test ownership
-
-- Hurl is the sole source of truth for externally visible business behavior.
-- Go HTTP integration tests run real handlers against isolated schemas in a
-  disposable Docker PostgreSQL instance.
-- Store tests own transaction, concurrency, and database error behavior.
-- OpenAPI linting checks the published schema independently from implementation.
+The implemented Milestone 03 contract is represented by the OpenAPI documents,
+the current PostgreSQL schemas, and the API, SDK, PowerSync, and E2E acceptance
+tests listed above.

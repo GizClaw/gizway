@@ -1,7 +1,7 @@
 openapi: 3.1.0
-info: {title: GizWay Public AI API, version: 2.0.0}
+info: {title: GizWay Public AI API, version: 3.0.0}
 servers: [{url: https://api.gizway.com}]
-security: [{subscriptionKey: []}]
+security: [{subscriptionKey: []}, {anthropicSubscriptionKey: []}, {geminiSubscriptionKey: []}]
 paths:
   /v1/models:
     get:
@@ -15,6 +15,7 @@ paths:
   /v1/messages:
     post:
       operationId: createAnthropicMessage
+      parameters: [{name: anthropic-version, in: header, required: true, schema: {type: string, minLength: 1}}]
       requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
       responses: {'200': {$ref: '#/components/responses/AIResponse'}}
   /v1beta/models/{operation}:
@@ -26,7 +27,7 @@ paths:
   /v1/realtime/client_secrets:
     post:
       operationId: createRealtimeClientSecret
-      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [model, transport], properties: {model: {type: string, minLength: 1}, transport: {type: string, const: websocket}}}}}}
       responses: {'201': {description: Ephemeral regional Realtime session, content: {application/json: {schema: {$ref: '#/components/schemas/RealtimeSecret'}}}}}
   /v1/realtime:
     get:
@@ -37,6 +38,8 @@ paths:
 components:
   securitySchemes:
     subscriptionKey: {type: http, scheme: bearer}
+    anthropicSubscriptionKey: {type: apiKey, in: header, name: x-api-key}
+    geminiSubscriptionKey: {type: apiKey, in: header, name: x-goog-api-key}
     realtimeSecret: {type: http, scheme: bearer}
   schemas:
     Model:
@@ -52,7 +55,7 @@ components:
       type: object
       required: [client_secret, session]
       properties:
-        client_secret: {type: object, required: [value], properties: {value: {type: string}}}
+        client_secret: {type: object, required: [value, expires_at], properties: {value: {type: string}, expires_at: {type: integer, format: int64}}}
         session:
           type: object
           required: [session_id, transport, model]
@@ -70,9 +73,33 @@ components:
               messages: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Message'}}
               stream: {type: boolean, default: false}
               max_tokens: {type: integer, minimum: 1}
+              temperature: {type: number}
+              top_p: {type: number}
+              top_k: {type: integer}
+              stop: {type: array, items: {type: string}}
+              stream_options:
+                type: object
+                additionalProperties: false
+                properties:
+                  include_usage: {type: boolean}
+                  include_obfuscation: {type: boolean}
     GeminiContent:
       required: true
-      content: {application/json: {schema: {type: object, required: [contents], properties: {contents: {type: array, minItems: 1, items: {type: object, additionalProperties: true}}}}}}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [contents]
+            properties:
+              contents: {type: array, minItems: 1, items: {type: object, additionalProperties: true}}
+              generationConfig:
+                type: object
+                properties:
+                  maxOutputTokens: {type: integer, minimum: 1}
+                  temperature: {type: number}
+                  topP: {type: number}
+                  topK: {type: integer}
+                  stopSequences: {type: array, items: {type: string}}
   responses:
     ModelList: {description: Regional active models, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Model'}}}}}}}
     AIResponse: {description: Provider-compatible response, content: {application/json: {schema: {$ref: '#/components/schemas/AIResponse'}}, text/event-stream: {schema: {type: string}}}}

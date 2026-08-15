@@ -247,6 +247,29 @@ func (s *Stores) configTransaction(ctx context.Context, operation func(*gorm.DB)
 	})
 }
 
+// ExecuteConfigTransaction lets a caller atomically update Bifrost Config
+// Store tables and service-owned extension tables in the same PostgreSQL
+// transaction.
+func (s *Stores) ExecuteConfigTransaction(ctx context.Context, operation func(*gorm.DB) error) error {
+	return s.configTransaction(ctx, operation)
+}
+
+// CreateKeyInTransaction persists a Provider Key in a caller-owned Config
+// Store transaction. The caller is responsible for committing or rolling back.
+func (s *Stores) CreateKeyInTransaction(ctx context.Context, record KeyRecord, tx *gorm.DB) error {
+	if tx == nil {
+		return errors.New("bifrost config store transaction is required")
+	}
+	return s.Config.CreateProviderKey(ctx, schemas.ModelProvider(record.ProviderID), schemaKey(record), tx)
+}
+
+func (s *Stores) UpdateKeyInTransaction(ctx context.Context, record KeyRecord, tx *gorm.DB) error {
+	if tx == nil {
+		return errors.New("bifrost config store transaction is required")
+	}
+	return s.Config.UpdateProviderKey(ctx, schemas.ModelProvider(record.ProviderID), record.ID, schemaKey(record), tx)
+}
+
 func (s *Stores) CreateProvider(ctx context.Context, record ProviderRecord) error {
 	return s.configTransaction(ctx, func(tx *gorm.DB) error {
 		if err := s.Config.AddProvider(ctx, schemas.ModelProvider(record.ID), providerConfig(record), tx); err != nil {
@@ -363,14 +386,33 @@ func (s *Stores) WriteLog(ctx context.Context, record map[string]any) error {
 	metadata, _ := json.Marshal(record)
 	selectedKeyID, _ := record["selected_key_id"].(string)
 	modelID, _ := record["model_id"].(string)
+	providerID, _ := record["provider_id"].(string)
+	status, _ := record["status"].(string)
+	if status == "" {
+		status = "success"
+	}
+	executionMode, _ := record["execution_mode"].(string)
 	createdAt, _ := record["created_at"].(time.Time)
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
 	entry := &logstore.Log{
 		ID: fmt.Sprint(record["id"]), Timestamp: createdAt, CreatedAt: createdAt,
-		Object: "chat.completion", Provider: fmt.Sprint(record["provider_id"]), Model: modelID,
-		SelectedKeyID: selectedKeyID, SelectedKeyName: selectedKeyID, Status: "success", Metadata: new(string(metadata)),
+		Object: "chat.completion", Provider: providerID, Model: modelID,
+		SelectedKeyID: selectedKeyID, SelectedKeyName: selectedKeyID, Status: status, Metadata: new(string(metadata)),
+	}
+	entry.Stream = executionMode == "streaming" || executionMode == "realtime"
+	if executionMode == "realtime" {
+		entry.Object = "realtime"
+	}
+	if latency, ok := record["latency_ms"].(float64); ok {
+		entry.Latency = &latency
+	}
+	if usage, ok := record["usage"].(*schemas.BifrostLLMUsage); ok {
+		entry.TokenUsageParsed = usage
+	}
+	if message, ok := record["error"].(string); ok && message != "" {
+		entry.ErrorDetailsParsed = &schemas.BifrostError{IsBifrostError: true, Error: &schemas.ErrorField{Message: message}}
 	}
 	if s.logType == "postgresql" {
 		rdb, ok := s.Logs.(*logstore.RDBLogStore)

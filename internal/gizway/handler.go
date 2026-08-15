@@ -1,49 +1,59 @@
 package gizway
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"gorm.io/gorm"
 
 	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
 	"github.com/idy/gizway/internal/identity"
 )
 
 type Config struct {
-	DB                      *sqlx.DB
-	Verifier                *identity.Verifier
-	AdminAudience           string
-	HMACSecret              []byte
-	GizPayURL               string
-	ServiceToken            func(context.Context) (string, error)
-	HTTPClient              *http.Client
-	Now                     func() time.Time
-	OutboxBatchSize         int
-	OutboxRetryInterval     time.Duration
-	OutboxAbandonAfter      time.Duration
-	BifrostMaxRetries       int
-	BifrostRequestTimeout   time.Duration
-	ObserveDependency       func(string, error)
-	BifrostStores           *bifrostadapter.Stores
-	Logger                  *slog.Logger
-	ProviderCallbackBaseURL string
-	ProviderCallbackSecret  []byte
+	DB                         *sqlx.DB
+	DatabaseSchema             string
+	Verifier                   *identity.Verifier
+	HumanAudience              string
+	HMACSecret                 []byte
+	GizPayURL                  string
+	ServiceToken               func(context.Context) (string, error)
+	HTTPClient                 *http.Client
+	Now                        func() time.Time
+	OutboxBatchSize            int
+	OutboxRetryInterval        time.Duration
+	OutboxAbandonAfter         time.Duration
+	CreditCacheCleanupInterval time.Duration
+	BifrostMaxRetries          int
+	BifrostRequestTimeout      time.Duration
+	RealtimeSessionTTL         time.Duration
+	BifrostStores              *bifrostadapter.Stores
+	Logger                     *slog.Logger
+	ProviderCallbackBaseURL    string
+	ProviderCallbackSecret     []byte
+}
+
+type creditAdmission struct {
+	accountID, subscriptionID, productID, billing string
+	ownerIssuer, ownerSubject                     string
+	allowed                                       bool
 }
 
 type creditState struct {
+	admission creditAdmission
 	available int64
-	productID string
-	billing   string
 	expires   time.Time
 	loading   bool
 	wait      chan struct{}
@@ -62,14 +72,12 @@ type Handler struct {
 	done       chan struct{}
 }
 
-func (h *Handler) observeDependency(name string, err error) {
-	if h.config.ObserveDependency != nil {
-		h.config.ObserveDependency(name, err)
-	}
-}
+var schemaNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+const defaultCreditCacheCleanupInterval = time.Minute
 
 func New(config Config) (*Handler, error) {
-	if config.DB == nil || config.Verifier == nil || config.AdminAudience == "" || config.BifrostStores == nil {
+	if config.DB == nil || config.Verifier == nil || config.HumanAudience == "" || config.BifrostStores == nil || !schemaNamePattern.MatchString(config.DatabaseSchema) {
 		return nil, errors.New("incomplete GizWay handler configuration")
 	}
 	if config.Now == nil {
@@ -87,42 +95,55 @@ func New(config Config) (*Handler, error) {
 	if config.OutboxAbandonAfter <= 0 {
 		config.OutboxAbandonAfter = 24 * time.Hour
 	}
+	if config.CreditCacheCleanupInterval <= 0 {
+		config.CreditCacheCleanupInterval = defaultCreditCacheCleanupInterval
+	}
+	if config.RealtimeSessionTTL <= 0 {
+		config.RealtimeSessionTTL = time.Minute
+	}
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
 	engine := bifrostadapter.NewLazyWithExecution(config.BifrostMaxRetries, config.BifrostRequestTimeout)
 	engine.ConfigureProviderCallbacks(config.ProviderCallbackBaseURL, config.ProviderCallbackSecret)
-	handler := &Handler{
-		config: config, engine: engine, stores: config.BifrostStores, credits: make(map[string]*creditState), realtime: make(map[string]realtimeSession),
-		stop: make(chan struct{}), done: make(chan struct{}),
-	}
+	h := &Handler{config: config, engine: engine, stores: config.BifrostStores, credits: map[string]*creditState{}, realtime: map[string]realtimeSession{}, stop: make(chan struct{}), done: make(chan struct{})}
 	_, _ = config.DB.Exec(`UPDATE charge_outbox SET status='pending',recover_duplicate=true,updated_at=$1 WHERE status='sending'`, config.Now().UTC())
-	go handler.runOutbox()
-	return handler, nil
+	go h.runBackgroundWorkers()
+	return h, nil
 }
 
 func (h *Handler) diagnostic(message string, err error, attributes ...any) {
 	if err != nil {
 		attributes = append(attributes, "error", err.Error())
 	}
-	h.config.Logger.Error(message, attributes...)
+	logger := h.config.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Error(message, attributes...)
+}
+
+func (h *Handler) runBackgroundWorkers() {
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		h.runOutbox()
+	}()
+	go func() {
+		defer workers.Done()
+		h.runCreditCacheCleanup()
+	}()
+	workers.Wait()
+	close(h.done)
 }
 
 func (h *Handler) runOutbox() {
-	defer close(h.done)
-	retryInterval := h.config.OutboxRetryInterval
-	if retryInterval <= 0 {
-		retryInterval = 250 * time.Millisecond
+	interval := h.config.OutboxRetryInterval
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
 	}
-	abandonAfter := h.config.OutboxAbandonAfter
-	if abandonAfter <= 0 {
-		abandonAfter = 24 * time.Hour
-	}
-	batchSize := h.config.OutboxBatchSize
-	if batchSize <= 0 {
-		batchSize = 20
-	}
-	ticker := time.NewTicker(retryInterval)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -130,11 +151,20 @@ func (h *Handler) runOutbox() {
 			return
 		case <-ticker.C:
 		}
-		var ids []string
+		h.pruneRealtimeSessions()
+		if h.config.DB == nil || h.config.Now == nil {
+			continue
+		}
+		abandonAfter := h.config.OutboxAbandonAfter
+		if abandonAfter <= 0 {
+			abandonAfter = 24 * time.Hour
+		}
+		batchSize := h.config.OutboxBatchSize
+		if batchSize <= 0 {
+			batchSize = 20
+		}
 		_, _ = h.config.DB.Exec(`UPDATE charge_outbox SET status='abandoned',updated_at=$1 WHERE status='pending' AND created_at < $2`, h.config.Now().UTC(), h.config.Now().UTC().Add(-abandonAfter))
-		// A failed local state transition after the remote request can leave a row
-		// in sending. This worker is single-threaded, so reclaiming both states is
-		// safe and avoids requiring a process restart to resume recovery.
+		var ids []string
 		if h.config.DB.Select(&ids, `SELECT external_order_id FROM charge_outbox WHERE status IN('pending','sending') ORDER BY created_at LIMIT $1`, batchSize) != nil {
 			continue
 		}
@@ -144,7 +174,37 @@ func (h *Handler) runOutbox() {
 	}
 }
 
-// Close stops the background Outbox worker before its database is closed.
+func (h *Handler) runCreditCacheCleanup() {
+	interval := h.config.CreditCacheCleanupInterval
+	if interval <= 0 {
+		interval = defaultCreditCacheCleanupInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-h.stop:
+			return
+		case <-ticker.C:
+			h.pruneCreditStates()
+		}
+	}
+}
+
+func (h *Handler) pruneCreditStates() {
+	if h.config.Now == nil {
+		return
+	}
+	now := h.config.Now().UTC()
+	h.creditMu.Lock()
+	defer h.creditMu.Unlock()
+	for keyHMAC, state := range h.credits {
+		if state != nil && !state.loading && !now.Before(state.expires) {
+			delete(h.credits, keyHMAC)
+		}
+	}
+}
+
 func (h *Handler) Close() error {
 	h.stopOnce.Do(func() { close(h.stop) })
 	<-h.done
@@ -152,544 +212,231 @@ func (h *Handler) Close() error {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasPrefix(r.URL.Path, "/admin/") {
+	if !strings.HasPrefix(r.URL.Path, "/user/") {
 		h.protocol(w, r)
 		return
 	}
-	principal, err := h.config.Verifier.AuthenticateAny(r)
+	principal, err := h.config.Verifier.Authenticate(r, h.config.HumanAudience)
 	if err != nil {
 		if errors.Is(err, identity.ErrInvalidIssuer) {
 			errJSON(w, 401, "invalid_token_issuer", "invalid token issuer")
-		} else if strings.Count(r.Header.Get("Authorization"), ".") < 2 {
-			errJSON(w, 401, "invalid_bearer_token", "invalid bearer token")
-		} else {
-			errJSON(w, 401, "invalid_token", "invalid token")
-		}
-		return
-	}
-	var status string
-	lookupErr := h.config.DB.Get(&status, `SELECT status FROM administrators WHERE identity_issuer=$1 AND identity_subject=$2`, principal.Issuer, principal.Subject)
-	if !principal.Audiences[h.config.AdminAudience] {
-		if lookupErr == nil {
+		} else if errors.Is(err, identity.ErrInvalidAudience) {
 			errJSON(w, 401, "invalid_token_audience", "invalid token audience")
-		} else if principal.HasRoleInAnyProject("administrator") {
-			errJSON(w, 403, "administrator_region_forbidden", "administrator belongs to another region")
 		} else {
-			errJSON(w, 403, "administrator_required", "administrator required")
+			errJSON(w, 401, "invalid_bearer_token", "invalid bearer token")
 		}
-		return
-	}
-	if lookupErr != nil {
-		errJSON(w, 403, "administrator_required", "administrator required")
-		return
-	}
-	if !principal.HasRole(h.config.AdminAudience, "administrator") {
-		errJSON(w, 403, "administrator_required", "administrator required")
-		return
-	}
-	if status != "active" {
-		errJSON(w, 403, "administrator_inactive", "administrator inactive")
 		return
 	}
 	path := r.URL.Path
 	switch {
-	case strings.HasPrefix(path, "/admin/v1/models"):
-		h.models(w, r)
-	case path == "/admin/v1/providers":
-		h.providers(w, r)
-	case strings.HasPrefix(path, "/admin/v1/providers/"):
-		h.providerResource(w, r)
-	case strings.HasPrefix(path, "/admin/v1/provider-api-keys/"):
-		h.providerKeyResource(w, r)
-	case path == "/admin/v1/ai-orders":
-		h.listTable(w, `SELECT o.*,m.name AS model FROM ai_orders o JOIN models m ON m.id=o.model_id ORDER BY o.created_at,o.id`)
-	case path == "/admin/v1/charge-outbox":
-		h.listTable(w, `SELECT * FROM charge_outbox ORDER BY created_at,id`)
-	case path == "/admin/v1/bifrost-logs":
-		logs, logErr := h.stores.LogsList(r.Context())
-		if logErr != nil {
-			internal(w)
-			return
-		}
-		writeJSON(w, 200, map[string]any{"data": logs})
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/user/v1/providers/") && strings.HasSuffix(path, "/keys"):
+		h.createProviderKey(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/user/v1/providers/"), "/keys"), principal)
+	case r.Method == http.MethodPut && strings.HasPrefix(path, "/user/v1/provider-keys/") && strings.HasSuffix(path, "/prices"):
+		h.putProviderKeyPrices(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/user/v1/provider-keys/"), "/prices"), principal)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/user/v1/provider-keys/") && strings.HasSuffix(path, "/disable"):
+		h.disableProviderKey(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/user/v1/provider-keys/"), "/disable"), principal)
 	default:
 		notFound(w)
 	}
 }
 
-func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("model_id")
-	if id == "" {
-		if r.Method == http.MethodGet {
-			h.listTable(w, `SELECT * FROM models ORDER BY created_at,id`)
-			return
-		}
-		var body struct {
-			Name          string `json:"name"`
-			ProviderID    string `json:"provider_id"`
-			ProviderModel string `json:"provider_model"`
-		}
-		if decode(r, &body) != nil {
-			invalid(w)
-			return
-		}
-		if !nonBlank(body.Name) || !nonBlank(body.ProviderID) || !nonBlank(body.ProviderModel) {
-			invalid(w)
-			return
-		}
-		provider, providerErr := h.stores.Provider(r.Context(), body.ProviderID)
-		if providerErr != nil || provider.Status != "active" {
-			errJSON(w, 400, "invalid_provider", "Provider is not active")
-			return
-		}
-		id = "mdl_" + uuid.NewString()
-		now := h.config.Now().UTC()
-		_, err := h.config.DB.Exec(`INSERT INTO models(id,name,provider_id,provider_model,status,created_at,updated_at) VALUES($1,$2,$3,$4,'active',$5,$5)`, id, body.Name, body.ProviderID, body.ProviderModel, now)
-		if err != nil {
-			internal(w)
-			return
-		}
-		writeJSON(w, 201, map[string]any{"id": id, "name": body.Name, "provider_id": body.ProviderID, "provider_model": body.ProviderModel, "status": "active"})
-		return
+func (h *Handler) ownerMerchant(ctx context.Context, authorization string, principal identity.Principal) (string, error) {
+	var merchantID string
+	err := h.config.DB.GetContext(ctx, &merchantID, `SELECT merchant_id FROM gizway_user_merchants WHERE owner_identity_issuer=$1 AND owner_identity_subject=$2`, principal.Issuer, principal.Subject)
+	if err == nil {
+		return merchantID, nil
 	}
-	if strings.HasSuffix(r.URL.Path, "/prices") {
-		h.modelPrices(w, r, id)
-		return
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
 	}
-	row, err := h.one(`SELECT * FROM models WHERE id=$1`, id)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(h.config.GizPayURL, "/")+"/account/v1/initialize", nil)
 	if err != nil {
-		notFound(w)
-		return
+		return "", err
 	}
-	if r.Method == http.MethodPatch {
-		var body struct {
-			Name   *string `json:"name"`
-			Status *string `json:"status"`
-		}
-		if decode(r, &body) != nil {
-			invalid(w)
-			return
-		}
-		if body.Name == nil && body.Status == nil || body.Name != nil && !nonBlank(*body.Name) || body.Status != nil && *body.Status != "active" && *body.Status != "inactive" {
-			invalid(w)
-			return
-		}
-		if body.Name != nil {
-			row["name"] = *body.Name
-		}
-		if body.Status != nil {
-			row["status"] = *body.Status
-		}
-		if _, err = h.config.DB.Exec(`UPDATE models SET name=$1,status=$2,updated_at=$3 WHERE id=$4`, row["name"], row["status"], h.config.Now().UTC(), id); err != nil {
-			invalid(w)
-			return
-		}
+	request.Header.Set("Authorization", authorization)
+	response, err := h.config.HTTPClient.Do(request)
+	if err != nil {
+		return "", err
 	}
-	writeJSON(w, 200, row)
-}
-
-type price struct {
-	Metric   string `json:"metric"`
-	UnitSize int64  `json:"unit_size"`
-	Price    int64  `json:"price_microcredits"`
-}
-
-func validMetric(metric string) bool {
-	return metric == "input_token" || metric == "output_token"
-}
-
-func (h *Handler) modelPrices(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method == http.MethodGet {
-		rows, err := h.many(`SELECT metric,unit_size,price_microcredits FROM model_customer_prices WHERE model_id=$1 ORDER BY metric`, id)
-		if err != nil {
-			internal(w)
-			return
-		}
-		writeJSON(w, 200, map[string]any{"prices": rows})
-		return
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", errors.New("GizPay initialize failed")
 	}
 	var body struct {
-		Prices []price `json:"prices"`
+		DefaultMerchantID string `json:"default_merchant_id"`
 	}
-	if decode(r, &body) != nil || body.Prices == nil {
-		invalid(w)
-		return
+	if json.NewDecoder(response.Body).Decode(&body) != nil || body.DefaultMerchantID == "" {
+		return "", errors.New("GizPay initialize response is invalid")
 	}
-	tx, err := h.config.DB.Beginx()
-	if err != nil {
-		internal(w)
-		return
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`DELETE FROM model_customer_prices WHERE model_id=$1`, id); err != nil {
-		internal(w)
-		return
-	}
-	for _, p := range body.Prices {
-		if !validMetric(p.Metric) || p.UnitSize <= 0 || p.Price < 0 {
-			invalid(w)
-			return
-		}
-		if _, err = tx.Exec(`INSERT INTO model_customer_prices(model_id,metric,unit_size,price_microcredits) VALUES($1,$2,$3,$4)`, id, p.Metric, p.UnitSize, p.Price); err != nil {
-			invalid(w)
-			return
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		internal(w)
-		return
-	}
-	h.modelPrices(w, &http.Request{Method: http.MethodGet}, id)
-}
-
-func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		providers, err := h.stores.Providers(r.Context())
-		if err != nil {
-			internal(w)
-			return
-		}
-		data := make([]map[string]any, 0, len(providers))
-		for _, provider := range providers {
-			data = append(data, map[string]any{"id": provider.ID, "name": provider.Name, "kind": provider.Kind, "base_url": provider.BaseURL, "status": provider.Status, "created_at": provider.CreatedAt})
-		}
-		writeJSON(w, 200, map[string]any{"data": data})
-		return
-	}
-	var body struct {
-		Name    string `json:"name"`
-		Kind    string `json:"kind"`
-		BaseURL string `json:"base_url"`
-	}
-	if decode(r, &body) != nil {
-		invalid(w)
-		return
-	}
-	id := "prv_" + uuid.NewString()
-	if !nonBlank(body.Name) || !validProviderURL(body.BaseURL) || (body.Kind != "openai" && body.Kind != "anthropic" && body.Kind != "gemini") {
-		invalid(w)
-		return
-	}
-	err := h.stores.CreateProvider(r.Context(), bifrostadapter.ProviderRecord{ID: id, Name: body.Name, Kind: body.Kind, BaseURL: body.BaseURL, Status: "active", CreatedAt: h.config.Now().UTC()})
-	if err != nil {
-		internal(w)
-		return
-	}
-	writeJSON(w, 201, map[string]any{"id": id, "name": body.Name, "kind": body.Kind, "base_url": body.BaseURL, "status": "active"})
-}
-
-func (h *Handler) providerResource(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("provider_id")
-	if strings.HasSuffix(r.URL.Path, "/api-keys") {
-		h.providerKeys(w, r, id)
-		return
-	}
-	provider, err := h.stores.Provider(r.Context(), id)
-	if err != nil {
-		notFound(w)
-		return
-	}
-	if r.Method == http.MethodPatch {
-		var body struct {
-			Name    *string `json:"name"`
-			BaseURL *string `json:"base_url"`
-			Status  *string `json:"status"`
-		}
-		if decode(r, &body) != nil {
-			invalid(w)
-			return
-		}
-		if body.Name == nil && body.BaseURL == nil && body.Status == nil || body.Name != nil && !nonBlank(*body.Name) || body.BaseURL != nil && !validProviderURL(*body.BaseURL) || body.Status != nil && *body.Status != "active" && *body.Status != "inactive" {
-			invalid(w)
-			return
-		}
-		if body.Name != nil {
-			provider.Name = *body.Name
-		}
-		if body.BaseURL != nil {
-			provider.BaseURL = *body.BaseURL
-		}
-		if body.Status != nil {
-			provider.Status = *body.Status
-		}
-		err = h.stores.UpdateProvider(r.Context(), provider)
-		if err != nil {
-			invalid(w)
-			return
-		}
-	}
-	writeJSON(w, 200, map[string]any{"id": provider.ID, "name": provider.Name, "kind": provider.Kind, "base_url": provider.BaseURL, "status": provider.Status})
+	_, err = h.config.DB.ExecContext(ctx, `INSERT INTO gizway_user_merchants(owner_identity_issuer,owner_identity_subject,merchant_id) VALUES($1,$2,$3) ON CONFLICT(owner_identity_issuer,owner_identity_subject) DO UPDATE SET merchant_id=EXCLUDED.merchant_id,updated_at=now()`, principal.Issuer, principal.Subject, body.DefaultMerchantID)
+	return body.DefaultMerchantID, err
 }
 
 type keyPrice struct {
-	ModelID    string `json:"model_id"`
-	Metric     string `json:"metric"`
-	UnitSize   int64  `json:"unit_size"`
-	Commission int64  `json:"commission_microcredits"`
+	ModelID      string `json:"model_id"`
+	Metric       string `json:"metric"`
+	UnitSize     int64  `json:"unit_size"`
+	Microcredits int64  `json:"microcredits_per_unit"`
 }
 
-func (h *Handler) providerKeys(w http.ResponseWriter, r *http.Request, providerID string) {
-	if r.Method == http.MethodGet {
-		keys, err := h.stores.Keys(r.Context(), providerID)
-		if err != nil {
-			internal(w)
-			return
-		}
-		data := make([]map[string]any, 0, len(keys))
-		for _, key := range keys {
-			row := map[string]any{"bifrost_key_id": key.ID, "provider_id": key.ProviderID, "name": key.Name, "api_key": key.APIKey, "weight": key.Weight, "status": key.Status}
-			var beneficiary string
-			_ = h.config.DB.Get(&beneficiary, `SELECT beneficiary_merchant_id FROM provider_key_billing WHERE bifrost_key_id=$1`, key.ID)
-			row["beneficiary_merchant_id"] = beneficiary
-			data = append(data, row)
-		}
-		writeJSON(w, 200, map[string]any{"data": data})
-		return
+func validMetric(metric string) bool { return metric == "input_tokens" || metric == "output_tokens" }
+
+func validatePrices(prices []keyPrice) bool {
+	if len(prices) == 0 {
+		return false
 	}
+	seen := map[string]bool{}
+	for _, p := range prices {
+		key := p.ModelID + "\x00" + p.Metric
+		if !nonBlank(p.ModelID) || !validMetric(p.Metric) || p.UnitSize <= 0 || p.Microcredits < 0 || seen[key] {
+			return false
+		}
+		seen[key] = true
+	}
+	return true
+}
+
+func (h *Handler) createProviderKey(w http.ResponseWriter, r *http.Request, providerID string, principal identity.Principal) {
 	var body struct {
-		Name        string     `json:"name"`
-		APIKey      string     `json:"api_key"`
-		Weight      int        `json:"weight"`
-		Status      string     `json:"status"`
-		Beneficiary string     `json:"beneficiary_merchant_id"`
-		Prices      []keyPrice `json:"prices"`
+		Name   string     `json:"name"`
+		Key    string     `json:"key"`
+		Status string     `json:"status"`
+		Prices []keyPrice `json:"prices"`
 	}
-	if decode(r, &body) != nil || body.Prices == nil {
+	if decode(r, &body) != nil || !nonBlank(providerID) || !nonBlank(body.Key) || body.Status != "active" || !validatePrices(body.Prices) {
 		invalid(w)
 		return
 	}
-	if !nonBlank(body.Beneficiary) {
-		errJSON(w, 400, "incomplete_provider_key_billing", "beneficiary Merchant is required")
-		return
-	}
-	if !nonBlank(body.Name) || !nonBlank(body.APIKey) || body.Weight <= 0 || body.Status != "active" {
-		invalid(w)
-		return
-	}
-	for _, p := range body.Prices {
-		if !nonBlank(p.ModelID) || !validMetric(p.Metric) || p.UnitSize <= 0 || p.Commission < 0 {
-			invalid(w)
-			return
-		}
-	}
-	if _, err := h.stores.Provider(r.Context(), providerID); err != nil {
+	provider, err := h.stores.Provider(r.Context(), providerID)
+	if err != nil || provider.Status != "active" {
 		notFound(w)
 		return
 	}
-	id := "bfk_" + uuid.NewString()
-	if err := h.stores.CreateKey(r.Context(), bifrostadapter.KeyRecord{ID: id, ProviderID: providerID, Name: body.Name, APIKey: body.APIKey, Weight: body.Weight, Enabled: false, Status: "inactive"}); err != nil {
+	merchantID, err := h.ownerMerchant(r.Context(), r.Header.Get("Authorization"), principal)
+	if err != nil {
+		errJSON(w, 503, "account_initialize_unavailable", "account initialization unavailable")
+		return
+	}
+	id, now := "pkey_"+uuid.NewString(), h.config.Now().UTC()
+	name := body.Name
+	if !nonBlank(name) {
+		name = "Provider Key"
+	}
+	err = h.stores.ExecuteConfigTransaction(r.Context(), func(tx *gorm.DB) error {
+		validatedModels := map[string]bool{}
+		for _, price := range body.Prices {
+			if validatedModels[price.ModelID] {
+				continue
+			}
+			var count int64
+			if err := tx.Raw(`SELECT count(*) FROM client_sync.models WHERE id=? AND provider_id=? AND status='active'`, price.ModelID, providerID).Scan(&count).Error; err != nil || count != 1 {
+				return errors.New("price references an unavailable provider model")
+			}
+			validatedModels[price.ModelID] = true
+		}
+		if err := h.stores.CreateKeyInTransaction(r.Context(), bifrostadapter.KeyRecord{ID: id, ProviderID: providerID, Name: name, APIKey: body.Key, Weight: 1, Enabled: true, Status: "active"}, tx); err != nil {
+			return err
+		}
+		q := func(table string) string { return `"` + h.config.DatabaseSchema + `".` + table }
+		if err := tx.Exec(`INSERT INTO `+q("provider_key_billing")+`(provider_key_id,owner_identity_issuer,owner_identity_subject,merchant_id,status,created_at,updated_at) VALUES(?,?,?,?,? ,?,?)`, id, principal.Issuer, principal.Subject, merchantID, "active", now, now).Error; err != nil {
+			return err
+		}
+		for _, p := range body.Prices {
+			if err := tx.Exec(`INSERT INTO `+q("provider_key_prices")+`(provider_key_id,model_id,metric,unit_size,microcredits_per_unit) VALUES(?,?,?,?,?)`, id, p.ModelID, p.Metric, p.UnitSize, p.Microcredits).Error; err != nil {
+				return err
+			}
+		}
+		pricesJSON, _ := json.Marshal(body.Prices)
+		return tx.Exec(`INSERT INTO client_sync.provider_keys(id,provider_id,key,merchant_id,owner_identity_issuer,owner_identity_subject,status,prices_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, providerID, body.Key, merchantID, principal.Issuer, principal.Subject, "active", string(pricesJSON), now, now).Error
+	})
+	if err != nil {
 		invalid(w)
 		return
 	}
-	tx, err := h.config.DB.Beginx()
+	writeJSON(w, 201, map[string]any{"provider_key_id": id, "provider_id": providerID, "key": body.Key, "merchant_id": merchantID, "status": "active", "prices": body.Prices})
+}
+
+func (h *Handler) putProviderKeyPrices(w http.ResponseWriter, r *http.Request, id string, principal identity.Principal) {
+	var body struct {
+		Prices []keyPrice `json:"prices"`
+	}
+	if decode(r, &body) != nil || !validatePrices(body.Prices) {
+		invalid(w)
+		return
+	}
+	tx, err := h.config.DB.BeginTxx(r.Context(), nil)
 	if err != nil {
 		internal(w)
 		return
 	}
 	defer tx.Rollback()
-	if _, err = tx.Exec(`INSERT INTO provider_key_billing(bifrost_key_id,beneficiary_merchant_id,status) VALUES($1,$2,'active')`, id, body.Beneficiary); err != nil {
-		invalid(w)
+	var providerID string
+	if tx.Get(&providerID, `SELECT k.provider_id FROM provider_key_billing b JOIN client_sync.provider_keys k ON k.id=b.provider_key_id WHERE b.provider_key_id=$1 AND b.owner_identity_issuer=$2 AND b.owner_identity_subject=$3`, id, principal.Issuer, principal.Subject) != nil {
+		notFound(w)
 		return
 	}
-	for _, p := range body.Prices {
-		if _, err = tx.Exec(`INSERT INTO provider_key_prices(bifrost_key_id,model_id,metric,unit_size,commission_microcredits) VALUES($1,$2,$3,$4,$5)`, id, p.ModelID, p.Metric, p.UnitSize, p.Commission); err != nil {
+	validatedModels := map[string]bool{}
+	for _, price := range body.Prices {
+		if validatedModels[price.ModelID] {
+			continue
+		}
+		var count int
+		if tx.Get(&count, `SELECT count(*) FROM client_sync.models WHERE id=$1 AND provider_id=$2 AND status='active'`, price.ModelID, providerID) != nil || count != 1 {
 			invalid(w)
 			return
 		}
+		validatedModels[price.ModelID] = true
+	}
+	if _, err = tx.Exec(`DELETE FROM provider_key_prices WHERE provider_key_id=$1`, id); err != nil {
+		internal(w)
+		return
+	}
+	for _, p := range body.Prices {
+		if _, err = tx.Exec(`INSERT INTO provider_key_prices(provider_key_id,model_id,metric,unit_size,microcredits_per_unit) VALUES($1,$2,$3,$4,$5)`, id, p.ModelID, p.Metric, p.UnitSize, p.Microcredits); err != nil {
+			invalid(w)
+			return
+		}
+	}
+	pricesJSON, _ := json.Marshal(body.Prices)
+	if _, err = tx.Exec(`UPDATE client_sync.provider_keys SET prices_json=$1,updated_at=$2 WHERE id=$3`, string(pricesJSON), h.config.Now().UTC(), id); err != nil {
+		internal(w)
+		return
 	}
 	if err = tx.Commit(); err != nil {
 		internal(w)
 		return
 	}
-	if err = h.stores.UpdateKey(r.Context(), bifrostadapter.KeyRecord{ID: id, ProviderID: providerID, Name: body.Name, APIKey: body.APIKey, Weight: body.Weight, Enabled: true, Status: "active"}); err != nil {
-		internal(w)
-		return
-	}
-	writeJSON(w, 201, map[string]any{
-		"bifrost_key_id": id, "provider_id": providerID, "name": body.Name,
-		"api_key": body.APIKey, "weight": body.Weight, "status": "active",
-		"beneficiary_merchant_id": body.Beneficiary, "prices": body.Prices,
-	})
+	writeJSON(w, 200, body)
 }
 
-func (h *Handler) providerKeyResource(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("bifrost_key_id")
-	switch {
-	case strings.HasSuffix(r.URL.Path, "/disable"):
-		key, err := h.stores.FindKey(r.Context(), id)
-		if err != nil {
-			notFound(w)
-			return
-		}
-		key.Enabled, key.Status = false, "disabled"
-		if err := h.stores.UpdateKey(r.Context(), key); err != nil {
-			internal(w)
-			return
-		}
-		_, _ = h.config.DB.Exec(`UPDATE provider_key_billing SET status='inactive' WHERE bifrost_key_id=$1`, id)
-		writeJSON(w, 200, map[string]any{"bifrost_key_id": id, "status": "disabled"})
-	case strings.HasSuffix(r.URL.Path, "/billing"):
-		h.keyBilling(w, r, id)
-	case strings.HasSuffix(r.URL.Path, "/prices"):
-		h.keyPrices(w, r, id)
-	default:
-		h.key(w, r, id)
-	}
-}
-
-func (h *Handler) key(w http.ResponseWriter, r *http.Request, id string) {
-	key, err := h.stores.FindKey(r.Context(), id)
+func (h *Handler) disableProviderKey(w http.ResponseWriter, r *http.Request, id string, principal identity.Principal) {
+	var providerID, keyValue, merchantID string
+	err := h.config.DB.QueryRowxContext(r.Context(), `SELECT b.merchant_id,k.provider_id,k.key FROM provider_key_billing b JOIN client_sync.provider_keys k ON k.id=b.provider_key_id WHERE b.provider_key_id=$1 AND b.owner_identity_issuer=$2 AND b.owner_identity_subject=$3`, id, principal.Issuer, principal.Subject).Scan(&merchantID, &providerID, &keyValue)
 	if err != nil {
 		notFound(w)
 		return
 	}
-	if r.Method == http.MethodPatch {
-		var body struct {
-			APIKey *string `json:"api_key"`
-			Weight *int    `json:"weight"`
-		}
-		if decode(r, &body) != nil || body.APIKey == nil && body.Weight == nil {
-			invalid(w)
-			return
-		}
-		if body.APIKey != nil {
-			if !nonBlank(*body.APIKey) {
-				invalid(w)
-				return
-			}
-			key.APIKey = *body.APIKey
-		}
-		if body.Weight != nil {
-			if *body.Weight < 1 {
-				invalid(w)
-				return
-			}
-			key.Weight = *body.Weight
-		}
-		err = h.stores.UpdateKey(r.Context(), key)
-		if err != nil {
-			invalid(w)
-			return
-		}
-	}
-	var beneficiary string
-	_ = h.config.DB.Get(&beneficiary, `SELECT beneficiary_merchant_id FROM provider_key_billing WHERE bifrost_key_id=$1`, id)
-	var prices []keyPrice
-	_ = h.config.DB.Select(&prices, `SELECT model_id,metric,unit_size,commission_microcredits FROM provider_key_prices WHERE bifrost_key_id=$1 ORDER BY model_id,metric`, id)
-	writeJSON(w, 200, map[string]any{"bifrost_key_id": key.ID, "provider_id": key.ProviderID, "name": key.Name, "api_key": key.APIKey, "weight": key.Weight, "status": key.Status, "beneficiary_merchant_id": beneficiary, "prices": prices})
-}
-
-func (h *Handler) keyBilling(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method == http.MethodPut {
-		var body struct {
-			Beneficiary string `json:"beneficiary_merchant_id"`
-			Status      string `json:"status"`
-		}
-		if decode(r, &body) != nil || !nonBlank(body.Beneficiary) || (body.Status != "active" && body.Status != "inactive") {
-			invalid(w)
-			return
-		}
-		key, err := h.stores.FindKey(r.Context(), id)
-		if err != nil {
-			notFound(w)
-			return
-		}
-		key.Enabled, key.Status = false, "inactive"
-		if err := h.stores.UpdateKey(r.Context(), key); err != nil {
-			internal(w)
-			return
-		}
-		result, err := h.config.DB.Exec(`UPDATE provider_key_billing SET beneficiary_merchant_id=$1,status=$2 WHERE bifrost_key_id=$3`, body.Beneficiary, body.Status, id)
-		if err != nil {
-			invalid(w)
-			return
-		}
-		if affected, affectedErr := result.RowsAffected(); affectedErr != nil || affected != 1 {
-			notFound(w)
-			return
-		}
-		if body.Status == "active" {
-			key.Enabled, key.Status = true, "active"
-			if err := h.stores.UpdateKey(r.Context(), key); err != nil {
-				internal(w)
-				return
-			}
-		}
-	}
-	row, err := h.one(`SELECT bifrost_key_id,beneficiary_merchant_id,status FROM provider_key_billing WHERE bifrost_key_id=$1`, id)
+	key, err := h.stores.Key(r.Context(), providerID, id)
 	if err != nil {
 		notFound(w)
 		return
 	}
-	writeJSON(w, 200, row)
-}
-
-func (h *Handler) keyPrices(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method == http.MethodPut {
-		var body struct {
-			Prices []keyPrice `json:"prices"`
+	key.Enabled = false
+	key.Status = "disabled"
+	if err = h.stores.ExecuteConfigTransaction(r.Context(), func(tx *gorm.DB) error {
+		if err := h.stores.UpdateKeyInTransaction(r.Context(), key, tx); err != nil {
+			return err
 		}
-		if decode(r, &body) != nil || body.Prices == nil {
-			invalid(w)
-			return
+		q := `"` + h.config.DatabaseSchema + `".`
+		if err := tx.Exec(`UPDATE `+q+`provider_key_billing SET status='disabled',updated_at=? WHERE provider_key_id=?`, h.config.Now().UTC(), id).Error; err != nil {
+			return err
 		}
-		for _, p := range body.Prices {
-			if !nonBlank(p.ModelID) || !validMetric(p.Metric) || p.UnitSize <= 0 || p.Commission < 0 {
-				invalid(w)
-				return
-			}
-		}
-		key, err := h.stores.FindKey(r.Context(), id)
-		if err != nil {
-			notFound(w)
-			return
-		}
-		wasActive := key.Enabled && key.Status == "active"
-		key.Enabled, key.Status = false, "inactive"
-		if err := h.stores.UpdateKey(r.Context(), key); err != nil {
-			internal(w)
-			return
-		}
-		tx, err := h.config.DB.Beginx()
-		if err != nil {
-			internal(w)
-			return
-		}
-		defer tx.Rollback()
-		_, _ = tx.Exec(`DELETE FROM provider_key_prices WHERE bifrost_key_id=$1`, id)
-		for _, p := range body.Prices {
-			if _, err = tx.Exec(`INSERT INTO provider_key_prices(bifrost_key_id,model_id,metric,unit_size,commission_microcredits) VALUES($1,$2,$3,$4,$5)`, id, p.ModelID, p.Metric, p.UnitSize, p.Commission); err != nil {
-				invalid(w)
-				return
-			}
-		}
-		if err = tx.Commit(); err != nil {
-			internal(w)
-			return
-		}
-		if wasActive {
-			key.Enabled, key.Status = true, "active"
-			if err := h.stores.UpdateKey(r.Context(), key); err != nil {
-				internal(w)
-				return
-			}
-		}
-	}
-	rows, err := h.many(`SELECT model_id,metric,unit_size,commission_microcredits FROM provider_key_prices WHERE bifrost_key_id=$1 ORDER BY model_id,metric`, id)
-	if err != nil {
+		return tx.Exec(`UPDATE client_sync.provider_keys SET status='disabled',updated_at=? WHERE id=?`, h.config.Now().UTC(), id).Error
+	}); err != nil {
 		internal(w)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"prices": rows})
-}
-
-func (h *Handler) listTable(w http.ResponseWriter, query string) {
-	rows, err := h.many(query)
-	if err != nil {
-		internal(w)
-		return
-	}
-	writeJSON(w, 200, map[string]any{"data": rows})
+	writeJSON(w, 200, map[string]any{"provider_key_id": id, "provider_id": providerID, "key": keyValue, "merchant_id": merchantID, "status": "disabled"})
 }
 
 type row map[string]any
@@ -715,16 +462,6 @@ func (h *Handler) many(query string, args ...any) ([]map[string]any, error) {
 	}
 	return result, rows.Err()
 }
-func (h *Handler) one(query string, args ...any) (map[string]any, error) {
-	rows, err := h.many(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) != 1 {
-		return nil, errors.New("not found")
-	}
-	return rows[0], nil
-}
 func decode(r *http.Request, value any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -737,18 +474,7 @@ func decode(r *http.Request, value any) error {
 	}
 	return nil
 }
-
-func nonBlank(value string) bool {
-	return strings.TrimSpace(value) != ""
-}
-
-func validProviderURL(value string) bool {
-	if !nonBlank(value) {
-		return false
-	}
-	parsed, err := url.ParseRequestURI(value)
-	return err == nil && parsed.Host != "" && (parsed.Scheme == "http" || parsed.Scheme == "https")
-}
+func nonBlank(value string) bool { return strings.TrimSpace(value) != "" }
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -760,3 +486,5 @@ func errJSON(w http.ResponseWriter, status int, code, message string) {
 func invalid(w http.ResponseWriter)  { errJSON(w, 400, "invalid_request", "invalid request") }
 func internal(w http.ResponseWriter) { errJSON(w, 500, "internal_error", "internal server error") }
 func notFound(w http.ResponseWriter) { errJSON(w, 404, "not_found", "resource not found") }
+
+var _ = bytes.NewReader

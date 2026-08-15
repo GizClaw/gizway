@@ -51,6 +51,9 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 	var realtimeCalls atomic.Int64
 	var webrtcCalls atomic.Int64
 	var realtimeAudioEvents atomic.Int64
+	var lastMaxTokens atomic.Int64
+	var lastStreamIncludeUsage atomic.Bool
+	var lastStreamIncludeObfuscation atomic.Bool
 	type heldChatJob struct {
 		reached     chan struct{}
 		release     chan struct{}
@@ -88,8 +91,11 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			"responses_calls": responsesCalls.Load(), "embedding_calls": embeddingCalls.Load(),
 			"speech_calls": speechCalls.Load(), "transcription_calls": transcriptionCalls.Load(),
 			"image_calls": imageCalls.Load(), "realtime_calls": realtimeCalls.Load(),
-			"webrtc_calls":          webrtcCalls.Load(),
-			"realtime_audio_events": realtimeAudioEvents.Load(),
+			"webrtc_calls":                    webrtcCalls.Load(),
+			"realtime_audio_events":           realtimeAudioEvents.Load(),
+			"last_max_tokens":                 lastMaxTokens.Load(),
+			"last_stream_include_usage":       map[bool]int64{false: 0, true: 1}[lastStreamIncludeUsage.Load()],
+			"last_stream_include_obfuscation": map[bool]int64{false: 0, true: 1}[lastStreamIncludeObfuscation.Load()],
 		})
 	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
@@ -722,8 +728,14 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 		}
 		calls.Add(1)
 		var request struct {
-			Model          string            `json:"model"`
-			Stream         bool              `json:"stream"`
+			Model         string `json:"model"`
+			Stream        bool   `json:"stream"`
+			MaxTokens     int    `json:"max_tokens"`
+			MaxCompletion int    `json:"max_completion_tokens"`
+			StreamOptions struct {
+				IncludeUsage       bool `json:"include_usage"`
+				IncludeObfuscation bool `json:"include_obfuscation"`
+			} `json:"stream_options"`
 			Tools          []json.RawMessage `json:"tools"`
 			ResponseFormat json.RawMessage   `json:"response_format"`
 			Messages       []struct {
@@ -734,6 +746,9 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			http.Error(w, `{"error":{"message":"invalid request"}}`, http.StatusBadRequest)
 			return
 		}
+		lastMaxTokens.Store(int64(max(request.MaxTokens, request.MaxCompletion)))
+		lastStreamIncludeUsage.Store(request.StreamOptions.IncludeUsage)
+		lastStreamIncludeObfuscation.Store(request.StreamOptions.IncludeObfuscation)
 		cachedUsage := false
 		actualGrossSeven := false
 		invalidConversion := false

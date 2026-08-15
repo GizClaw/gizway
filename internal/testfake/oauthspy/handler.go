@@ -1,5 +1,5 @@
 // Package oauthspy provides a transparent ZITADEL token-endpoint observer for
-// Milestone 02 E2E. It records only decoded JWT metadata and never exposes the
+// Milestone 03 E2E. It records only decoded JWT metadata and never exposes the
 // client assertion itself.
 package oauthspy
 

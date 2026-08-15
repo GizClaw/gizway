@@ -1,10 +1,7 @@
 package gizpay
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -23,47 +20,26 @@ import (
 )
 
 type Config struct {
-	DB                      *sqlx.DB
-	Verifier                *identity.Verifier
-	HumanAudience           string
-	ServiceAudience         string
-	HMACSecret              []byte
-	EncryptionSecrets       map[int][]byte
-	ActiveEncryptionVersion int
-	PlatformFeeBPS          int64
-	RecheckInterval         time.Duration
-	MaxOrderMetadataBytes   int
-	MaxCommissions          int
-	ServiceAccounts         identity.ServiceAccountManager
-	Now                     func() time.Time
+	DB                    *sqlx.DB
+	Verifier              *identity.Verifier
+	HumanAudience         string
+	ServiceAudience       string
+	HMACSecret            []byte
+	PlatformFeeBPS        int64
+	RecheckInterval       time.Duration
+	MaxOrderMetadataBytes int
+	MaxCommissions        int
+	ServiceAccounts       identity.ServiceAccountManager
+	Now                   func() time.Time
 }
 
 type Handler struct {
 	config Config
-	aead   map[int]cipher.AEAD
 }
 
 func New(config Config) (*Handler, error) {
-	if config.DB == nil || config.Verifier == nil || config.ServiceAccounts == nil || len(config.HMACSecret) == 0 || config.ActiveEncryptionVersion <= 0 || len(config.EncryptionSecrets) == 0 {
+	if config.DB == nil || config.Verifier == nil || config.ServiceAccounts == nil || len(config.HMACSecret) == 0 {
 		return nil, errors.New("incomplete GizPay handler configuration")
-	}
-	aead := make(map[int]cipher.AEAD, len(config.EncryptionSecrets))
-	for version, secret := range config.EncryptionSecrets {
-		if version <= 0 || len(secret) == 0 {
-			return nil, errors.New("invalid Subscription API Key encryption key")
-		}
-		key := sha256.Sum256(secret)
-		block, err := aes.NewCipher(key[:])
-		if err != nil {
-			return nil, err
-		}
-		aead[version], err = cipher.NewGCM(block)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if aead[config.ActiveEncryptionVersion] == nil {
-		return nil, errors.New("active Subscription API Key encryption version is not configured")
 	}
 	if config.Now == nil {
 		config.Now = time.Now
@@ -77,7 +53,7 @@ func New(config Config) (*Handler, error) {
 	if config.MaxCommissions <= 0 {
 		config.MaxCommissions = 32
 	}
-	return &Handler{config: config, aead: aead}, nil
+	return &Handler{config: config}, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -102,17 +78,36 @@ func (h *Handler) serveAccount(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_token", "invalid token")
 		return
 	}
-	userID, accountID, err := h.ensureHuman(r, principal)
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "internal_error", "identity provisioning failed")
+	path := r.URL.Path
+	if r.Method == http.MethodPost && path == "/account/v1/initialize" {
+		contents, readErr := io.ReadAll(io.LimitReader(r.Body, 2))
+		if readErr != nil || len(contents) != 0 {
+			errorJSON(w, http.StatusBadRequest, "invalid_request", "initialize does not accept a request body")
+			return
+		}
+		userID, accountID, ledgerID, merchantID, err := h.initializeHuman(r, principal)
+		if err != nil {
+			internal(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user_id": userID, "account_id": accountID,
+			"ledger_account_id": ledgerID, "default_merchant_id": merchantID,
+		})
 		return
 	}
-	path := r.URL.Path
+	userID, accountID, err := h.lookupHuman(r, principal)
+	if err != nil {
+		notFound(w)
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && path == "/account/v1/accounts":
 		h.listAccounts(w, userID)
 	case strings.HasPrefix(path, "/account/v1/accounts/"):
 		h.accountRead(w, r, accountID)
+	case r.Method == http.MethodGet && path == "/account/v1/products":
+		h.listProducts(w)
 	case path == "/account/v1/service-accounts":
 		h.serviceAccounts(w, r, userID)
 	case strings.HasPrefix(path, "/account/v1/service-accounts/"):
@@ -132,37 +127,65 @@ func (h *Handler) serveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) ensureHuman(r *http.Request, principal identity.Principal) (string, string, error) {
+func (h *Handler) lookupHuman(r *http.Request, principal identity.Principal) (string, string, error) {
+	var userID, accountID string
+	err := h.config.DB.QueryRowxContext(r.Context(), `
+		SELECT u.id,a.id FROM users u JOIN accounts a ON a.owner_user_id=u.id
+		WHERE u.identity_issuer=$1 AND u.identity_subject=$2`, principal.Issuer, principal.Subject).Scan(&userID, &accountID)
+	return userID, accountID, err
+}
+
+func (h *Handler) initializeHuman(r *http.Request, principal identity.Principal) (string, string, string, string, error) {
 	tx, err := h.config.DB.BeginTxx(r.Context(), nil)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	defer tx.Rollback()
 	userID := "usr_" + uuid.NewString()
 	now := h.config.Now().UTC()
 	_, err = tx.ExecContext(r.Context(), `INSERT INTO users(id,identity_issuer,identity_subject,status,created_at) VALUES($1,$2,$3,'active',$4) ON CONFLICT(identity_issuer,identity_subject) DO NOTHING`, userID, principal.Issuer, principal.Subject, now)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	if err = tx.GetContext(r.Context(), &userID, `SELECT id FROM users WHERE identity_issuer=$1 AND identity_subject=$2`, principal.Issuer, principal.Subject); err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	accountID := "acct_" + uuid.NewString()
 	_, err = tx.ExecContext(r.Context(), `INSERT INTO accounts(id,owner_user_id,status,created_at) VALUES($1,$2,'active',$3) ON CONFLICT(owner_user_id) DO NOTHING`, accountID, userID, now)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	if err = tx.GetContext(r.Context(), &accountID, `SELECT id FROM accounts WHERE owner_user_id=$1`, userID); err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES($1,$2,'credit','active') ON CONFLICT(owner_account_id,asset_code) DO NOTHING`, "ledger_"+uuid.NewString(), accountID)
+	ledgerID := "ledger_" + uuid.NewString()
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES($1,$2,'credit','active') ON CONFLICT(owner_account_id,asset_code) DO NOTHING`, ledgerID, accountID)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
+	}
+	if err = tx.GetContext(r.Context(), &ledgerID, `SELECT id FROM ledger_accounts WHERE owner_account_id=$1 AND asset_code='credit'`, accountID); err != nil {
+		return "", "", "", "", err
+	}
+	merchantID := "merchant_" + uuid.NewString()
+	defaultName := principal.DisplayName()
+	if defaultName == "" {
+		defaultName = "User " + userID
+	}
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at) VALUES($1,$2,$3,$3,true,'active',$4,$4) ON CONFLICT DO NOTHING`, merchantID, accountID, defaultName, now)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	if err = tx.GetContext(r.Context(), &merchantID, `SELECT id FROM merchants WHERE settlement_account_id=$1 AND is_default=true`, accountID); err != nil {
+		return "", "", "", "", err
+	}
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO client_sync.account_balances(id,account_id,owner_identity_issuer,owner_identity_subject,balance_microcredits) VALUES($1,$1,$2,$3,0) ON CONFLICT(account_id) DO NOTHING`, accountID, principal.Issuer, principal.Subject)
+	if err != nil {
+		return "", "", "", "", err
 	}
 	if err = tx.Commit(); err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
-	return userID, accountID, nil
+	return userID, accountID, ledgerID, merchantID, nil
 }
 
 func (h *Handler) listAccounts(w http.ResponseWriter, userID string) {
@@ -188,6 +211,10 @@ func (h *Handler) accountRead(w http.ResponseWriter, r *http.Request, ownedID st
 	}
 	switch parts[4] {
 	case "balance":
+		if r.Method != http.MethodGet {
+			notFound(w)
+			return
+		}
 		var balance int64
 		if h.config.DB.Get(&balance, `SELECT balance_microcredits FROM account_balances WHERE account_id=$1`, ownedID) != nil {
 			notFound(w)
@@ -195,17 +222,118 @@ func (h *Handler) accountRead(w http.ResponseWriter, r *http.Request, ownedID st
 		}
 		writeJSON(w, 200, map[string]any{"account_id": ownedID, "balance_microcredits": balance})
 	case "charges":
+		if r.Method != http.MethodGet {
+			notFound(w)
+			return
+		}
 		h.listAccountCharges(w, ownedID)
 	case "transactions":
+		if r.Method != http.MethodGet {
+			notFound(w)
+			return
+		}
 		h.listTransactions(w, ownedID, r.URL.Query().Get("ledger_transaction_id"))
+	case "topups":
+		h.accountTopups(w, r, ownedID)
 	default:
 		notFound(w)
 	}
 }
 
+func (h *Handler) accountTopups(w http.ResponseWriter, r *http.Request, accountID string) {
+	if r.Method == http.MethodGet {
+		rows, err := h.queryMaps(`SELECT * FROM topups WHERE account_id=$1 ORDER BY created_at,id`, accountID)
+		if err != nil {
+			internal(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": rowsToMaps(rows)})
+		return
+	}
+	if r.Method != http.MethodPost {
+		notFound(w)
+		return
+	}
+	var body struct {
+		Channel           string `json:"channel"`
+		ExternalReference string `json:"external_reference"`
+		Amount            int64  `json:"amount_microcredits"`
+	}
+	if decode(r, &body) != nil || body.Channel != "fake" || strings.TrimSpace(body.ExternalReference) == "" || body.Amount <= 0 {
+		invalid(w)
+		return
+	}
+	tx, err := h.config.DB.BeginTxx(r.Context(), nil)
+	if err != nil {
+		internal(w)
+		return
+	}
+	defer tx.Rollback()
+	var exists bool
+	if err = tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM topups WHERE channel=$1 AND external_reference=$2)`, body.Channel, body.ExternalReference); err != nil {
+		internal(w)
+		return
+	}
+	if exists {
+		errorJSON(w, http.StatusConflict, "duplicate_external_reference", "Top-up external reference already exists")
+		return
+	}
+	var ledgerID, issuer, subject string
+	if err = tx.QueryRowx(`SELECT l.id,u.identity_issuer,u.identity_subject FROM ledger_accounts l JOIN accounts a ON a.id=l.owner_account_id JOIN users u ON u.id=a.owner_user_id WHERE a.id=$1 AND l.asset_code='credit' FOR SHARE`, accountID).Scan(&ledgerID, &issuer, &subject); err != nil {
+		notFound(w)
+		return
+	}
+	transactionID := "txn_" + uuid.NewString()
+	topupID := "topup_" + uuid.NewString()
+	now := h.config.Now().UTC()
+	if _, err = tx.Exec(`INSERT INTO ledger_transactions(id,transaction_type,status,created_at) VALUES($1,'topup','pending',$2)`, transactionID, now); err != nil {
+		internal(w)
+		return
+	}
+	if err = insertEntry(tx, transactionID, "led_clearing", "debit", body.Amount); err != nil {
+		internal(w)
+		return
+	}
+	if err = insertEntry(tx, transactionID, ledgerID, "credit", body.Amount); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`UPDATE ledger_transactions SET status='posted' WHERE id=$1`, transactionID); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`INSERT INTO topups(id,account_id,channel,external_reference,amount_microcredits,status,ledger_transaction_id,created_at,credited_at) VALUES($1,$2,$3,$4,$5,'succeeded',$6,$7,$7)`, topupID, accountID, body.Channel, body.ExternalReference, body.Amount, transactionID, now); err != nil {
+		var pqError *pq.Error
+		if errors.As(err, &pqError) && pqError.Code == "23505" {
+			errorJSON(w, http.StatusConflict, "duplicate_external_reference", "Top-up external reference already exists")
+		} else {
+			internal(w)
+		}
+		return
+	}
+	if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits+$1 WHERE account_id=$2`, body.Amount, accountID); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`INSERT INTO client_sync.transactions(id,account_id,owner_identity_issuer,owner_identity_subject,transaction_type,amount_microcredits,created_at) VALUES($1,$2,$3,$4,'topup',$5,$6)`, transactionID, accountID, issuer, subject, body.Amount, now); err != nil {
+		internal(w)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		internal(w)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id": topupID, "account_id": accountID, "channel": body.Channel,
+		"external_reference": body.ExternalReference, "amount_microcredits": body.Amount,
+		"status": "succeeded", "ledger_transaction_id": transactionID,
+		"created_at": now, "credited_at": now,
+	})
+}
+
 func (h *Handler) serviceAccounts(w http.ResponseWriter, r *http.Request, userID string) {
 	if r.Method == http.MethodGet {
-		rows, err := h.queryMaps(`SELECT id,status,created_at,revoked_at FROM service_principals WHERE owner_user_id=$1 ORDER BY created_at,id`, userID)
+		rows, err := h.queryMaps(`SELECT id,name,roles,status,created_at,revoked_at FROM service_principals WHERE owner_user_id=$1 ORDER BY created_at,id`, userID)
 		if err != nil {
 			internal(w)
 			return
@@ -235,7 +363,8 @@ func (h *Handler) serviceAccounts(w http.ResponseWriter, r *http.Request, userID
 		return
 	}
 	id := "svc_" + uuid.NewString()
-	_, err = h.config.DB.Exec(`INSERT INTO service_principals(id,owner_user_id,identity_issuer,identity_subject,credential_key_id,status,created_at) VALUES($1,$2,$3,$4,$5,'active',$6)`, id, userID, h.config.Verifier.Issuer(), credential.Subject, credential.KeyID, h.config.Now().UTC())
+	roles, _ := json.Marshal(body.Roles)
+	_, err = h.config.DB.Exec(`INSERT INTO service_principals(id,owner_user_id,identity_issuer,identity_subject,credential_key_id,name,roles,status,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8)`, id, userID, h.config.Verifier.Issuer(), credential.Subject, credential.KeyID, body.Name, roles, h.config.Now().UTC())
 	if err != nil {
 		_ = h.config.ServiceAccounts.RevokeCredential(r.Context(), credential.Subject, credential.KeyID)
 		internal(w)
@@ -251,10 +380,7 @@ func validServiceAccountRoles(roles []string) bool {
 	if len(roles) == 0 {
 		return false
 	}
-	allowed := map[string]bool{
-		"account_reader": true, "account_payer": true, "merchant_operator": true,
-		"subscription_credit_reader": true, "subscription_charger": true, "account_admin": true,
-	}
+	allowed := map[string]bool{"credit_check": true, "charge": true}
 	seen := map[string]bool{}
 	for _, role := range roles {
 		if !allowed[role] || seen[role] {
@@ -307,6 +433,10 @@ func (h *Handler) merchants(w http.ResponseWriter, r *http.Request, userID strin
 		writeJSON(w, 200, map[string]any{"data": rowsToMaps(rows)})
 		return
 	}
+	if r.Method != http.MethodPost {
+		notFound(w)
+		return
+	}
 	var body struct {
 		SettlementAccountID string `json:"settlement_account_id"`
 		LegalName           string `json:"legal_name"`
@@ -328,12 +458,12 @@ func (h *Handler) merchants(w http.ResponseWriter, r *http.Request, userID strin
 	}
 	id := "mrc_" + uuid.NewString()
 	now := h.config.Now().UTC()
-	_, err := h.config.DB.Exec(`INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,status,review_level,created_at,updated_at) VALUES($1,$2,$3,$4,'active','basic',$5,$5)`, id, body.SettlementAccountID, body.LegalName, body.PublicName, now)
+	_, err := h.config.DB.Exec(`INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at) VALUES($1,$2,$3,$4,false,'active',$5,$5)`, id, body.SettlementAccountID, body.LegalName, body.PublicName, now)
 	if err != nil {
 		internal(w)
 		return
 	}
-	writeJSON(w, 201, map[string]any{"id": id, "settlement_account_id": body.SettlementAccountID, "legal_name": body.LegalName, "public_name": body.PublicName, "status": "active"})
+	writeJSON(w, 201, map[string]any{"id": id, "settlement_account_id": body.SettlementAccountID, "legal_name": body.LegalName, "public_name": body.PublicName, "is_default": false, "status": "active"})
 }
 
 func (h *Handler) merchantResource(w http.ResponseWriter, r *http.Request, userID string) {
@@ -347,24 +477,45 @@ func (h *Handler) merchantResource(w http.ResponseWriter, r *http.Request, userI
 		h.merchantProducts(w, r, id)
 		return
 	}
+	if r.Method != http.MethodGet && r.Method != http.MethodPatch {
+		notFound(w)
+		return
+	}
 	if r.Method == http.MethodPatch {
 		var body struct {
-			PublicName string `json:"public_name"`
+			PublicName *string `json:"public_name"`
+			Status     *string `json:"status"`
 		}
 		if decode(r, &body) != nil {
 			invalid(w)
 			return
 		}
-		if strings.TrimSpace(body.PublicName) == "" {
+		if body.PublicName == nil && body.Status == nil || body.PublicName != nil && strings.TrimSpace(*body.PublicName) == "" {
 			invalid(w)
 			return
 		}
-		_, err = h.config.DB.Exec(`UPDATE merchants SET public_name=$1,updated_at=$2 WHERE id=$3`, body.PublicName, h.config.Now().UTC(), id)
+		if body.Status != nil && *body.Status != "active" && *body.Status != "inactive" {
+			invalid(w)
+			return
+		}
+		if body.Status != nil && *body.Status == "inactive" {
+			isDefault, _ := row["is_default"].(bool)
+			if isDefault {
+				errorJSON(w, http.StatusConflict, "default_merchant_in_use", "the default Merchant cannot be disabled")
+				return
+			}
+		}
+		if body.PublicName != nil {
+			row["public_name"] = *body.PublicName
+		}
+		if body.Status != nil {
+			row["status"] = *body.Status
+		}
+		_, err = h.config.DB.Exec(`UPDATE merchants SET public_name=$1,status=$2,updated_at=$3 WHERE id=$4`, row["public_name"], row["status"], h.config.Now().UTC(), id)
 		if err != nil {
 			internal(w)
 			return
 		}
-		row["public_name"] = body.PublicName
 	}
 	writeJSON(w, 200, row)
 }
@@ -377,6 +528,10 @@ func (h *Handler) merchantProducts(w http.ResponseWriter, r *http.Request, merch
 			return
 		}
 		writeJSON(w, 200, map[string]any{"data": rowsToMaps(rows)})
+		return
+	}
+	if r.Method != http.MethodPost {
+		notFound(w)
 		return
 	}
 	var body struct {
@@ -398,12 +553,21 @@ func (h *Handler) merchantProducts(w http.ResponseWriter, r *http.Request, merch
 	}
 	id := "prd_" + uuid.NewString()
 	now := h.config.Now().UTC()
-	_, err := h.config.DB.Exec(`INSERT INTO products(id,merchant_id,name,billing_mode,status,terms_version,created_at,updated_at) VALUES($1,$2,$3,$4,'active',$5,$6,$6)`, id, merchantID, body.Name, body.BillingMode, body.TermsVersion, now)
+	_, err := h.config.DB.Exec(`INSERT INTO products(id,merchant_id,name,billing_mode,published,status,terms_version,created_at,updated_at) VALUES($1,$2,$3,$4,true,'active',$5,$6,$6)`, id, merchantID, body.Name, body.BillingMode, body.TermsVersion, now)
 	if err != nil {
 		internal(w)
 		return
 	}
 	writeJSON(w, 201, map[string]any{"id": id, "merchant_id": merchantID, "name": body.Name, "billing_mode": body.BillingMode, "status": "active", "terms_version": body.TermsVersion})
+}
+
+func (h *Handler) listProducts(w http.ResponseWriter) {
+	rows, err := h.queryMaps(`SELECT * FROM products WHERE status='active' AND published=true ORDER BY created_at,id`)
+	if err != nil {
+		internal(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": rowsToMaps(rows)})
 }
 
 func (h *Handler) productResource(w http.ResponseWriter, r *http.Request, userID, accountID string) {
@@ -412,39 +576,50 @@ func (h *Handler) productResource(w http.ResponseWriter, r *http.Request, userID
 		h.createSubscription(w, r, id, userID, accountID)
 		return
 	}
+	if r.Method != http.MethodGet && r.Method != http.MethodPatch {
+		notFound(w)
+		return
+	}
+	if r.Method == http.MethodGet {
+		row, err := h.queryMap(`SELECT * FROM products WHERE id=$1 AND status='active' AND published=true`, id)
+		if err != nil {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, row)
+		return
+	}
 	row, err := h.queryMap(`SELECT p.* FROM products p JOIN merchants m ON m.id=p.merchant_id JOIN accounts a ON a.id=m.settlement_account_id WHERE p.id=$1 AND a.owner_user_id=$2`, id, userID)
 	if err != nil {
 		notFound(w)
 		return
 	}
-	if r.Method == http.MethodPatch {
-		var body struct {
-			Name   *string `json:"name"`
-			Status *string `json:"status"`
-		}
-		if decode(r, &body) != nil {
-			invalid(w)
-			return
-		}
-		if body.Name == nil && body.Status == nil || body.Name != nil && strings.TrimSpace(*body.Name) == "" {
-			invalid(w)
-			return
-		}
-		if body.Status != nil && *body.Status != "active" && *body.Status != "inactive" {
-			invalid(w)
-			return
-		}
-		if body.Name != nil {
-			row["name"] = *body.Name
-		}
-		if body.Status != nil {
-			row["status"] = *body.Status
-		}
-		_, err = h.config.DB.Exec(`UPDATE products SET name=$1,status=$2,updated_at=$3 WHERE id=$4`, row["name"], row["status"], h.config.Now().UTC(), id)
-		if err != nil {
-			invalid(w)
-			return
-		}
+	var body struct {
+		Name   *string `json:"name"`
+		Status *string `json:"status"`
+	}
+	if decode(r, &body) != nil {
+		invalid(w)
+		return
+	}
+	if body.Name == nil && body.Status == nil || body.Name != nil && strings.TrimSpace(*body.Name) == "" {
+		invalid(w)
+		return
+	}
+	if body.Status != nil && *body.Status != "active" && *body.Status != "inactive" {
+		invalid(w)
+		return
+	}
+	if body.Name != nil {
+		row["name"] = *body.Name
+	}
+	if body.Status != nil {
+		row["status"] = *body.Status
+	}
+	_, err = h.config.DB.Exec(`UPDATE products SET name=$1,status=$2,updated_at=$3 WHERE id=$4`, row["name"], row["status"], h.config.Now().UTC(), id)
+	if err != nil {
+		invalid(w)
+		return
 	}
 	writeJSON(w, 200, row)
 }
@@ -467,7 +642,7 @@ func (h *Handler) createSubscription(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 	var terms string
-	if h.config.DB.Get(&terms, `SELECT terms_version FROM products WHERE id=$1 AND status='active'`, productID) != nil {
+	if h.config.DB.Get(&terms, `SELECT terms_version FROM products WHERE id=$1 AND status='active' AND published=true`, productID) != nil {
 		notFound(w)
 		return
 	}
@@ -505,8 +680,12 @@ func (h *Handler) subscriptionResource(w http.ResponseWriter, r *http.Request, u
 		notFound(w)
 		return
 	}
-	if strings.Contains(r.URL.Path, "/api-keys") {
+	if strings.Contains(r.URL.Path, "/keys") {
 		h.subscriptionKeys(w, r, id)
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodPatch {
+		notFound(w)
 		return
 	}
 	if r.Method == http.MethodPatch {
@@ -537,10 +716,14 @@ func (h *Handler) subscriptionResource(w http.ResponseWriter, r *http.Request, u
 }
 
 func (h *Handler) subscriptionKeys(w http.ResponseWriter, r *http.Request, subscriptionID string) {
-	keyID := r.PathValue("api_key_id")
+	keyID := r.PathValue("subscription_key_id")
 	if keyID != "" {
 		if strings.HasSuffix(r.URL.Path, "/revoke") {
-			result, err := h.config.DB.Exec(`UPDATE subscription_api_keys SET status='revoked',revoked_at=$1 WHERE id=$2 AND subscription_id=$3 AND status='active'`, h.config.Now().UTC(), keyID, subscriptionID)
+			if r.Method != http.MethodPost {
+				notFound(w)
+				return
+			}
+			result, err := h.config.DB.Exec(`UPDATE subscription_keys SET status='revoked',revoked_at=$1 WHERE id=$2 AND subscription_id=$3 AND status='active'`, h.config.Now().UTC(), keyID, subscriptionID)
 			if err != nil {
 				internal(w)
 				return
@@ -548,9 +731,9 @@ func (h *Handler) subscriptionKeys(w http.ResponseWriter, r *http.Request, subsc
 			n, _ := result.RowsAffected()
 			if n == 0 {
 				var exists bool
-				_ = h.config.DB.Get(&exists, `SELECT EXISTS(SELECT 1 FROM subscription_api_keys WHERE id=$1 AND subscription_id=$2 AND status='revoked')`, keyID, subscriptionID)
+				_ = h.config.DB.Get(&exists, `SELECT EXISTS(SELECT 1 FROM subscription_keys WHERE id=$1 AND subscription_id=$2 AND status='revoked')`, keyID, subscriptionID)
 				if exists {
-					errorJSON(w, 409, "api_key_already_revoked", "API Key already revoked")
+					errorJSON(w, 409, "subscription_key_already_revoked", "Subscription Key already revoked")
 				} else {
 					notFound(w)
 				}
@@ -559,12 +742,16 @@ func (h *Handler) subscriptionKeys(w http.ResponseWriter, r *http.Request, subsc
 			h.writeKey(w, keyID, subscriptionID)
 			return
 		}
+		if r.Method != http.MethodGet {
+			notFound(w)
+			return
+		}
 		h.writeKey(w, keyID, subscriptionID)
 		return
 	}
 	if r.Method == http.MethodGet {
 		var ids []string
-		if h.config.DB.Select(&ids, `SELECT id FROM subscription_api_keys WHERE subscription_id=$1 ORDER BY created_at,id`, subscriptionID) != nil {
+		if h.config.DB.Select(&ids, `SELECT id FROM subscription_keys WHERE subscription_id=$1 ORDER BY created_at,id`, subscriptionID) != nil {
 			internal(w)
 			return
 		}
@@ -578,24 +765,23 @@ func (h *Handler) subscriptionKeys(w http.ResponseWriter, r *http.Request, subsc
 		writeJSON(w, 200, map[string]any{"data": data})
 		return
 	}
+	if r.Method != http.MethodPost {
+		notFound(w)
+		return
+	}
 	random, err := randomToken(rand.Reader, 24)
 	if err != nil {
 		internal(w)
 		return
 	}
 	raw := "giz_sk_" + random
-	encrypted, err := h.encrypt(raw, h.config.ActiveEncryptionVersion)
-	if err != nil {
-		internal(w)
-		return
-	}
 	id := "key_" + uuid.NewString()
-	_, err = h.config.DB.Exec(`INSERT INTO subscription_api_keys(id,subscription_id,key_hmac,encrypted_key,encryption_version,status,created_at) VALUES($1,$2,$3,$4,$5,'active',$6)`, id, subscriptionID, subscriptionkey.HMAC(h.config.HMACSecret, raw), encrypted, h.config.ActiveEncryptionVersion, h.config.Now().UTC())
+	_, err = h.config.DB.Exec(`INSERT INTO subscription_keys(id,subscription_id,key,subscription_key_hmac,status,created_at) VALUES($1,$2,$3,$4,'active',$5)`, id, subscriptionID, raw, subscriptionkey.HMAC(h.config.HMACSecret, raw), h.config.Now().UTC())
 	if err != nil {
 		internal(w)
 		return
 	}
-	writeJSON(w, 201, map[string]any{"id": id, "subscription_id": subscriptionID, "api_key": raw, "status": "active"})
+	writeJSON(w, 201, map[string]any{"id": id, "subscription_id": subscriptionID, "key": raw, "status": "active"})
 }
 
 func (h *Handler) writeKey(w http.ResponseWriter, id, subscriptionID string) {
@@ -608,23 +794,18 @@ func (h *Handler) writeKey(w http.ResponseWriter, id, subscriptionID string) {
 }
 func (h *Handler) keyMap(id, subscriptionID string) (map[string]any, error) {
 	var row struct {
-		ID                string     `db:"id"`
-		SubscriptionID    string     `db:"subscription_id"`
-		EncryptedKey      string     `db:"encrypted_key"`
-		EncryptionVersion int        `db:"encryption_version"`
-		Status            string     `db:"status"`
-		CreatedAt         time.Time  `db:"created_at"`
-		RevokedAt         *time.Time `db:"revoked_at"`
+		ID             string     `db:"id"`
+		SubscriptionID string     `db:"subscription_id"`
+		Key            string     `db:"key"`
+		Status         string     `db:"status"`
+		CreatedAt      time.Time  `db:"created_at"`
+		RevokedAt      *time.Time `db:"revoked_at"`
 	}
-	err := h.config.DB.Get(&row, `SELECT id,subscription_id,encrypted_key,encryption_version,status,created_at,revoked_at FROM subscription_api_keys WHERE id=$1 AND subscription_id=$2`, id, subscriptionID)
+	err := h.config.DB.Get(&row, `SELECT id,subscription_id,key,status,created_at,revoked_at FROM subscription_keys WHERE id=$1 AND subscription_id=$2`, id, subscriptionID)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := h.decrypt(row.EncryptedKey, row.EncryptionVersion)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"id": row.ID, "subscription_id": row.SubscriptionID, "api_key": raw, "status": row.Status, "created_at": row.CreatedAt, "revoked_at": row.RevokedAt}, nil
+	return map[string]any{"id": row.ID, "subscription_id": row.SubscriptionID, "key": row.Key, "status": row.Status, "created_at": row.CreatedAt, "revoked_at": row.RevokedAt}, nil
 }
 
 func (h *Handler) serveService(w http.ResponseWriter, r *http.Request) {
@@ -644,25 +825,25 @@ func (h *Handler) serveService(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, 401, "service_principal_revoked", "service principal is not active")
 		return
 	}
-	if strings.HasSuffix(r.URL.Path, "subscription-credit-checks") {
-		if !principal.Roles["subscription_credit_reader"] {
-			errorJSON(w, 403, "insufficient_role", "missing reader role")
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "subscription-credit-checks") {
+		if !principal.Roles["credit_check"] {
+			errorJSON(w, 403, "insufficient_role", "missing credit_check role")
 			return
 		}
 		h.creditCheck(w, r)
 		return
 	}
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "payg-charges") {
-		if !principal.Roles["subscription_charger"] {
-			errorJSON(w, 403, "insufficient_role", "missing charger role")
+		if !principal.Roles["charge"] {
+			errorJSON(w, 403, "insufficient_role", "missing charge role")
 			return
 		}
 		h.createCharge(w, r, principalID)
 		return
 	}
 	if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/payg-charges/") {
-		if !principal.Roles["subscription_charger"] {
-			errorJSON(w, 403, "insufficient_role", "missing charger role")
+		if !principal.Roles["charge"] {
+			errorJSON(w, 403, "insufficient_role", "missing charge role")
 			return
 		}
 		h.getCharge(w, r.PathValue("external_order_id"))
@@ -673,31 +854,43 @@ func (h *Handler) serveService(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) creditCheck(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		APIKeyHMAC string `json:"api_key_hmac"`
+		SubscriptionKeyHMAC string `json:"subscription_key_hmac"`
 	}
-	if decode(r, &body) != nil || len(body.APIKeyHMAC) != 43 {
+	if decode(r, &body) != nil || strings.TrimSpace(body.SubscriptionKeyHMAC) == "" {
 		invalid(w)
 		return
 	}
 	var row struct {
+		AccountID          string `db:"account_id"`
+		SubscriptionID     string `db:"subscription_id"`
 		ProductID          string `db:"product_id"`
 		BillingMode        string `db:"billing_mode"`
+		OwnerIssuer        string `db:"owner_identity_issuer"`
+		OwnerSubject       string `db:"owner_identity_subject"`
 		KeyStatus          string `db:"key_status"`
 		SubscriptionStatus string `db:"subscription_status"`
 		ProductStatus      string `db:"product_status"`
 		Balance            int64  `db:"balance"`
 	}
-	err := h.config.DB.Get(&row, `SELECT p.id product_id,p.billing_mode,k.status key_status,s.status subscription_status,p.status product_status,b.balance_microcredits balance FROM subscription_api_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN account_balances b ON b.account_id=s.account_id WHERE k.key_hmac=$1`, body.APIKeyHMAC)
-	allowed := err == nil && row.KeyStatus == "active" && row.SubscriptionStatus == "active" && row.ProductStatus == "active" && row.Balance > 0
+	err := h.config.DB.Get(&row, `SELECT s.account_id,s.id subscription_id,p.id product_id,p.billing_mode,u.identity_issuer owner_identity_issuer,u.identity_subject owner_identity_subject,k.status key_status,s.status subscription_status,p.status product_status,b.balance_microcredits balance FROM subscription_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN accounts a ON a.id=s.account_id JOIN users u ON u.id=a.owner_user_id JOIN account_balances b ON b.account_id=s.account_id WHERE k.subscription_key_hmac=$1`, body.SubscriptionKeyHMAC)
+	if err != nil || row.KeyStatus != "active" {
+		errorJSON(w, http.StatusUnauthorized, "invalid_subscription_key", "Subscription Key is unknown or revoked")
+		return
+	}
+	allowed := row.SubscriptionStatus == "active" && row.ProductStatus == "active" && row.Balance > 0
 	available := int64(0)
 	if allowed {
 		available = row.Balance
 	}
-	result := map[string]any{"status": "denied", "available_microcredits": available, "checked_at": h.config.Now().UTC(), "recheck_after_seconds": int64(h.config.RecheckInterval / time.Second)}
+	result := map[string]any{
+		"status": "denied", "available_microcredits": available,
+		"account_id": row.AccountID, "subscription_id": row.SubscriptionID,
+		"product_id": row.ProductID, "billing_mode": row.BillingMode,
+		"owner_identity_issuer": row.OwnerIssuer, "owner_identity_subject": row.OwnerSubject,
+		"checked_at": h.config.Now().UTC(), "recheck_after_seconds": int64(h.config.RecheckInterval / time.Second),
+	}
 	if allowed {
 		result["status"] = "allowed"
-		result["product_id"] = row.ProductID
-		result["billing_mode"] = row.BillingMode
 	}
 	writeJSON(w, 200, result)
 }
@@ -707,13 +900,13 @@ type commissionRequest struct {
 	Amount     int64  `json:"amount_microcredits"`
 }
 type chargeRequest struct {
-	ExternalOrderID string              `json:"external_order_id"`
-	APIKeyHMAC      string              `json:"api_key_hmac"`
-	Gross           int64               `json:"gross_microcredits"`
-	Commissions     []commissionRequest `json:"commissions"`
-	Order           json.RawMessage     `json:"order"`
-	Started         time.Time           `json:"service_started_at"`
-	Completed       time.Time           `json:"service_completed_at"`
+	ExternalOrderID     string              `json:"external_order_id"`
+	SubscriptionKeyHMAC string              `json:"subscription_key_hmac"`
+	Gross               int64               `json:"gross_microcredits"`
+	Commissions         []commissionRequest `json:"commissions"`
+	Order               json.RawMessage     `json:"order"`
+	Started             time.Time           `json:"service_started_at"`
+	Completed           time.Time           `json:"service_completed_at"`
 }
 
 func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principalID string) {
@@ -726,8 +919,8 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 		errorJSON(w, 400, "invalid_external_order_id", "external order ID is required")
 		return
 	}
-	if len(body.APIKeyHMAC) != 43 {
-		errorJSON(w, 400, "invalid_api_key_hmac", "API Key HMAC is required")
+	if strings.TrimSpace(body.SubscriptionKeyHMAC) == "" {
+		errorJSON(w, 400, "invalid_subscription_key_hmac", "Subscription Key HMAC is required")
 		return
 	}
 	if body.Gross <= 0 {
@@ -777,13 +970,17 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 	}
 	defer tx.Rollback()
 	var subscriptionID, payerAccountID, mainMerchantID, mainAccountID, mainMerchantStatus string
-	err = tx.QueryRowx(`SELECT s.id,s.account_id,m.id,m.settlement_account_id,m.status FROM subscription_api_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN merchants m ON m.id=p.merchant_id WHERE k.key_hmac=$1 FOR SHARE OF m`, body.APIKeyHMAC).Scan(&subscriptionID, &payerAccountID, &mainMerchantID, &mainAccountID, &mainMerchantStatus)
+	err = tx.QueryRowx(`SELECT s.id,s.account_id,m.id,m.settlement_account_id,m.status FROM subscription_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN merchants m ON m.id=p.merchant_id WHERE k.subscription_key_hmac=$1 AND (k.status='active' OR (k.status='revoked' AND $2 <= k.revoked_at)) FOR SHARE OF m`, body.SubscriptionKeyHMAC, body.Started).Scan(&subscriptionID, &payerAccountID, &mainMerchantID, &mainAccountID, &mainMerchantStatus)
 	if err != nil {
-		errorJSON(w, 404, "subscription_api_key_not_found", "subscription API Key not found")
+		errorJSON(w, 404, "subscription_key_not_found", "Subscription Key not found")
 		return
 	}
 	if mainMerchantStatus != "active" {
 		errorJSON(w, 400, "main_merchant_inactive", "Product Merchant is inactive")
+		return
+	}
+	if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtext($1))`, payerAccountID); err != nil {
+		internal(w)
 		return
 	}
 	resolved := make([]resolvedCommission, 0, len(body.Commissions))
@@ -840,6 +1037,42 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 		internal(w)
 		return
 	}
+	var payerIssuer, payerSubject string
+	if err = tx.QueryRowx(`SELECT u.identity_issuer,u.identity_subject FROM accounts a JOIN users u ON u.id=a.owner_user_id WHERE a.id=$1`, payerAccountID).Scan(&payerIssuer, &payerSubject); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits-$1 WHERE account_id=$2`, body.Gross, payerAccountID); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits+$1 WHERE account_id=$2`, mainNet, mainAccountID); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`INSERT INTO client_sync.transactions(id,account_id,owner_identity_issuer,owner_identity_subject,transaction_type,amount_microcredits,created_at) VALUES($1,$2,$3,$4,'payg_charge',$5,$6)`, transactionID, payerAccountID, payerIssuer, payerSubject, -body.Gross, now); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`INSERT INTO client_sync.charges(id,account_id,subscription_id,owner_identity_issuer,owner_identity_subject,external_order_id,gross_microcredits,order_snapshot,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, chargeID, payerAccountID, subscriptionID, payerIssuer, payerSubject, body.ExternalOrderID, body.Gross, snapshot, now); err != nil {
+		internal(w)
+		return
+	}
+	for _, commission := range resolved {
+		if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits+$1 WHERE account_id=$2`, commission.Amount, commission.Settlement); err != nil {
+			internal(w)
+			return
+		}
+		var issuer, subject string
+		if err = tx.QueryRowx(`SELECT u.identity_issuer,u.identity_subject FROM accounts a JOIN users u ON u.id=a.owner_user_id WHERE a.id=$1`, commission.Settlement).Scan(&issuer, &subject); err != nil {
+			internal(w)
+			return
+		}
+		if _, err = tx.Exec(`INSERT INTO client_sync.commissions(id,merchant_id,charge_id,owner_identity_issuer,owner_identity_subject,amount_microcredits,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, chargeID+":"+commission.MerchantID, commission.MerchantID, chargeID, issuer, subject, commission.Amount, now); err != nil {
+			internal(w)
+			return
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		internal(w)
 		return
@@ -862,7 +1095,7 @@ func validateOrderMetadata(raw json.RawMessage, maxBytes int) error {
 	}
 	forbidden := map[string]bool{
 		"prompt": true, "authorization": true, "api_key": true,
-		"subscription_api_key": true, "provider_api_key": true, "provider_secret": true,
+		"subscription_key": true, "provider_key": true, "provider_secret": true,
 	}
 	var inspect func(any) error
 	inspect = func(current any) error {
@@ -937,7 +1170,7 @@ func (h *Handler) postLedger(tx *sqlx.Tx, transactionID, payer, main string, gro
 		}
 	}
 	if fee > 0 {
-		platform, err := ledger("acct_platform", "")
+		platform, err := ledger("", "platform_fee")
 		if err != nil {
 			return err
 		}
@@ -1005,30 +1238,6 @@ func insertEntry(tx *sqlx.Tx, transactionID, ledgerID, direction string, amount 
 	return err
 }
 
-func (h *Handler) encrypt(raw string, version int) (string, error) {
-	aead := h.aead[version]
-	if aead == nil {
-		return "", fmt.Errorf("unknown encryption version %d", version)
-	}
-	nonce := make([]byte, aead.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-	sealed := aead.Seal(nonce, nonce, []byte(raw), nil)
-	return base64.RawURLEncoding.EncodeToString(sealed), nil
-}
-func (h *Handler) decrypt(value string, version int) (string, error) {
-	aead := h.aead[version]
-	if aead == nil {
-		return "", fmt.Errorf("unknown encryption version %d", version)
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(raw) < aead.NonceSize() {
-		return "", errors.New("invalid ciphertext")
-	}
-	plain, err := aead.Open(nil, raw[:aead.NonceSize()], raw[aead.NonceSize():], nil)
-	return string(plain), err
-}
 func randomToken(reader io.Reader, size int) (string, error) {
 	raw := make([]byte, size)
 	if _, err := io.ReadFull(reader, raw); err != nil {

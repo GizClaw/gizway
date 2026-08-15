@@ -50,14 +50,14 @@ func TestZITADELServiceAccountManagerCreateAndRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	credential, err := manager.Create(context.Background(), "CN Gateway", []string{"subscription_credit_reader", "subscription_charger"})
+	credential, err := manager.Create(context.Background(), "CN Gateway", []string{"credit_check", "charge"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if credential.Subject != "machine-1" || credential.KeyID != "key-1" || string(credential.KeyJSON) != string(keyDocument) {
 		t.Fatalf("credential = %#v", credential)
 	}
-	if !reflect.DeepEqual(grantedRoles, []string{"subscription_credit_reader", "subscription_charger"}) {
+	if !reflect.DeepEqual(grantedRoles, []string{"credit_check", "charge"}) {
 		t.Fatalf("roles = %#v", grantedRoles)
 	}
 	if err := manager.RevokeCredential(context.Background(), credential.Subject, credential.KeyID); err != nil {

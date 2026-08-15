@@ -1,0 +1,17 @@
+replication:
+  connections:
+    - type: postgresql
+      uri: postgresql://postgres:postgres@postgres-global:5432/gizway
+      sslmode: disable
+storage:
+  type: postgresql
+  uri: postgresql://postgres:postgres@postgres-powersync:5432/global_sync
+  sslmode: disable
+port: 8080
+sync_config:
+  path: /config/sync-config.yaml
+client_auth:
+  jwks_uri: http://oauth-spy:19500/oauth/v2/keys
+  audience: ["386000000000000001"]
+telemetry:
+  disable_telemetry_sharing: true

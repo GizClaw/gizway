@@ -14,16 +14,11 @@ authentication:
     management_client:
       token_url: http://oauth-spy:19500/oauth/v2/token
       private_key_file: /fixtures/zitadel-bootstrap-machine.json
-subscription_api_keys:
+subscription_keys:
   hmac:
-    secret_file: /secrets/subscription-api-key-hmac
-  encryption:
-    active_version: 1
-    keys:
-      - version: 1
-        secret_file: /secrets/subscription-api-key-encryption-v1
+    secret_file: /secrets/subscription-key-hmac
 credit_check:
-  recheck_interval: 5m1s
+  recheck_interval: 5m
 payg_charges:
   platform_fee_bps: 200
 tls:

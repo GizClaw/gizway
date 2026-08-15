@@ -35,6 +35,8 @@ type ProcessKind string
 const (
 	ProcessGizPay ProcessKind = "gizpay"
 	ProcessGizWay ProcessKind = "gizway"
+
+	defaultCreditCacheCleanupInterval = "1m"
 )
 
 type ProcessConfig struct {
@@ -51,24 +53,22 @@ type ProcessConfig struct {
 			JWKSURL             string              `yaml:"jwks_url" json:"jwks_url"`
 			HumanAudience       string              `yaml:"human_audience" json:"human_audience,omitempty"`
 			ServiceAudience     string              `yaml:"service_audience" json:"service_audience,omitempty"`
-			AdminAudience       string              `yaml:"admin_audience" json:"admin_audience,omitempty"`
 			ManagementClient    MachineClientConfig `yaml:"management_client" json:"management_client"`
 			JWKSRefreshInterval string              `yaml:"jwks_refresh_interval" json:"jwks_refresh_interval,omitempty"`
 		} `yaml:"zitadel" json:"zitadel"`
 		ServiceAccount MachineClientConfig `yaml:"service_account" json:"service_account"`
 	} `yaml:"authentication" json:"authentication"`
-	SubscriptionAPIKeys struct {
+	SubscriptionKeys struct {
 		HMAC struct {
 			SecretFile string `yaml:"secret_file" json:"secret_file"`
 		} `yaml:"hmac" json:"hmac"`
-		Encryption struct {
-			ActiveVersion int               `yaml:"active_version" json:"active_version"`
-			Keys          []VersionedSecret `yaml:"keys" json:"keys,omitempty"`
-		} `yaml:"encryption" json:"encryption"`
-	} `yaml:"subscription_api_keys" json:"subscription_api_keys"`
+	} `yaml:"subscription_keys" json:"subscription_keys"`
 	CreditCheck struct {
 		RecheckInterval string `yaml:"recheck_interval" json:"recheck_interval"`
 	} `yaml:"credit_check" json:"credit_check"`
+	CreditCache struct {
+		CleanupInterval string `yaml:"cleanup_interval" json:"cleanup_interval"`
+	} `yaml:"credit_cache" json:"credit_cache"`
 	PAYGCharges struct {
 		PlatformFeeBPS        int64 `yaml:"platform_fee_bps" json:"platform_fee_bps"`
 		MaxOrderMetadataBytes int   `yaml:"max_order_metadata_bytes" json:"max_order_metadata_bytes"`
@@ -100,9 +100,6 @@ type ProcessConfig struct {
 		PublicBaseURL      string `yaml:"public_base_url" json:"public_base_url,omitempty"`
 		CallbackSecretFile string `yaml:"callback_secret_file" json:"callback_secret_file,omitempty"`
 	} `yaml:"provider_callbacks" json:"provider_callbacks"`
-	Health struct {
-		DependencyObservationMaxAge string `yaml:"dependency_observation_max_age" json:"dependency_observation_max_age,omitempty"`
-	} `yaml:"health" json:"health"`
 	Logging struct {
 		Level  string `yaml:"level" json:"level,omitempty"`
 		Format string `yaml:"format" json:"format,omitempty"`
@@ -134,11 +131,6 @@ type MachineClientConfig struct {
 	TokenRefreshBefore string   `yaml:"token_refresh_before" json:"token_refresh_before,omitempty"`
 }
 
-type VersionedSecret struct {
-	Version    int    `yaml:"version" json:"version"`
-	SecretFile string `yaml:"secret_file" json:"secret_file"`
-}
-
 func LoadProcessConfig(path string, kind ProcessKind) (ProcessConfig, error) {
 	if path == "" {
 		return ProcessConfig{}, errors.New("--config is required")
@@ -152,6 +144,7 @@ func LoadProcessConfig(path string, kind ProcessKind) (ProcessConfig, error) {
 	decoder.KnownFields(true)
 	config := ProcessConfig{}
 	config.CreditCheck.RecheckInterval = "5m"
+	config.CreditCache.CleanupInterval = defaultCreditCacheCleanupInterval
 	config.PAYGCharges.MaxOrderMetadataBytes = 8192
 	config.PAYGCharges.MaxCommissions = 32
 	if err := decoder.Decode(&config); err != nil {
@@ -177,19 +170,16 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 	if config.Database.DSN == "" || config.Database.Schema == "" {
 		return errors.New("database.dsn and database.schema are required")
 	}
-	if config.SubscriptionAPIKeys.HMAC.SecretFile == "" {
-		return errors.New("subscription_api_keys.hmac.secret_file is required")
+	if config.SubscriptionKeys.HMAC.SecretFile == "" {
+		return errors.New("subscription_keys.hmac.secret_file is required")
 	}
 	files := []string{
-		config.SubscriptionAPIKeys.HMAC.SecretFile,
+		config.SubscriptionKeys.HMAC.SecretFile,
 		config.Authentication.ZITADEL.ManagementClient.PrivateKeyFile,
 		config.Authentication.ServiceAccount.PrivateKeyFile,
 		config.TLS.CertificateFile,
 		config.TLS.PrivateKeyFile,
 		config.ProviderCallbacks.CallbackSecretFile,
-	}
-	for _, key := range config.SubscriptionAPIKeys.Encryption.Keys {
-		files = append(files, key.SecretFile)
 	}
 	for _, path := range files {
 		if path == "" {
@@ -208,21 +198,6 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 	}
 	if kind == ProcessGizPay && (config.PAYGCharges.PlatformFeeBPS < 0 || config.PAYGCharges.PlatformFeeBPS > 10000) {
 		return errors.New("payg_charges.platform_fee_bps must be between 0 and 10000")
-	}
-	if kind == ProcessGizPay {
-		if config.SubscriptionAPIKeys.Encryption.ActiveVersion <= 0 || len(config.SubscriptionAPIKeys.Encryption.Keys) == 0 {
-			return errors.New("subscription_api_keys.encryption active_version and keys are required")
-		}
-		versions := make(map[int]bool, len(config.SubscriptionAPIKeys.Encryption.Keys))
-		for _, key := range config.SubscriptionAPIKeys.Encryption.Keys {
-			if key.Version <= 0 || key.SecretFile == "" || versions[key.Version] {
-				return errors.New("subscription_api_keys.encryption keys require unique positive versions and Secret files")
-			}
-			versions[key.Version] = true
-		}
-		if !versions[config.SubscriptionAPIKeys.Encryption.ActiveVersion] {
-			return errors.New("subscription_api_keys.encryption active_version has no configured key")
-		}
 	}
 	if kind == ProcessGizPay && (config.PAYGCharges.MaxOrderMetadataBytes < 0 || config.PAYGCharges.MaxCommissions < 0) {
 		return errors.New("payg_charges metadata and commission limits cannot be negative")
@@ -243,15 +218,18 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 	}
 	if kind == ProcessGizWay {
 		service := config.Authentication.ServiceAccount
-		if config.Authentication.ZITADEL.Issuer == "" || config.Authentication.ZITADEL.JWKSURL == "" || config.Authentication.ZITADEL.AdminAudience == "" ||
+		if config.Authentication.ZITADEL.Issuer == "" || config.Authentication.ZITADEL.JWKSURL == "" || config.Authentication.ZITADEL.HumanAudience == "" ||
 			service.TokenURL == "" || service.PrivateKeyFile == "" || service.Audience == "" || len(service.RequestedScopes) == 0 || len(service.RequiredRoles) == 0 {
-			return errors.New("GizWay ZITADEL administrator and Service Account configuration is required")
+			return errors.New("GizWay ZITADEL human and Service Account configuration is required")
 		}
 		if config.GizPay.ServiceDSN == "" {
 			return errors.New("gizpay.service_dsn is required")
 		}
 		if config.Bifrost.ConfigStore.Type != "postgresql" || config.Bifrost.ConfigStore.DSN == "" || config.Bifrost.ConfigStore.Schema == "" {
 			return errors.New("bifrost.config_store PostgreSQL DSN and schema are required")
+		}
+		if config.Bifrost.ConfigStore.DSN != config.Database.DSN {
+			return errors.New("bifrost.config_store.dsn must equal database.dsn for atomic Provider Key transactions")
 		}
 		if config.Bifrost.LogStore.Type != "postgresql" && config.Bifrost.LogStore.Type != "clickhouse" {
 			return errors.New("bifrost.log_store.type must be postgresql or clickhouse")
@@ -290,11 +268,11 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 		"authentication.zitadel.jwks_refresh_interval":        config.Authentication.ZITADEL.JWKSRefreshInterval,
 		"authentication.service_account.token_refresh_before": config.Authentication.ServiceAccount.TokenRefreshBefore,
 		"gizpay.request_timeout":                              config.GizPay.RequestTimeout,
+		"credit_cache.cleanup_interval":                       config.CreditCache.CleanupInterval,
 		"charge_outbox.retry_interval":                        config.ChargeOutbox.RetryInterval,
 		"charge_outbox.abandon_after":                         config.ChargeOutbox.AbandonAfter,
 		"bifrost.log_store.writer.batch_interval":             config.Bifrost.LogStore.Writer.BatchInterval,
 		"bifrost.execution.request_timeout":                   config.Bifrost.Execution.RequestTimeout,
-		"health.dependency_observation_max_age":               config.Health.DependencyObservationMaxAge,
 	} {
 		if value != "" {
 			if duration, durationErr := time.ParseDuration(value); durationErr != nil || duration <= 0 {
@@ -387,22 +365,13 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 		return err
 	}
 	defer database.Close()
-	dependencies := newDependencyTracker()
 	logger := processLogger(config.Logging.Level, config.Logging.Format)
-	zitadelClient := observedHTTPClient("zitadel", dependencies, 10*time.Second)
+	zitadelClient := &http.Client{Timeout: 10 * time.Second}
 	var business http.Handler
 	if kind == ProcessGizPay {
-		hmacSecret, err := readConfiguredSecret(config, config.SubscriptionAPIKeys.HMAC.SecretFile)
+		hmacSecret, err := readConfiguredSecret(config, config.SubscriptionKeys.HMAC.SecretFile)
 		if err != nil {
 			return err
-		}
-		encryptionSecrets := make(map[int][]byte, len(config.SubscriptionAPIKeys.Encryption.Keys))
-		for _, configuredKey := range config.SubscriptionAPIKeys.Encryption.Keys {
-			encryptionSecret, secretErr := readConfiguredSecret(config, configuredKey.SecretFile)
-			if secretErr != nil {
-				return secretErr
-			}
-			encryptionSecrets[configuredKey.Version] = encryptionSecret
 		}
 		management := config.Authentication.ZITADEL.ManagementClient
 		managementKeyFile := management.PrivateKeyFile
@@ -420,9 +389,7 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 			return tokenErr
 		}
 		managementTokenFunc := func(ctx context.Context) (string, error) {
-			token, tokenErr := managementToken.Token(ctx)
-			dependencies.Observe("zitadel", tokenErr)
-			return token, tokenErr
+			return managementToken.Token(ctx)
 		}
 		serviceAccounts, managerErr := identity.NewZITADELServiceAccountManager(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.ServiceAudience, managementTokenFunc, zitadelClient)
 		if managerErr != nil {
@@ -433,26 +400,24 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 			recheckValue = "5m"
 		}
 		recheckInterval, _ := time.ParseDuration(recheckValue)
-		verifier := identity.NewVerifierWithRefreshAndClient(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.JWKSURL, durationOr(config.Authentication.ZITADEL.JWKSRefreshInterval, 5*time.Minute), zitadelClient).
-			SetRefreshObserver(func(err error) { dependencies.Observe("zitadel", err) })
+		verifier := identity.NewVerifierWithRefreshAndClient(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.JWKSURL, durationOr(config.Authentication.ZITADEL.JWKSRefreshInterval, 5*time.Minute), zitadelClient)
 		business, err = payservice.New(payservice.Config{
-			DB:              database.SQL,
-			Verifier:        verifier,
-			HumanAudience:   config.Authentication.ZITADEL.HumanAudience,
-			ServiceAudience: config.Authentication.ZITADEL.ServiceAudience,
-			ServiceAccounts: serviceAccounts,
-			HMACSecret:      hmacSecret, EncryptionSecrets: encryptionSecrets,
-			ActiveEncryptionVersion: config.SubscriptionAPIKeys.Encryption.ActiveVersion,
-			PlatformFeeBPS:          config.PAYGCharges.PlatformFeeBPS,
-			RecheckInterval:         recheckInterval,
-			MaxOrderMetadataBytes:   config.PAYGCharges.MaxOrderMetadataBytes,
-			MaxCommissions:          config.PAYGCharges.MaxCommissions,
+			DB:                    database.SQL,
+			Verifier:              verifier,
+			HumanAudience:         config.Authentication.ZITADEL.HumanAudience,
+			ServiceAudience:       config.Authentication.ZITADEL.ServiceAudience,
+			ServiceAccounts:       serviceAccounts,
+			HMACSecret:            hmacSecret,
+			PlatformFeeBPS:        config.PAYGCharges.PlatformFeeBPS,
+			RecheckInterval:       recheckInterval,
+			MaxOrderMetadataBytes: config.PAYGCharges.MaxOrderMetadataBytes,
+			MaxCommissions:        config.PAYGCharges.MaxCommissions,
 		})
 		if err != nil {
 			return err
 		}
 	} else {
-		hmacSecret, secretErr := readConfiguredSecret(config, config.SubscriptionAPIKeys.HMAC.SecretFile)
+		hmacSecret, secretErr := readConfiguredSecret(config, config.SubscriptionKeys.HMAC.SecretFile)
 		if secretErr != nil {
 			return secretErr
 		}
@@ -486,7 +451,6 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 				if tokenErr == nil {
 					tokenErr = identity.RequireTokenRoles(token, config.Authentication.ServiceAccount.Audience, config.Authentication.ServiceAccount.RequiredRoles)
 				}
-				dependencies.Observe("zitadel", tokenErr)
 				return token, tokenErr
 			}
 		}
@@ -504,27 +468,27 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 			return storeErr
 		}
 		defer bifrostStores.Close(context.Background())
-		verifier := identity.NewVerifierWithRefreshAndClient(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.JWKSURL, durationOr(config.Authentication.ZITADEL.JWKSRefreshInterval, 5*time.Minute), zitadelClient).
-			SetRefreshObserver(func(err error) { dependencies.Observe("zitadel", err) })
+		verifier := identity.NewVerifierWithRefreshAndClient(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.JWKSURL, durationOr(config.Authentication.ZITADEL.JWKSRefreshInterval, 5*time.Minute), zitadelClient)
 		business, err = wayservice.New(wayservice.Config{
-			DB:                      database.SQL,
-			Verifier:                verifier,
-			AdminAudience:           config.Authentication.ZITADEL.AdminAudience,
-			HMACSecret:              hmacSecret,
-			GizPayURL:               config.GizPay.ServiceDSN,
-			ServiceToken:            serviceToken,
-			Now:                     now,
-			HTTPClient:              observedHTTPClient("gizpay", dependencies, durationOr(config.GizPay.RequestTimeout, 30*time.Second)),
-			ObserveDependency:       dependencies.Observe,
-			BifrostStores:           bifrostStores,
-			Logger:                  logger,
-			ProviderCallbackBaseURL: config.ProviderCallbacks.PublicBaseURL,
-			ProviderCallbackSecret:  callbackSecret,
-			OutboxBatchSize:         positiveOr(config.ChargeOutbox.MaxBatchSize, 20),
-			OutboxRetryInterval:     durationOr(config.ChargeOutbox.RetryInterval, 250*time.Millisecond),
-			OutboxAbandonAfter:      durationOr(config.ChargeOutbox.AbandonAfter, 24*time.Hour),
-			BifrostMaxRetries:       config.Bifrost.Execution.MaxRetries,
-			BifrostRequestTimeout:   durationOr(config.Bifrost.Execution.RequestTimeout, 10*time.Second),
+			DB:                         database.SQL,
+			DatabaseSchema:             config.Database.Schema,
+			Verifier:                   verifier,
+			HumanAudience:              config.Authentication.ZITADEL.HumanAudience,
+			HMACSecret:                 hmacSecret,
+			GizPayURL:                  config.GizPay.ServiceDSN,
+			ServiceToken:               serviceToken,
+			Now:                        now,
+			HTTPClient:                 &http.Client{Timeout: durationOr(config.GizPay.RequestTimeout, 30*time.Second)},
+			BifrostStores:              bifrostStores,
+			Logger:                     logger,
+			ProviderCallbackBaseURL:    config.ProviderCallbacks.PublicBaseURL,
+			ProviderCallbackSecret:     callbackSecret,
+			OutboxBatchSize:            positiveOr(config.ChargeOutbox.MaxBatchSize, 20),
+			OutboxRetryInterval:        durationOr(config.ChargeOutbox.RetryInterval, 250*time.Millisecond),
+			OutboxAbandonAfter:         durationOr(config.ChargeOutbox.AbandonAfter, 24*time.Hour),
+			CreditCacheCleanupInterval: configuredCreditCacheCleanupInterval(config),
+			BifrostMaxRetries:          config.Bifrost.Execution.MaxRetries,
+			BifrostRequestTimeout:      durationOr(config.Bifrost.Execution.RequestTimeout, 10*time.Second),
 		})
 		if err != nil {
 			return err
@@ -533,28 +497,7 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 	if closer, ok := business.(interface{ Close() error }); ok {
 		defer closer.Close()
 	}
-	apiServer := api.NewMilestone02(surface, config.Server.Name, business, advance)
-	apiServer.ConfigureReadiness(func(ctx context.Context, _ bool) (map[string]any, error) {
-		if err := database.SQL.PingContext(ctx); err != nil {
-			return nil, err
-		}
-		bootstrap, err := localBootstrapStatus(ctx, database.SQL, kind, config.Bifrost.ConfigStore.Schema)
-		if err != nil {
-			return nil, err
-		}
-		maxAge := durationOr(config.Health.DependencyObservationMaxAge, 5*time.Minute)
-		observations, recent := dependencies.Snapshot(time.Now().UTC(), maxAge)
-		status := "degraded"
-		if recent && bootstrap == "complete" {
-			status = "healthy"
-		}
-		return map[string]any{
-			"status":       status,
-			"database":     map[string]any{"status": "available", "backend": "postgresql", "schema": config.Database.Schema},
-			"dependencies": observations,
-			"bootstrap":    map[string]any{"status": bootstrap},
-		}, nil
-	})
+	apiServer := api.NewMilestone03(surface, config.Server.Name, business, advance)
 	listener, err := net.Listen("tcp", config.Server.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
@@ -619,6 +562,10 @@ func durationOr(value string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return duration
+}
+
+func configuredCreditCacheCleanupInterval(config ProcessConfig) time.Duration {
+	return durationOr(config.CreditCache.CleanupInterval, time.Minute)
 }
 
 func positiveOr(value, fallback int) int {

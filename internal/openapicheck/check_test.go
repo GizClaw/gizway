@@ -16,7 +16,7 @@ func TestRepositoryOpenAPIContractsResolveBundleAndMatchRoutes(t *testing.T) {
 	if err := CheckHurlCoverage(filepath.Join(root, "api", "openapi"), filepath.Join(root, "tests", "api", "stories")); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"account.json", "gizway-admin.json", "internal-gizpay.json"} {
+	for _, name := range []string{"account.json", "gizway-user.json", "internal-gizpay.json"} {
 		raw, err := os.ReadFile(filepath.Join(output, name))
 		if err != nil || len(raw) == 0 {
 			t.Fatalf("bundle %s: bytes=%d err=%v", name, len(raw), err)
@@ -129,31 +129,31 @@ paths:
 	}
 }
 
-func TestHurlCoverageSeparatesCentralAndRegionalAdminDocuments(t *testing.T) {
+func TestHurlCoverageSeparatesDocuments(t *testing.T) {
 	openapi := t.TempDir()
 	hurl := t.TempDir()
 	central := `openapi: 3.1.0
 info: {title: Central, version: 1.0.0}
-servers: [{url: https://credit.gizway.com/admin/v1}]
+servers: [{url: https://credit.gizway.com/account/v1}]
 paths:
   /me:
-    get: {operationId: getCurrentAdministrator, responses: {'200': {description: ok}}}
+    get: {operationId: getCurrentIdentity, responses: {'200': {description: ok}}}
 `
 	regional := strings.ReplaceAll(central, "title: Central", "title: Regional")
 	regional = strings.ReplaceAll(regional, "credit.gizway.com", "global.gizway.com")
-	if err := os.WriteFile(filepath.Join(openapi, "gizpay-admin.yaml"), []byte(central), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(openapi, "account.yaml"), []byte(central), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(openapi, "gizway-admin.yaml"), []byte(regional), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(openapi, "gizway-user.yaml"), []byte(regional), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	story := "# covers: gizpay-admin.yaml#getCurrentAdministrator\nGET {{pay_url}}/admin/v1/me\n"
+	story := "# covers: account.yaml#getCurrentIdentity\nGET {{pay_url}}/account/v1/me\n"
 	if err := os.WriteFile(filepath.Join(hurl, "story.hurl"), []byte(story), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	err := CheckHurlCoverage(openapi, hurl)
-	if err == nil || !strings.Contains(err.Error(), "gizway-admin.yaml#getCurrentAdministrator") {
-		t.Fatalf("regional Admin operation was incorrectly merged with central coverage: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "gizway-user.yaml#getCurrentIdentity") {
+		t.Fatalf("regional operation was incorrectly merged with central coverage: %v", err)
 	}
 }
 

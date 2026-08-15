@@ -1,4 +1,4 @@
-// Command gizpay runs the Milestone 02 control plane.
+// Command gizpay runs the Milestone 03 control plane.
 package main
 
 import (

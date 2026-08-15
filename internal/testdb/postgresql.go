@@ -43,12 +43,45 @@ func OpenGizWay(t testing.TB) *storage.Storage {
 
 func openService(t testing.TB, opener func(string, bool) (*storage.Storage, error)) *storage.Storage {
 	t.Helper()
-	database, err := opener(NewSchema(t), true)
+	database, err := opener(NewDatabase(t), true)
 	if err != nil {
 		t.Fatalf("open isolated service PostgreSQL schema: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	return database
+}
+
+// NewDatabase creates an isolated PostgreSQL database. Milestone 03 services
+// own a fixed client_sync schema, so schema-only isolation would make parallel
+// GizPay and GizWay tests collide even though production uses separate DBs.
+func NewDatabase(t testing.TB) string {
+	t.Helper()
+	dsn := os.Getenv("GIZWAY_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Fatal("GIZWAY_TEST_POSTGRES_DSN is required; run tests through scripts/test-unit")
+	}
+	parsed, err := url.Parse(dsn)
+	if err != nil || parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" {
+		t.Fatalf("service database tests require a PostgreSQL URL DSN: %v", err)
+	}
+	databaseName := "gizway_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	bootstrap, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bootstrap.ExecContext(context.Background(), `CREATE DATABASE `+databaseName); err != nil {
+		_ = bootstrap.Close()
+		t.Fatalf("create PostgreSQL test database: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = bootstrap.ExecContext(context.Background(), `DROP DATABASE IF EXISTS `+databaseName+` WITH (FORCE)`)
+		_ = bootstrap.Close()
+	})
+	parsed.Path = "/" + databaseName
+	query := parsed.Query()
+	query.Del("search_path")
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func openStory(t testing.TB, opener func(string) (*storage.Storage, error)) *storage.Storage {

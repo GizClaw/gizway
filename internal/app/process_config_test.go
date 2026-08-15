@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRedactDSN(t *testing.T) {
@@ -26,7 +27,7 @@ func TestRedactDSN(t *testing.T) {
 	}
 }
 
-func TestLoadProcessConfigDefaultsCreditRecheckToFiveMinutes(t *testing.T) {
+func TestLoadProcessConfigDefaultsCreditIntervals(t *testing.T) {
 	directory := t.TempDir()
 	secret := filepath.Join(directory, "hmac")
 	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
@@ -44,14 +45,15 @@ authentication:
   zitadel:
     issuer: https://identity.example.test
     jwks_url: https://identity.example.test/oauth/v2/keys
-    admin_audience: regional-admin
+    human_audience: gizway-human
+    service_audience: gizway-service
   service_account:
     token_url: https://identity.example.test/oauth/v2/token
     private_key_file: ` + secret + `
     audience: gizpay-service
     requested_scopes: [openid]
-    required_roles: [subscription_credit_reader]
-subscription_api_keys:
+    required_roles: [credit_check]
+subscription_keys:
   hmac:
     secret_file: ` + secret + `
 gizpay:
@@ -76,6 +78,71 @@ bifrost:
 	if config.CreditCheck.RecheckInterval != "5m" {
 		t.Fatalf("credit_check.recheck_interval = %q, want 5m", config.CreditCheck.RecheckInterval)
 	}
+	if config.CreditCache.CleanupInterval != "1m" {
+		t.Fatalf("credit_cache.cleanup_interval = %q, want 1m", config.CreditCache.CleanupInterval)
+	}
+
+	configuredYAML := strings.Replace(configYAML, "gizpay:\n", "credit_cache:\n  cleanup_interval: 37s\ngizpay:\n", 1)
+	if err := os.WriteFile(configPath, []byte(configuredYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configured, err := LoadProcessConfig(configPath, ProcessGizWay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configured.CreditCache.CleanupInterval != "37s" || configuredCreditCacheCleanupInterval(configured) != 37*time.Second {
+		t.Fatalf("configured credit_cache.cleanup_interval = %q (%s), want 37s", configured.CreditCache.CleanupInterval, configuredCreditCacheCleanupInterval(configured))
+	}
+}
+
+func TestCreditCacheCleanupIntervalValidationAndRuntimeValue(t *testing.T) {
+	config := ProcessConfig{}
+	config.CreditCache.CleanupInterval = "37s"
+	if got := configuredCreditCacheCleanupInterval(config); got != 37*time.Second {
+		t.Fatalf("configured Credit Cache cleanup interval = %s, want 37s", got)
+	}
+
+	for _, value := range []string{"0s", "-1s", "not-a-duration"} {
+		t.Run(value, func(t *testing.T) {
+			invalid := validGizWayProcessConfigForDurationTests(t)
+			invalid.CreditCache.CleanupInterval = value
+			if err := ValidateProcessConfig(invalid, ProcessGizWay); err == nil || !strings.Contains(err.Error(), "credit_cache.cleanup_interval must be a positive duration") {
+				t.Fatalf("ValidateProcessConfig() error = %v", err)
+			}
+		})
+	}
+}
+
+func validGizWayProcessConfigForDurationTests(t *testing.T) ProcessConfig {
+	t.Helper()
+	directory := t.TempDir()
+	secret := filepath.Join(directory, "secret")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := ProcessConfig{Version: 1}
+	config.configDirectory = directory
+	config.Server.Name = "global.example.test"
+	config.Server.ListenAddress = "127.0.0.1:0"
+	config.Database.DSN = "postgres://localhost/db"
+	config.Database.Schema = "gizway"
+	config.SubscriptionKeys.HMAC.SecretFile = secret
+	config.Authentication.ZITADEL.Issuer = "https://identity.example.test"
+	config.Authentication.ZITADEL.JWKSURL = "https://identity.example.test/oauth/v2/keys"
+	config.Authentication.ZITADEL.HumanAudience = "gizway-human"
+	config.Authentication.ServiceAccount.TokenURL = "https://identity.example.test/oauth/v2/token"
+	config.Authentication.ServiceAccount.PrivateKeyFile = secret
+	config.Authentication.ServiceAccount.Audience = "gizpay-service"
+	config.Authentication.ServiceAccount.RequestedScopes = []string{"openid"}
+	config.Authentication.ServiceAccount.RequiredRoles = []string{"credit_check"}
+	config.GizPay.ServiceDSN = "https://pay.example.test"
+	config.Bifrost.ConfigStore.Type = "postgresql"
+	config.Bifrost.ConfigStore.DSN = config.Database.DSN
+	config.Bifrost.ConfigStore.Schema = "bifrost_config"
+	config.Bifrost.LogStore.Type = "postgresql"
+	config.Bifrost.LogStore.DSN = config.Database.DSN
+	config.Bifrost.LogStore.Schema = "bifrost_logs"
+	return config
 }
 
 func TestTLSCertificatePairEnablesHTTPSUnlessExplicitlyDisabled(t *testing.T) {
