@@ -21,8 +21,8 @@ func TestReportOutboxDoesNotSendWhenSendingStateCannotBePersisted(t *testing.T) 
 	database := testdb.OpenGizWay(t)
 	db := database.SQL
 	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
-		VALUES ('ai-order-outbox-send','order-outbox-send','key-outbox-send','hmac-outbox-send','account-outbox-send','subscription-outbox-send','product-outbox-send','issuer','subject','model-outbox-send','provider-outbox-send',10,1,'{}','{}','pending');
+		INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,subscription_key_id,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
+		VALUES ('ai-order-outbox-send','order-outbox-send','key-outbox-send','hmac-outbox-send','skey-outbox-send','account-outbox-send','subscription-outbox-send','product-outbox-send','issuer','subject','model-outbox-send','provider-outbox-send',10,1,'{}','{}','pending');
 		INSERT INTO charge_outbox(id,external_order_id,ai_order_id,payload,status,recover_duplicate)
 		VALUES ('outbox-send','order-outbox-send','ai-order-outbox-send','{}','pending',false);
 		CREATE FUNCTION reject_outbox_sending() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -125,8 +125,8 @@ func insertOutboxFixture(t *testing.T, db *sqlx.DB, suffix string) {
 	t.Helper()
 	_, err := db.ExecContext(t.Context(), `
 		WITH inserted_order AS (
-			INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
-			VALUES ($3,$4,'key-outbox','hmac-outbox','account-outbox','subscription-outbox','product-outbox','issuer','subject',$1,$2,10,1,'{}','{}','pending')
+			INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,subscription_key_id,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,status)
+			VALUES ($3,$4,'key-outbox','hmac-outbox','skey-outbox','account-outbox','subscription-outbox','product-outbox','issuer','subject',$1,$2,10,1,'{}','{}','pending')
 			RETURNING id
 		)
 		INSERT INTO charge_outbox(id,external_order_id,ai_order_id,payload,status,recover_duplicate)

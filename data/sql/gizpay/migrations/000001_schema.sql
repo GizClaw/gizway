@@ -5,6 +5,8 @@ CREATE TABLE users (
     id TEXT PRIMARY KEY,
     identity_issuer TEXT NOT NULL,
     identity_subject TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (identity_issuer, identity_subject)
@@ -104,16 +106,19 @@ CREATE TABLE subscriptions (
     terms_version TEXT NOT NULL DEFAULT 'current' CHECK (length(trim(terms_version)) > 0),
     accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    canceled_at TIMESTAMPTZ
+    canceled_at TIMESTAMPTZ,
+    UNIQUE (account_id, product_id)
 );
 
 CREATE TABLE subscription_keys (
     id TEXT PRIMARY KEY,
     subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE RESTRICT,
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     key TEXT NOT NULL UNIQUE CHECK (length(key) > 0),
     subscription_key_hmac TEXT NOT NULL UNIQUE CHECK (length(subscription_key_hmac) > 0),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
     CHECK ((status='active' AND revoked_at IS NULL) OR (status='revoked' AND revoked_at IS NOT NULL))
 );
@@ -152,7 +157,33 @@ CREATE TABLE topups (
     UNIQUE (channel, external_reference)
 );
 
+CREATE TABLE product_listings (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    site TEXT NOT NULL CHECK (length(trim(site)) > 0),
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    description TEXT NOT NULL DEFAULT '',
+    billing_mode TEXT NOT NULL DEFAULT 'pay_as_you_go' CHECK (billing_mode IN ('pay_as_you_go')),
+    price_text TEXT NOT NULL DEFAULT '',
+    display_order INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_id, site)
+);
+
 CREATE SCHEMA client_sync;
+CREATE TABLE client_sync.user_profiles (
+    id TEXT PRIMARY KEY,
+    owner_identity_issuer TEXT NOT NULL,
+    owner_identity_subject TEXT NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    merchant_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (owner_identity_issuer, owner_identity_subject)
+);
 CREATE TABLE client_sync.account_balances (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL UNIQUE,
@@ -203,12 +234,19 @@ FOR EACH ROW EXECUTE FUNCTION protect_service_principal();
 CREATE FUNCTION protect_subscription_key() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Subscription Key cannot be deleted'; END IF;
-    IF OLD.status='revoked' THEN RAISE EXCEPTION 'revoked Subscription Key cannot be changed'; END IF;
     IF NEW.id IS DISTINCT FROM OLD.id OR NEW.subscription_id IS DISTINCT FROM OLD.subscription_id
+       OR NEW.name IS DISTINCT FROM OLD.name
        OR NEW.key IS DISTINCT FROM OLD.key OR NEW.subscription_key_hmac IS DISTINCT FROM OLD.subscription_key_hmac
        OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
         RAISE EXCEPTION 'Subscription Key identity and material are immutable';
     END IF;
+    IF NEW.status=OLD.status AND NEW.revoked_at IS NOT DISTINCT FROM OLD.revoked_at THEN
+        IF OLD.last_used_at IS NOT NULL AND (NEW.last_used_at IS NULL OR NEW.last_used_at < OLD.last_used_at) THEN
+            RAISE EXCEPTION 'Subscription Key last_used_at cannot move backwards';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD.status='revoked' THEN RAISE EXCEPTION 'revoked Subscription Key cannot be changed'; END IF;
     IF NOT (OLD.status='active' AND NEW.status='revoked' AND NEW.revoked_at IS NOT NULL) THEN
         RAISE EXCEPTION 'only active to revoked Subscription Key transition is allowed';
     END IF;

@@ -2,87 +2,114 @@ config:
   edition: 3
 
 streams:
+  public_catalog:
+    auto_subscribe: true
+    queries:
+      - |
+        SELECT product_listings.*
+        FROM product_listings
+        WHERE product_listings.status = 'active'
+          AND (
+            auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
+            OR auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog_global' IS NOT NULL
+            OR auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog_cn' IS NOT NULL
+          )
+
   current_user:
     auto_subscribe: true
     queries:
       - |
-        SELECT my_profile.id, my_profile.status, my_profile.created_at
-        FROM users AS my_profile
-        WHERE my_profile.identity_subject = auth.user_id()
-          AND my_profile.identity_issuer = auth.parameter('iss')
+        SELECT my_profile.id, my_profile.email, my_profile.display_name,
+               my_profile.merchant_id, my_profile.status, my_profile.created_at
+        FROM client_sync.user_profiles AS "my_profile"
+        WHERE my_profile.owner_identity_subject = auth.user_id()
+          AND my_profile.owner_identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_accounts.*
-        FROM accounts AS my_accounts
+        FROM accounts AS "my_accounts"
         JOIN users ON users.id = my_accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_balances.*
         FROM client_sync.account_balances AS my_balances
         WHERE my_balances.owner_identity_subject = auth.user_id()
           AND my_balances.owner_identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_merchants.*
-        FROM merchants AS my_merchants
+        FROM merchants AS "my_merchants"
         JOIN accounts ON accounts.id = my_merchants.settlement_account_id
         JOIN users ON users.id = accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_products.*
-        FROM products AS my_products
+        FROM products AS "my_products"
         JOIN merchants ON merchants.id = my_products.merchant_id
         JOIN accounts ON accounts.id = merchants.settlement_account_id
         JOIN users ON users.id = accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_subscriptions.*
-        FROM subscriptions AS my_subscriptions
+        FROM subscriptions AS "my_subscriptions"
         JOIN accounts ON accounts.id = my_subscriptions.account_id
         JOIN users ON users.id = accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_subscription_keys.id, my_subscription_keys.subscription_id,
-               my_subscription_keys.key, my_subscription_keys.status,
-               my_subscription_keys.created_at, my_subscription_keys.revoked_at
-        FROM subscription_keys AS my_subscription_keys
+               my_subscription_keys.name, my_subscription_keys.key,
+               my_subscription_keys.status, my_subscription_keys.created_at,
+               my_subscription_keys.last_used_at, my_subscription_keys.revoked_at
+        FROM subscription_keys AS "my_subscription_keys"
         JOIN subscriptions ON subscriptions.id = my_subscription_keys.subscription_id
         JOIN accounts ON accounts.id = subscriptions.account_id
         JOIN users ON users.id = accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_topups.*
-        FROM topups AS my_topups
+        FROM topups AS "my_topups"
         JOIN accounts ON accounts.id = my_topups.account_id
         JOIN users ON users.id = accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_charges.*
         FROM client_sync.charges AS my_charges
         WHERE my_charges.owner_identity_subject = auth.user_id()
           AND my_charges.owner_identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_transactions.*
         FROM client_sync.transactions AS my_transactions
         WHERE my_transactions.owner_identity_subject = auth.user_id()
           AND my_transactions.owner_identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_commissions.*
         FROM client_sync.commissions AS my_commissions
         WHERE my_commissions.owner_identity_subject = auth.user_id()
           AND my_commissions.owner_identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
       - |
         SELECT my_service_accounts.id, my_service_accounts.name,
                my_service_accounts.roles, my_service_accounts.status,
                my_service_accounts.created_at, my_service_accounts.revoked_at
-        FROM service_principals AS my_service_accounts
+        FROM service_principals AS "my_service_accounts"
         JOIN users ON users.id = my_service_accounts.owner_user_id
         WHERE users.identity_subject = auth.user_id()
           AND users.identity_issuer = auth.parameter('iss')
+          AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL
 
   available_products:
     auto_subscribe: true
@@ -91,3 +118,4 @@ streams:
       FROM products AS available_products
       WHERE status = 'active'
         AND published = true
+        AND auth.parameter('urn:zitadel:iam:org:project:386000000000000001:roles') ->> 'public_catalog' IS NULL

@@ -4,23 +4,6 @@
 # covers: account.yaml#getProduct account.yaml#updateProduct account.yaml#createProductSubscription
 # covers: account.yaml#listSubscriptions account.yaml#getSubscription account.yaml#updateSubscription
 
-POST {{pay_url}}/account/v1/initialize
-Authorization: Bearer {{human_token}}
-
-HTTP 200
-[Captures]
-account_id: jsonpath "$.account_id"
-default_merchant_id: jsonpath "$.default_merchant_id"
-
-
-POST {{pay_url}}/account/v1/initialize
-Authorization: Bearer {{human_token_two}}
-
-HTTP 200
-[Captures]
-account_id_two: jsonpath "$.account_id"
-
-
 GET {{pay_url}}/account/v1/merchants
 Authorization: Bearer {{human_token}}
 
@@ -115,7 +98,7 @@ jsonpath "$.id" == "{{product_id}}"
 POST {{pay_url}}/account/v1/products/{{product_id}}/subscriptions
 Authorization: Bearer {{human_token_two}}
 Content-Type: application/json
-{"account_id":"{{account_id_two}}","terms_version":"m03-v1"}
+{"id":"sub_m03_other_retained","account_id":"{{account_id_two}}","terms_version":"m03-v1"}
 
 HTTP 201
 [Asserts]
@@ -132,7 +115,7 @@ HTTP 404
 POST {{pay_url}}/account/v1/products/{{hidden_product_id}}/subscriptions
 Authorization: Bearer {{human_token_two}}
 Content-Type: application/json
-{"account_id":"{{account_id_two}}","terms_version":"m03-v1"}
+{"id":"sub_m03_hidden_retained","account_id":"{{account_id_two}}","terms_version":"m03-v1"}
 
 HTTP 404
 
@@ -159,7 +142,7 @@ jsonpath "$.name" == "M03 PAYG Updated"
 POST {{pay_url}}/account/v1/products/{{product_id}}/subscriptions
 Authorization: Bearer {{human_token}}
 Content-Type: application/json
-{"account_id":"{{account_id}}","terms_version":"m03-v1"}
+{"id":"sub_m03_owner_retained","account_id":"{{account_id}}","terms_version":"m03-v1"}
 
 HTTP 201
 [Captures]

@@ -21,6 +21,9 @@ describe('PowerSync region isolation', () => {
       expect(globalUsage.size).toBeGreaterThan(0);
       expect(cnUsage.size).toBeGreaterThan(0);
       expect([...globalUsage].filter((id) => cnUsage.has(id))).toEqual([]);
+			const usedProviderKeys = await global.database.getAll<{ last_used_at: string | null }>('SELECT last_used_at FROM my_provider_keys');
+			expect(usedProviderKeys.length).toBeGreaterThan(0);
+			expect(usedProviderKeys.every((key) => key.last_used_at != null)).toBe(true);
     } finally {
       await Promise.all([global.cleanup(), cn.cleanup()]);
     }

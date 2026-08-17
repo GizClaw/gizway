@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: {title: GizWay User Command API, version: 3.0.0}
+info: {title: GizWay User Command API, version: 4.0.0}
 servers: [{url: https://api.gizway.com/user/v1}]
 security: [{humanBearer: []}]
 paths:
@@ -8,7 +8,15 @@ paths:
     post:
       operationId: createProviderKey
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateProviderKey'}}}}
-      responses: {'201': {description: Provider Key created atomically, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderKey'}}}}}
+      responses:
+        '200': {description: Existing identical Provider Key, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderKey'}}}}
+        '201': {description: Provider Key created atomically, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderKey'}}}}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {description: resource_id_conflict, content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+        '503': {$ref: 'common.yaml#/components/responses/ServiceUnavailable'}
   /provider-keys/{provider_key_id}/prices:
     parameters: [{$ref: '#/components/parameters/provider_key_id'}]
     put:
@@ -27,6 +35,7 @@ components:
     provider_id: {name: provider_id, in: path, required: true, schema: {type: string, minLength: 1}}
     provider_key_id: {name: provider_key_id, in: path, required: true, schema: {type: string, minLength: 1}}
   schemas:
+    ErrorResponse: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}
     Price:
       type: object
       additionalProperties: false
@@ -44,19 +53,23 @@ components:
     CreateProviderKey:
       type: object
       additionalProperties: false
-      required: [key, status, prices]
+      required: [id, name, key, status, prices]
       properties:
+        id: {type: string, minLength: 1}
         name: {type: string, minLength: 1}
         key: {type: string, minLength: 1}
         status: {type: string, const: active}
         prices: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Price'}}
     ProviderKey:
       type: object
-      required: [provider_key_id, provider_id, key, merchant_id, status]
+      required: [provider_key_id, provider_id, name, key, merchant_id, status]
       properties:
         provider_key_id: {type: string}
         provider_id: {type: string}
+        name: {type: string}
         key: {type: string}
         merchant_id: {type: string}
         status: {type: string, enum: [active, disabled]}
+        last_used_at: {type: [string, 'null'], format: date-time}
+        earned_microcredits: {type: integer, format: int64, minimum: 0}
         prices: {type: array, items: {$ref: '#/components/schemas/Price'}}

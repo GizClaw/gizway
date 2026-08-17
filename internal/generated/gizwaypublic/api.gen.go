@@ -20,35 +20,36 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
 )
 
-// Defines values for ModelObject.
+// Defines values for GetPublicCatalogToken200JSONResponseBodyTokenType.
 const (
-	ModelObjectModel ModelObject = "model"
+	Bearer GetPublicCatalogToken200JSONResponseBodyTokenType = "Bearer"
 )
 
-// Valid indicates whether the value is a known member of the ModelObject enum.
-func (e ModelObject) Valid() bool {
+// Valid indicates whether the value is a known member of the GetPublicCatalogToken200JSONResponseBodyTokenType enum.
+func (e GetPublicCatalogToken200JSONResponseBodyTokenType) Valid() bool {
 	switch e {
-	case ModelObjectModel:
+	case Bearer:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RealtimeSecretSessionTransport.
+// Defines values for ListModels200JSONResponseBodyDataObject.
 const (
-	RealtimeSecretSessionTransportWebsocket RealtimeSecretSessionTransport = "websocket"
+	Model ListModels200JSONResponseBodyDataObject = "model"
 )
 
-// Valid indicates whether the value is a known member of the RealtimeSecretSessionTransport enum.
-func (e RealtimeSecretSessionTransport) Valid() bool {
+// Valid indicates whether the value is a known member of the ListModels200JSONResponseBodyDataObject enum.
+func (e ListModels200JSONResponseBodyDataObject) Valid() bool {
 	switch e {
-	case RealtimeSecretSessionTransportWebsocket:
+	case Model:
 		return true
 	default:
 		return false
@@ -70,77 +71,31 @@ func (e CreateRealtimeClientSecretJSONBodyTransport) Valid() bool {
 	}
 }
 
-// AIResponse defines model for AIResponse.
-type AIResponse map[string]interface{}
+// Defines values for CreateRealtimeClientSecret201JSONResponseBodySessionTransport.
+const (
+	CreateRealtimeClientSecret201JSONResponseBodySessionTransportWebsocket CreateRealtimeClientSecret201JSONResponseBodySessionTransport = "websocket"
+)
 
-// Message defines model for Message.
-type Message struct {
-	Content string `json:"content"`
-	Role    string `json:"role"`
+// Valid indicates whether the value is a known member of the CreateRealtimeClientSecret201JSONResponseBodySessionTransport enum.
+func (e CreateRealtimeClientSecret201JSONResponseBodySessionTransport) Valid() bool {
+	switch e {
+	case CreateRealtimeClientSecret201JSONResponseBodySessionTransportWebsocket:
+		return true
+	default:
+		return false
+	}
 }
 
-// Model defines model for Model.
-type Model struct {
-	Id     string      `json:"id"`
-	Object ModelObject `json:"object"`
-}
-
-// ModelObject defines model for Model.Object.
-type ModelObject string
-
-// RealtimeSecret defines model for RealtimeSecret.
-type RealtimeSecret struct {
-	ClientSecret struct {
-		ExpiresAt int64  `json:"expires_at"`
-		Value     string `json:"value"`
-	} `json:"client_secret"`
-	Session struct {
-		Model     string                         `json:"model"`
-		SessionId string                         `json:"session_id"`
-		Transport RealtimeSecretSessionTransport `json:"transport"`
-	} `json:"session"`
-}
-
-// RealtimeSecretSessionTransport defines model for RealtimeSecret.Session.Transport.
-type RealtimeSecretSessionTransport string
-
-// ModelList defines model for ModelList.
-type ModelList struct {
-	Data []Model `json:"data"`
-}
-
-// ChatCompletion defines model for ChatCompletion.
-type ChatCompletion struct {
-	MaxTokens     *int      `json:"max_tokens,omitempty"`
-	Messages      []Message `json:"messages"`
-	Model         string    `json:"model"`
-	Stop          *[]string `json:"stop,omitempty"`
-	Stream        *bool     `json:"stream,omitempty"`
-	StreamOptions *struct {
-		IncludeObfuscation *bool `json:"include_obfuscation,omitempty"`
-		IncludeUsage       *bool `json:"include_usage,omitempty"`
-	} `json:"stream_options,omitempty"`
-	Temperature *float32 `json:"temperature,omitempty"`
-	TopK        *int     `json:"top_k,omitempty"`
-	TopP        *float32 `json:"top_p,omitempty"`
-}
-
-// GeminiContent defines model for GeminiContent.
-type GeminiContent struct {
-	Contents         []map[string]interface{} `json:"contents"`
-	GenerationConfig *struct {
-		MaxOutputTokens *int      `json:"maxOutputTokens,omitempty"`
-		StopSequences   *[]string `json:"stopSequences,omitempty"`
-		Temperature     *float32  `json:"temperature,omitempty"`
-		TopK            *int      `json:"topK,omitempty"`
-		TopP            *float32  `json:"topP,omitempty"`
-	} `json:"generationConfig,omitempty"`
-}
+// GetPublicCatalogToken200JSONResponseBodyTokenType defines parameters for GetPublicCatalogToken.
+type GetPublicCatalogToken200JSONResponseBodyTokenType string
 
 // CreateChatCompletionJSONBody defines parameters for CreateChatCompletion.
 type CreateChatCompletionJSONBody struct {
-	MaxTokens     *int      `json:"max_tokens,omitempty"`
-	Messages      []Message `json:"messages"`
+	MaxTokens *int `json:"max_tokens,omitempty"`
+	Messages  []struct {
+		Content string `json:"content"`
+		Role    string `json:"role"`
+	} `json:"messages"`
 	Model         string    `json:"model"`
 	Stop          *[]string `json:"stop,omitempty"`
 	Stream        *bool     `json:"stream,omitempty"`
@@ -155,8 +110,11 @@ type CreateChatCompletionJSONBody struct {
 
 // CreateAnthropicMessageJSONBody defines parameters for CreateAnthropicMessage.
 type CreateAnthropicMessageJSONBody struct {
-	MaxTokens     *int      `json:"max_tokens,omitempty"`
-	Messages      []Message `json:"messages"`
+	MaxTokens *int `json:"max_tokens,omitempty"`
+	Messages  []struct {
+		Content string `json:"content"`
+		Role    string `json:"role"`
+	} `json:"messages"`
 	Model         string    `json:"model"`
 	Stop          *[]string `json:"stop,omitempty"`
 	Stream        *bool     `json:"stream,omitempty"`
@@ -174,6 +132,9 @@ type CreateAnthropicMessageParams struct {
 	AnthropicVersion string `json:"anthropic-version"`
 }
 
+// ListModels200JSONResponseBodyDataObject defines parameters for ListModels.
+type ListModels200JSONResponseBodyDataObject string
+
 // ConnectRealtimeWebSocketParams defines parameters for ConnectRealtimeWebSocket.
 type ConnectRealtimeWebSocketParams struct {
 	SessionId string `form:"session_id" json:"session_id"`
@@ -187,6 +148,9 @@ type CreateRealtimeClientSecretJSONBody struct {
 
 // CreateRealtimeClientSecretJSONBodyTransport defines parameters for CreateRealtimeClientSecret.
 type CreateRealtimeClientSecretJSONBodyTransport string
+
+// CreateRealtimeClientSecret201JSONResponseBodySessionTransport defines parameters for CreateRealtimeClientSecret.
+type CreateRealtimeClientSecret201JSONResponseBodySessionTransport string
 
 // GenerateGeminiContentJSONBody defines parameters for GenerateGeminiContent.
 type GenerateGeminiContentJSONBody struct {
@@ -286,6 +250,12 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// GetPublicCatalogToken performs a GET /auth/catalog-token (the `GetPublicCatalogToken` operationId) request.
+	GetPublicCatalogToken(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPublicRuntimeConfig performs a GET /auth/runtime-config (the `GetPublicRuntimeConfig` operationId) request.
+	GetPublicRuntimeConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CreateChatCompletionWithBody performs a POST /v1/chat/completions (the `CreateChatCompletion` operationId) request,
 	// with any type of body and a specified content type.
 	CreateChatCompletionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -323,6 +293,32 @@ type ClientInterface interface {
 	// GenerateGeminiContent performs a POST /v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request.
 	// Takes a body of the `application/json` content type.
 	GenerateGeminiContent(ctx context.Context, operation string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetPublicCatalogToken performs a GET /auth/catalog-token (the `GetPublicCatalogToken` operationId) request.
+func (c *Client) GetPublicCatalogToken(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPublicCatalogTokenRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetPublicRuntimeConfig performs a GET /auth/runtime-config (the `GetPublicRuntimeConfig` operationId) request.
+func (c *Client) GetPublicRuntimeConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPublicRuntimeConfigRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // CreateChatCompletionWithBody performs a POST /v1/chat/completions (the `CreateChatCompletion` operationId) request,
@@ -461,6 +457,60 @@ func (c *Client) GenerateGeminiContent(ctx context.Context, operation string, bo
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetPublicCatalogTokenRequest constructs an http.Request for the GetPublicCatalogToken method
+func NewGetPublicCatalogTokenRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/catalog-token")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPublicRuntimeConfigRequest constructs an http.Request for the GetPublicRuntimeConfig method
+func NewGetPublicRuntimeConfigRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/runtime-config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewCreateChatCompletionRequest calls the generic CreateChatCompletion builder with application/json body
@@ -764,6 +814,16 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetPublicCatalogTokenWithResponse performs a GET /auth/catalog-token (the `GetPublicCatalogToken` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	GetPublicCatalogTokenWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPublicCatalogTokenResponse, error)
+
+	// GetPublicRuntimeConfigWithResponse performs a GET /auth/runtime-config (the `GetPublicRuntimeConfig` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	GetPublicRuntimeConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPublicRuntimeConfigResponse, error)
+
 	// CreateChatCompletionWithBodyWithResponse performs a POST /v1/chat/completions (the `CreateChatCompletion` operationId) request,
 	// with any type of body and a specified content type.
 	//
@@ -815,15 +875,175 @@ type ClientWithResponsesInterface interface {
 	GenerateGeminiContentWithResponse(ctx context.Context, operation string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error)
 }
 
+type GetPublicCatalogTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		AccessToken string                                            `json:"access_token"`
+		ExpiresAt   time.Time                                         `json:"expires_at"`
+		TokenType   GetPublicCatalogToken200JSONResponseBodyTokenType `json:"token_type"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetPublicCatalogTokenResponse) GetJSON200() *struct {
+	AccessToken string                                            `json:"access_token"`
+	ExpiresAt   time.Time                                         `json:"expires_at"`
+	TokenType   GetPublicCatalogToken200JSONResponseBodyTokenType `json:"token_type"`
+} {
+	return r.JSON200
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetPublicCatalogTokenResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetPublicCatalogTokenResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPublicCatalogTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPublicCatalogTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetPublicCatalogTokenResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetPublicRuntimeConfigResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Identity struct {
+			Audience              string `json:"audience"`
+			ClientId              string `json:"client_id"`
+			Issuer                string `json:"issuer"`
+			PostLogoutRedirectUri string `json:"post_logout_redirect_uri"`
+			RedirectUri           string `json:"redirect_uri"`
+		} `json:"identity"`
+		Services struct {
+			GizpayApiUrl          string `json:"gizpay_api_url"`
+			GizpayPowersyncUrl    string `json:"gizpay_powersync_url"`
+			GizwayApiUrl          string `json:"gizway_api_url"`
+			GizwayPowersyncUrl    string `json:"gizway_powersync_url"`
+			PublicCatalogTokenUrl string `json:"public_catalog_token_url"`
+		} `json:"services"`
+		Site struct {
+			Hostname string `json:"hostname"`
+		} `json:"site"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetPublicRuntimeConfigResponse) GetJSON200() *struct {
+	Identity struct {
+		Audience              string `json:"audience"`
+		ClientId              string `json:"client_id"`
+		Issuer                string `json:"issuer"`
+		PostLogoutRedirectUri string `json:"post_logout_redirect_uri"`
+		RedirectUri           string `json:"redirect_uri"`
+	} `json:"identity"`
+	Services struct {
+		GizpayApiUrl          string `json:"gizpay_api_url"`
+		GizpayPowersyncUrl    string `json:"gizpay_powersync_url"`
+		GizwayApiUrl          string `json:"gizway_api_url"`
+		GizwayPowersyncUrl    string `json:"gizway_powersync_url"`
+		PublicCatalogTokenUrl string `json:"public_catalog_token_url"`
+	} `json:"services"`
+	Site struct {
+		Hostname string `json:"hostname"`
+	} `json:"site"`
+} {
+	return r.JSON200
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetPublicRuntimeConfigResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetPublicRuntimeConfigResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPublicRuntimeConfigResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPublicRuntimeConfigResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetPublicRuntimeConfigResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type CreateChatCompletionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *AIResponse
+	JSON200 *map[string]interface{}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r CreateChatCompletionResponse) GetJSON200() *AIResponse {
+func (r CreateChatCompletionResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
 }
 
@@ -860,11 +1080,11 @@ type CreateAnthropicMessageResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *AIResponse
+	JSON200 *map[string]interface{}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r CreateAnthropicMessageResponse) GetJSON200() *AIResponse {
+func (r CreateAnthropicMessageResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
 }
 
@@ -901,11 +1121,21 @@ type ListModelsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ModelList
+	JSON200 *struct {
+		Data []struct {
+			Id     string                                  `json:"id"`
+			Object ListModels200JSONResponseBodyDataObject `json:"object"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListModelsResponse) GetJSON200() *ModelList {
+func (r ListModelsResponse) GetJSON200() *struct {
+	Data []struct {
+		Id     string                                  `json:"id"`
+		Object ListModels200JSONResponseBodyDataObject `json:"object"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -976,11 +1206,31 @@ type CreateRealtimeClientSecretResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *RealtimeSecret
+	JSON201 *struct {
+		ClientSecret struct {
+			ExpiresAt int64  `json:"expires_at"`
+			Value     string `json:"value"`
+		} `json:"client_secret"`
+		Session struct {
+			Model     string                                                        `json:"model"`
+			SessionId string                                                        `json:"session_id"`
+			Transport CreateRealtimeClientSecret201JSONResponseBodySessionTransport `json:"transport"`
+		} `json:"session"`
+	}
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateRealtimeClientSecretResponse) GetJSON201() *RealtimeSecret {
+func (r CreateRealtimeClientSecretResponse) GetJSON201() *struct {
+	ClientSecret struct {
+		ExpiresAt int64  `json:"expires_at"`
+		Value     string `json:"value"`
+	} `json:"client_secret"`
+	Session struct {
+		Model     string                                                        `json:"model"`
+		SessionId string                                                        `json:"session_id"`
+		Transport CreateRealtimeClientSecret201JSONResponseBodySessionTransport `json:"transport"`
+	} `json:"session"`
+} {
 	return r.JSON201
 }
 
@@ -1017,11 +1267,11 @@ type GenerateGeminiContentResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *AIResponse
+	JSON200 *map[string]interface{}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GenerateGeminiContentResponse) GetJSON200() *AIResponse {
+func (r GenerateGeminiContentResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
 }
 
@@ -1052,6 +1302,28 @@ func (r GenerateGeminiContentResponse) ContentType() string {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
+}
+
+// GetPublicCatalogTokenWithResponse performs a GET /auth/catalog-token (the `GetPublicCatalogToken` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) GetPublicCatalogTokenWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPublicCatalogTokenResponse, error) {
+	rsp, err := c.GetPublicCatalogToken(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPublicCatalogTokenResponse(rsp)
+}
+
+// GetPublicRuntimeConfigWithResponse performs a GET /auth/runtime-config (the `GetPublicRuntimeConfig` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) GetPublicRuntimeConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPublicRuntimeConfigResponse, error) {
+	rsp, err := c.GetPublicRuntimeConfig(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPublicRuntimeConfigResponse(rsp)
 }
 
 // CreateChatCompletionWithBodyWithResponse performs a POST /v1/chat/completions (the `CreateChatCompletion` operationId) request,
@@ -1164,6 +1436,104 @@ func (c *ClientWithResponses) GenerateGeminiContentWithResponse(ctx context.Cont
 	return ParseGenerateGeminiContentResponse(rsp)
 }
 
+// ParseGetPublicCatalogTokenResponse parses an HTTP response from a GetPublicCatalogTokenWithResponse call
+func ParseGetPublicCatalogTokenResponse(rsp *http.Response) (*GetPublicCatalogTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPublicCatalogTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			AccessToken string                                            `json:"access_token"`
+			ExpiresAt   time.Time                                         `json:"expires_at"`
+			TokenType   GetPublicCatalogToken200JSONResponseBodyTokenType `json:"token_type"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPublicRuntimeConfigResponse parses an HTTP response from a GetPublicRuntimeConfigWithResponse call
+func ParseGetPublicRuntimeConfigResponse(rsp *http.Response) (*GetPublicRuntimeConfigResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPublicRuntimeConfigResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Identity struct {
+				Audience              string `json:"audience"`
+				ClientId              string `json:"client_id"`
+				Issuer                string `json:"issuer"`
+				PostLogoutRedirectUri string `json:"post_logout_redirect_uri"`
+				RedirectUri           string `json:"redirect_uri"`
+			} `json:"identity"`
+			Services struct {
+				GizpayApiUrl          string `json:"gizpay_api_url"`
+				GizpayPowersyncUrl    string `json:"gizpay_powersync_url"`
+				GizwayApiUrl          string `json:"gizway_api_url"`
+				GizwayPowersyncUrl    string `json:"gizway_powersync_url"`
+				PublicCatalogTokenUrl string `json:"public_catalog_token_url"`
+			} `json:"services"`
+			Site struct {
+				Hostname string `json:"hostname"`
+			} `json:"site"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseCreateChatCompletionResponse parses an HTTP response from a CreateChatCompletionWithResponse call
 func ParseCreateChatCompletionResponse(rsp *http.Response) (*CreateChatCompletionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1179,7 +1549,7 @@ func ParseCreateChatCompletionResponse(rsp *http.Response) (*CreateChatCompletio
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AIResponse
+		var dest map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1208,7 +1578,7 @@ func ParseCreateAnthropicMessageResponse(rsp *http.Response) (*CreateAnthropicMe
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AIResponse
+		var dest map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1237,7 +1607,12 @@ func ParseListModelsResponse(rsp *http.Response) (*ListModelsResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ModelList
+		var dest struct {
+			Data []struct {
+				Id     string                                  `json:"id"`
+				Object ListModels200JSONResponseBodyDataObject `json:"object"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1279,7 +1654,17 @@ func ParseCreateRealtimeClientSecretResponse(rsp *http.Response) (*CreateRealtim
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest RealtimeSecret
+		var dest struct {
+			ClientSecret struct {
+				ExpiresAt int64  `json:"expires_at"`
+				Value     string `json:"value"`
+			} `json:"client_secret"`
+			Session struct {
+				Model     string                                                        `json:"model"`
+				SessionId string                                                        `json:"session_id"`
+				Transport CreateRealtimeClientSecret201JSONResponseBodySessionTransport `json:"transport"`
+			} `json:"session"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1305,7 +1690,7 @@ func ParseGenerateGeminiContentResponse(rsp *http.Response) (*GenerateGeminiCont
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AIResponse
+		var dest map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1321,6 +1706,12 @@ func ParseGenerateGeminiContentResponse(rsp *http.Response) (*GenerateGeminiCont
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (GET /auth/catalog-token)
+	GetPublicCatalogToken(w http.ResponseWriter, r *http.Request)
+
+	// (GET /auth/runtime-config)
+	GetPublicRuntimeConfig(w http.ResponseWriter, r *http.Request)
 
 	// (POST /v1/chat/completions)
 	CreateChatCompletion(w http.ResponseWriter, r *http.Request)
@@ -1349,6 +1740,34 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetPublicCatalogToken operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicCatalogToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicCatalogToken(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicRuntimeConfig operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicRuntimeConfig(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicRuntimeConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // CreateChatCompletion operation middleware
 func (siw *ServerInterfaceWrapper) CreateChatCompletion(w http.ResponseWriter, r *http.Request) {
@@ -1616,12 +2035,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/models", wrapper.ListModels)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/catalog-token", wrapper.GetPublicCatalogToken)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/runtime-config", wrapper.GetPublicRuntimeConfig)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/chat/completions", wrapper.CreateChatCompletion)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/messages", wrapper.CreateAnthropicMessage)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1beta/models/{operation}", wrapper.GenerateGeminiContent)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/realtime/client_secrets", wrapper.CreateRealtimeClientSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/models", wrapper.ListModels)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/realtime", wrapper.ConnectRealtimeWebSocket)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/realtime/client_secrets", wrapper.CreateRealtimeClientSecret)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1beta/models/{operation}", wrapper.GenerateGeminiContent)
 
 	return m
 }
@@ -1631,25 +2052,30 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"7Flfb9s4Ev8qAnFvJ8fOtXfA+a01FkW2LTZoCvQh8Ao0NZHYSCRLjpy4gb/7gqT+S7blZrvAYvOUWJoZ",
+	"zvxmfsMh9USYzJUUINCQ5RMxwArNcXfDUsjBPaICUy0VZzfFxjDNFXIp3sPOvuOCLEkKNAZNQiJoDmRJ",
+	"HmdU8dk97EhIcKfsI6q41diHJIGcCz7dVCJlcsyeBpohz+EGmAZ0ITjXyZJsgGpnrFRKEZVVMcPFT+js",
+	"9yHh4k5aUeSY2Tfv+PcvdBdcF5uMs+DNVfDm+oqEZAvacGljeX2xuFjY9aQCQRUnS/Lq4vJiQUKiKKYO",
+	"2zktMJ0zijSTyQzlPQj7OPGRSAWaWi+vYrsgoF9s5cU/O2mLgFFSGJ+s/ywW9g+TAkE4I1SpjDNnZv7V",
+	"SFGHS93bOOb2Fc2utV0OubVzRzMDIVGtR0+EMgbGRLWTORcfQCSYkuVljZdBzUVio4ZHxTWYiDov7qTO",
+	"7X8kpggzmzAyouNsR/6xC8JYlbe9nFTyLvvfCq4hJsvbrn8dWx1n1rUdufkKDH12Y6hLgizJqtAaBAaM",
+	"shTiKscl7sGvXz5bZ/+7ePWzoAatpT5Th8nYoaYoImgbxe+3dPZ9Mft/tP73v8bQzsEYmsDJXPZwdgs1",
+	"2iN4duV9MFNgVw7nqKSDz2RUCLqlPKObDJzpqkOR5e3a/vYU0oWwRTVjUtzx5DSHPnn5lRf/60jEYxDo",
+	"vD+Pe0XMQTCYwDuWcRAY8XiCLDemAN3hZ6H5WK0oaTDKZCILjDTEXAPDyMpO0D1Pvlc9pYvtuHoWjzgX",
+	"NsAN68+Wkt5yViI8PRkJ/67oLqKKR4XOpiBQaij5ANrsBDtD7+HslR5+ZKVx6k3R7eXroKEDKIR9OA/E",
+	"MABjNKEc4cxkptKgHzbO64K13sn+55wKG+a36m5KU3yr5YMBPTP0DgJrKyh7XeB7XeHb28uO9DN2pBLq",
+	"yEN9ei/aXs5ZSnFuh+oMrBGHhG1Qw81opYEirFKKq1qceE/B4FsZ787KZhf8nD568pkSTZ4XeRtLLhAS",
+	"0C3Y/QaFkJuhuZYXw/4us7NT5nTC2uwYmXMurrwzjTWqNXVjfy5jyCbscAal6oQ1nDl7lg1qoLkVjeGO",
+	"FhnW1V1KbqTMgIpGNpKqzvQ5o4BgWRFDJDd3hfFZbTnYWqUSLCpu9EX2I+gh5K7YCt1WEUW+8TlHqaL7",
+	"1ptWOdhXakSpl0Kfglb1jBOqUUFdwP6njFrW8hjpER5xDlsQOGvS2hjrl+iA/tdabnkMemb5TJFvMggq",
+	"9618Sfk2f45R/U11kv5Ydip7EtQ0BwRtyPL2wCG4PoDPqsNlH9WwFdRxFq5f+stLf3npL3+z/mKRMAcP",
+	"tR+4wY9e5JnRdwsopkiPUNafMAf1XsLTur+pEnnioGcPdqXyGF27POopO1enDHSfIHHZDShDvoWghLbB",
+	"urpPPIj2SgoBDD+Vcl9gcyPZPeCBZv6tAL1rerkBYzt4dYw91MRH23YrsZeLS99B2rHVrgRKS5RMZoF5",
+	"4MjS/qz6NLg1vV3v130E5uWJ2ziZk5tbBcjKaZWGf3y3OaPRTe3VqKkwSupOcT7AxlT5O16gdRnXZn6s",
+	"IV0+g5KdlAxfH7hz5QL/95qM7cxbmhUwVnDd0L3YiWvUsCrukWGhytBw/2z4MLp5Pi9lHbY1tqrt/eRB",
+	"sQt3E+CUTvOLSiEHTbNAVz2nokhQ2anbzgaQlm1+/lSza+9Pz8OmoiimTU+p5Z83F46T+x0I+xPeue82",
+	"q7Js/6wpslTrToZn7MEnprjEO8+lWNX3woMx9rcCVYGfJ86yduC7sbEL1htoT05+E0am9wcnpuvxgelE",
+	"/Vbw/gNHp/6WN/jqd7veh8e+bvr3B75X2g3TX+RVxHSXpe57oVnO51TxC39hecFkTvbr/R8BAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

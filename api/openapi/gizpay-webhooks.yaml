@@ -1,0 +1,45 @@
+openapi: 3.1.0
+info: {title: GizPay ZITADEL Webhooks, version: 4.0.0}
+servers: [{url: https://pay.gizway.com/webhooks/v1}]
+paths:
+  /zitadel/user-authenticated:
+    post:
+      operationId: initializeHumanFromZitadel
+      security: []
+      parameters:
+        - name: X-ZITADEL-Signature
+          in: header
+          required: true
+          schema: {type: string, minLength: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ZITADELActionPayload'}
+      responses:
+        '204': {description: Human initialized or non-Human ignored}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+components:
+  schemas:
+    ErrorResponse: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}
+    ZITADELActionPayload:
+      type: object
+      additionalProperties: true
+      required: [user]
+      properties:
+        user:
+          type: object
+          additionalProperties: true
+          required: [id]
+          properties:
+            id: {type: string, minLength: 1}
+            human: {type: [object, 'null'], additionalProperties: true}
+        userinfo:
+          type: object
+          additionalProperties: true
+          properties:
+            email: {type: string}
+            name: {type: string}
+            preferred_username: {type: string}

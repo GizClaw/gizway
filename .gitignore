@@ -24,6 +24,8 @@ node_modules/
 .vite/
 .next/
 storybook-static/
+playwright-report/
+test-results/
 *.tsbuildinfo
 
 # Local configuration and secrets

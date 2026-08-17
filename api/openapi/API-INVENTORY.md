@@ -1,7 +1,7 @@
 
 # Current implementation API inventory
 
-Final retained operation count: **39**.
+Final retained operation count: **41**.
 
 | OpenAPI file | Method | Path | operationId | Service | Status | Deletion reason | Hurl coverage |
 |---|---|---|---|---|---|---|---|
@@ -9,9 +9,8 @@ Final retained operation count: **39**.
 | account.yaml | GET | `/account/v1/accounts/{account_id}/balance` | getAccountBalance | GizPay | Keep | - | tests/api/stories/24-milestone-03/01-initialize-and-account.hurl |
 | account.yaml | GET | `/account/v1/accounts/{account_id}/charges` | listAccountCharges | GizPay | Keep | - | tests/api/stories/24-milestone-03/01-initialize-and-account.hurl |
 | account.yaml | GET | `/account/v1/accounts/{account_id}/topups` | listAccountTopups | GizPay | Keep | - | tests/api/stories/24-milestone-03/04-topups-and-ledger.hurl |
-| account.yaml | POST | `/account/v1/accounts/{account_id}/topups` | createAccountTopup | GizPay | Keep | - | tests/api/stories/24-milestone-03/04-topups-and-ledger.hurl |
+| account.yaml | POST | `/account/v1/accounts/{account_id}/topups` | createAccountTopup | GizPay | Keep | - | tests/api/stories/24-milestone-03/04-topups-and-ledger.hurl<br>tests/api/stories/25-milestone-04/01-idempotent-writes.hurl |
 | account.yaml | GET | `/account/v1/accounts/{account_id}/transactions` | listAccountTransactions | GizPay | Keep | - | tests/api/stories/24-milestone-03/01-initialize-and-account.hurl |
-| account.yaml | POST | `/account/v1/initialize` | initializeUser | GizPay | Keep | - | tests/api/stories/24-milestone-03/01-initialize-and-account.hurl |
 | account.yaml | GET | `/account/v1/merchants` | listMerchants | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
 | account.yaml | POST | `/account/v1/merchants` | createMerchant | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
 | account.yaml | GET | `/account/v1/merchants/{merchant_id}` | getMerchant | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
@@ -21,7 +20,7 @@ Final retained operation count: **39**.
 | account.yaml | GET | `/account/v1/products` | listProducts | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
 | account.yaml | GET | `/account/v1/products/{product_id}` | getProduct | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
 | account.yaml | PATCH | `/account/v1/products/{product_id}` | updateProduct | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
-| account.yaml | POST | `/account/v1/products/{product_id}/subscriptions` | createProductSubscription | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
+| account.yaml | POST | `/account/v1/products/{product_id}/subscriptions` | createProductSubscription | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl<br>tests/api/stories/25-milestone-04/01-idempotent-writes.hurl |
 | account.yaml | GET | `/account/v1/service-accounts` | listServiceAccounts | GizPay | Keep | - | tests/api/stories/24-milestone-03/05-service-accounts-and-charge.hurl |
 | account.yaml | POST | `/account/v1/service-accounts` | createServiceAccount | GizPay | Keep | - | tests/api/stories/24-milestone-03/05-service-accounts-and-charge.hurl |
 | account.yaml | DELETE | `/account/v1/service-accounts/{service_account_id}` | revokeServiceAccount | GizPay | Keep | - | tests/api/stories/24-milestone-03/05-service-accounts-and-charge.hurl |
@@ -29,9 +28,12 @@ Final retained operation count: **39**.
 | account.yaml | GET | `/account/v1/subscriptions/{subscription_id}` | getSubscription | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
 | account.yaml | PATCH | `/account/v1/subscriptions/{subscription_id}` | updateSubscription | GizPay | Keep | - | tests/api/stories/24-milestone-03/02-merchant-product-subscription.hurl |
 | account.yaml | GET | `/account/v1/subscriptions/{subscription_id}/keys` | listSubscriptionKeys | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl |
-| account.yaml | POST | `/account/v1/subscriptions/{subscription_id}/keys` | createSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl |
+| account.yaml | POST | `/account/v1/subscriptions/{subscription_id}/keys` | createSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl<br>tests/api/stories/25-milestone-04/01-idempotent-writes.hurl |
 | account.yaml | GET | `/account/v1/subscriptions/{subscription_id}/keys/{subscription_key_id}` | getSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl |
 | account.yaml | POST | `/account/v1/subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke` | revokeSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl |
+| gizpay-webhooks.yaml | POST | `/webhooks/v1/zitadel/user-authenticated` | initializeHumanFromZitadel | GizPay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
+| gizway-public.yaml | GET | `/auth/catalog-token` | getPublicCatalogToken | GizWay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
+| gizway-public.yaml | GET | `/auth/runtime-config` | getPublicRuntimeConfig | GizWay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
 | gizway-public.yaml | POST | `/v1/chat/completions` | createChatCompletion | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-public.yaml | POST | `/v1/messages` | createAnthropicMessage | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-public.yaml | GET | `/v1/models` | listModels | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
@@ -40,7 +42,7 @@ Final retained operation count: **39**.
 | gizway-public.yaml | POST | `/v1beta/models/{operation}` | generateGeminiContent | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-user.yaml | POST | `/user/v1/provider-keys/{provider_key_id}/disable` | disableProviderKey | GizWay | Keep | - | tests/api/stories/24-milestone-03/06-provider-key-commands.hurl |
 | gizway-user.yaml | PUT | `/user/v1/provider-keys/{provider_key_id}/prices` | putProviderKeyPrices | GizWay | Keep | - | tests/api/stories/24-milestone-03/06-provider-key-commands.hurl |
-| gizway-user.yaml | POST | `/user/v1/providers/{provider_id}/keys` | createProviderKey | GizWay | Keep | - | tests/api/stories/24-milestone-03/06-provider-key-commands.hurl |
+| gizway-user.yaml | POST | `/user/v1/providers/{provider_id}/keys` | createProviderKey | GizWay | Keep | - | tests/api/stories/24-milestone-03/06-provider-key-commands.hurl<br>tests/api/stories/25-milestone-04/01-idempotent-writes.hurl |
 | internal-gizpay.yaml | POST | `/service/v1/payg-charges` | createPAYGCharge | GizPay | Keep | - | tests/api/stories/24-milestone-03/05-service-accounts-and-charge.hurl |
 | internal-gizpay.yaml | GET | `/service/v1/payg-charges/{external_order_id}` | getPAYGCharge | GizPay | Keep | - | tests/api/stories/24-milestone-03/05-service-accounts-and-charge.hurl |
 | internal-gizpay.yaml | POST | `/service/v1/subscription-credit-checks` | checkSubscriptionCredit | GizPay | Keep | - | tests/api/stories/24-milestone-03/05-service-accounts-and-charge.hurl |

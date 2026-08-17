@@ -11,11 +11,12 @@ CREATE TABLE gizway_user_merchants (
 );
 
 CREATE TABLE model_customer_prices (
+    id TEXT GENERATED ALWAYS AS (model_id || ':' || metric) STORED PRIMARY KEY,
     model_id TEXT NOT NULL,
     metric TEXT NOT NULL,
     unit_size BIGINT NOT NULL CHECK (unit_size > 0),
     price_microcredits BIGINT NOT NULL CHECK (price_microcredits >= 0),
-    PRIMARY KEY (model_id, metric)
+    UNIQUE (model_id, metric)
 );
 
 CREATE TABLE provider_key_billing (
@@ -23,6 +24,9 @@ CREATE TABLE provider_key_billing (
     owner_identity_issuer TEXT NOT NULL,
     owner_identity_subject TEXT NOT NULL,
     merchant_id TEXT NOT NULL,
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    last_used_at TIMESTAMPTZ,
+    earned_microcredits BIGINT NOT NULL DEFAULT 0 CHECK (earned_microcredits >= 0),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -42,6 +46,7 @@ CREATE TABLE ai_orders (
     external_order_id TEXT NOT NULL UNIQUE,
     provider_key_id TEXT NOT NULL,
     subscription_key_hmac TEXT NOT NULL,
+    subscription_key_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
     subscription_id TEXT NOT NULL,
     product_id TEXT NOT NULL,
@@ -70,6 +75,23 @@ CREATE TABLE charge_outbox (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE model_listings (
+    id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    description TEXT NOT NULL DEFAULT '',
+    family TEXT NOT NULL CHECK (length(trim(family)) > 0),
+    context TEXT NOT NULL DEFAULT '',
+    latency TEXT NOT NULL DEFAULT '',
+    accent TEXT NOT NULL DEFAULT '',
+    featured BOOLEAN NOT NULL DEFAULT false,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available','unavailable')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (model_id)
+);
+
 CREATE SCHEMA client_sync;
 CREATE TABLE client_sync.models (
     id TEXT PRIMARY KEY,
@@ -91,6 +113,9 @@ CREATE TABLE client_sync.provider_keys (
     merchant_id TEXT NOT NULL,
     owner_identity_issuer TEXT NOT NULL,
     owner_identity_subject TEXT NOT NULL,
+    name TEXT NOT NULL,
+    last_used_at TIMESTAMPTZ,
+    earned_microcredits BIGINT NOT NULL DEFAULT 0 CHECK (earned_microcredits >= 0),
     status TEXT NOT NULL,
     prices_json JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,

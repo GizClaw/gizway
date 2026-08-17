@@ -10,7 +10,7 @@ go_command="${GO:-go}"
 diagnostics="$(mktemp "${TMPDIR:-/tmp}/gizway-modernize.XXXXXX")"
 trap 'rm -f "${diagnostics}"' EXIT INT TERM
 
-if "${go_command}" tool modernize ./... >"${diagnostics}" 2>&1; then
+if "${go_command}" tool modernize "$@" >"${diagnostics}" 2>&1; then
     exit 0
 fi
 

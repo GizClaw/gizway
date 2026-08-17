@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: {title: GizPay Service API, version: 3.0.0}
+info: {title: GizPay Service API, version: 4.0.0}
 servers: [{url: https://pay.gizway.com/service/v1}]
 security: [{serviceBearer: []}]
 paths:
@@ -23,17 +23,19 @@ components:
   securitySchemes:
     serviceBearer: {type: http, scheme: bearer, bearerFormat: JWT}
   schemas:
+    ErrorResponse: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}
     CreditCheckRequest:
       type: object
       required: [subscription_key_hmac]
       properties: {subscription_key_hmac: {type: string, minLength: 43, maxLength: 64}}
     CreditCheckResponse:
       type: object
-      required: [status, available_microcredits, account_id, subscription_id, product_id, billing_mode, owner_identity_issuer, owner_identity_subject, checked_at, recheck_after_seconds]
+      required: [status, available_microcredits, account_id, subscription_id, subscription_key_id, product_id, billing_mode, owner_identity_issuer, owner_identity_subject, checked_at, recheck_after_seconds]
       properties:
         status: {type: string, enum: [allowed, denied]}
         account_id: {type: string}
         subscription_id: {type: string}
+        subscription_key_id: {type: string}
         product_id: {type: string}
         billing_mode: {type: string, const: pay_as_you_go}
         owner_identity_issuer: {type: string}

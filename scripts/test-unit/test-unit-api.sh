@@ -4,8 +4,8 @@ set -u
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repository_root="$(CDPATH= cd -- "${script_dir}/../.." && pwd)"
 compose="${repository_root}/tests/e2e/compose.yaml"
-results="$(mktemp "${TMPDIR:-/tmp}/gizway-m03-api.XXXXXX")"
-project="gizway-m03-api-$$"
+results="$(mktemp "${TMPDIR:-/tmp}/gizway-m04-api.XXXXXX")"
+project="gizway-m04-api-$$"
 
 cleanup() {
     status=$?
@@ -18,12 +18,12 @@ trap cleanup EXIT INT TERM
 
 for command in docker hurlfmt go; do
     if ! command -v "${command}" >/dev/null 2>&1; then
-        echo "${command} is required to run Milestone 03 API contracts" >&2
+        echo "${command} is required to run API contracts" >&2
         exit 1
     fi
 done
 
-stories="$(find "${repository_root}/tests/api/stories/24-milestone-03" -type f -name '*.hurl' -print | sort)"
+stories="$(find "${repository_root}/tests/api/stories/24-milestone-03" "${repository_root}/tests/api/stories/25-milestone-04" -type f -name '*.hurl' -print | sort)"
 for story in ${stories}; do
     if hurlfmt --check "${story}"; then
         printf '%s\tPARSE_PASS\n' "${story#${repository_root}/}" >>"${results}"
@@ -52,7 +52,7 @@ fi
 
 for story in ${stories}; do
     name="$(basename "${story}" .hurl)"
-    if [ -n "${MILESTONE03_STORY_FILTER:-}" ] && [ "${name}" != "${MILESTONE03_STORY_FILTER}" ]; then
+    if [ -n "${MILESTONE_STORY_FILTER:-${MILESTONE03_STORY_FILTER:-}}" ] && [ "${name}" != "${MILESTONE_STORY_FILTER:-${MILESTONE03_STORY_FILTER:-}}" ]; then
         continue
     fi
     if [ "${stack_ready}" = true ] && docker compose --project-name "${project}" -f "${compose}" --profile milestone-03-api run --rm --no-deps \
@@ -91,5 +91,7 @@ if [ "${stack_ready}" != true ]; then
 fi
 cat "${results}"
 if grep -Eq 'PARSE_FAIL|[[:space:]]FAIL$' "${results}"; then
+	docker compose --project-name "${project}" -f "${compose}" logs --tail 200 --no-log-prefix gizpay gizway-cn gizway-global credit-spy oauth-spy bootstrap-milestone-03 || true
+    docker compose --project-name "${project}" -f "${compose}" exec -T oauth-spy curl --fail --silent http://localhost:19500/test/stats || true
     exit 1
 fi

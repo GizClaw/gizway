@@ -5,6 +5,7 @@ POST {{way_url}}/user/v1/providers/{{provider_id}}/keys
 Authorization: Bearer {{human_token}}
 Content-Type: application/json
 {
+  "id": "pkey_m03_retained",
   "name": "M03 contributed key",
   "key": "{{provider_key_secret}}",
   "status": "active",
@@ -25,6 +26,8 @@ POST {{way_url}}/user/v1/providers/{{provider_id}}/keys
 Authorization: Bearer {{human_token}}
 Content-Type: application/json
 {
+  "id": "pkey_m03_missing_status",
+  "name": "Missing status",
   "key": "{{provider_key_secret_two}}",
   "prices": [{"model_id":"{{seeded_model_id}}","metric":"input_tokens","unit_size":1000000,"microcredits_per_unit":1}]
 }
@@ -39,7 +42,10 @@ POST {{way_url}}/user/v1/providers/{{provider_id}}/keys
 Authorization: Bearer {{human_token}}
 Content-Type: application/json
 {
+  "id": "pkey_m03_forbidden_merchant",
+  "name": "Forbidden merchant",
   "key": "{{provider_key_secret_two}}",
+  "status": "active",
   "merchant_id": "attacker-selected",
   "prices": [{"model_id":"{{seeded_model_id}}","metric":"input_tokens","unit_size":1000000,"microcredits_per_unit":1}]
 }

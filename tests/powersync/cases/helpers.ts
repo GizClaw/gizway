@@ -11,6 +11,8 @@ export type SyncEnvironment = {
   tokenTwo: string;
   invalidAudienceToken: string;
   humanToken: string;
+  cnCatalogToken: string;
+  globalCatalogToken: string;
   payURL: string;
   wayURL: string;
 };
@@ -24,6 +26,8 @@ export function loadEnvironment(): SyncEnvironment | null {
     tokenTwo: process.env.M03_POWERSYNC_TOKEN_TWO ?? '',
     invalidAudienceToken: process.env.M03_POWERSYNC_INVALID_AUDIENCE_TOKEN ?? '',
     humanToken: process.env.M03_HUMAN_TOKEN ?? process.env.M03_POWERSYNC_TOKEN ?? '',
+    cnCatalogToken: process.env.M04_POWERSYNC_CN_CATALOG_TOKEN ?? '',
+    globalCatalogToken: process.env.M04_POWERSYNC_GLOBAL_CATALOG_TOKEN ?? '',
     payURL: process.env.M03_PAY_URL ?? '',
     wayURL: process.env.M03_GLOBAL_URL ?? ''
   };

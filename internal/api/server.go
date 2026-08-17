@@ -100,15 +100,20 @@ func (s *Server) advanceStoryClock(w http.ResponseWriter, r *http.Request) {
 func surfaceHandler(surface Surface, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		if surface == SurfaceGizPay && path == "/account/v1/initialize" {
+			writeError(w, http.StatusNotFound, "not_found", "resource not found")
+			return
+		}
 		allowed := path == "/healthz" || strings.HasPrefix(path, "/test/")
 		if surface == SurfaceGizPay {
-			allowed = allowed || strings.HasPrefix(path, "/account/") || strings.HasPrefix(path, "/service/")
+			allowed = allowed || strings.HasPrefix(path, "/account/") || strings.HasPrefix(path, "/service/") ||
+				strings.HasPrefix(path, "/webhooks/")
 		} else {
 			allowed = allowed || strings.HasPrefix(path, "/user/") || strings.HasPrefix(path, "/v1/") ||
-				strings.HasPrefix(path, "/v1beta/")
+				strings.HasPrefix(path, "/v1beta/") || strings.HasPrefix(path, "/auth/")
 		}
 		if !allowed {
-			http.NotFound(w, r)
+			writeError(w, http.StatusNotFound, "not_found", "resource not found")
 			return
 		}
 		next.ServeHTTP(w, r)

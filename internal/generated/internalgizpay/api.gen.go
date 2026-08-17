@@ -25,13 +25,13 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
-// Defines values for CreditCheckResponseBillingMode.
+// Defines values for CheckSubscriptionCredit200JSONResponseBodyBillingMode.
 const (
-	PayAsYouGo CreditCheckResponseBillingMode = "pay_as_you_go"
+	PayAsYouGo CheckSubscriptionCredit200JSONResponseBodyBillingMode = "pay_as_you_go"
 )
 
-// Valid indicates whether the value is a known member of the CreditCheckResponseBillingMode enum.
-func (e CreditCheckResponseBillingMode) Valid() bool {
+// Valid indicates whether the value is a known member of the CheckSubscriptionCredit200JSONResponseBodyBillingMode enum.
+func (e CheckSubscriptionCredit200JSONResponseBodyBillingMode) Valid() bool {
 	switch e {
 	case PayAsYouGo:
 		return true
@@ -40,14 +40,14 @@ func (e CreditCheckResponseBillingMode) Valid() bool {
 	}
 }
 
-// Defines values for CreditCheckResponseStatus.
+// Defines values for CheckSubscriptionCredit200JSONResponseBodyStatus.
 const (
-	Allowed CreditCheckResponseStatus = "allowed"
-	Denied  CreditCheckResponseStatus = "denied"
+	Allowed CheckSubscriptionCredit200JSONResponseBodyStatus = "allowed"
+	Denied  CheckSubscriptionCredit200JSONResponseBodyStatus = "denied"
 )
 
-// Valid indicates whether the value is a known member of the CreditCheckResponseStatus enum.
-func (e CreditCheckResponseStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the CheckSubscriptionCredit200JSONResponseBodyStatus enum.
+func (e CheckSubscriptionCredit200JSONResponseBodyStatus) Valid() bool {
 	switch e {
 	case Allowed:
 		return true
@@ -58,20 +58,12 @@ func (e CreditCheckResponseStatus) Valid() bool {
 	}
 }
 
-// Charge defines model for Charge.
-type Charge struct {
-	ChargeId                    string        `json:"charge_id"`
-	Commissions                 *[]Commission `json:"commissions,omitempty"`
-	ExternalOrderId             string        `json:"external_order_id"`
-	GrossMicrocredits           int64         `json:"gross_microcredits"`
-	LedgerTransactionId         string        `json:"ledger_transaction_id"`
-	MainMerchantNetMicrocredits int64         `json:"main_merchant_net_microcredits"`
-	PlatformFeeMicrocredits     int64         `json:"platform_fee_microcredits"`
-}
-
-// ChargeRequest defines model for ChargeRequest.
-type ChargeRequest struct {
-	Commissions         []Commission           `json:"commissions"`
+// CreatePAYGChargeJSONBody defines parameters for CreatePAYGCharge.
+type CreatePAYGChargeJSONBody struct {
+	Commissions []struct {
+		AmountMicrocredits int64  `json:"amount_microcredits"`
+		MerchantId         string `json:"merchant_id"`
+	} `json:"commissions"`
 	ExternalOrderId     string                 `json:"external_order_id"`
 	GrossMicrocredits   int64                  `json:"gross_microcredits"`
 	Order               map[string]interface{} `json:"order"`
@@ -80,42 +72,22 @@ type ChargeRequest struct {
 	SubscriptionKeyHmac string                 `json:"subscription_key_hmac"`
 }
 
-// Commission defines model for Commission.
-type Commission struct {
-	AmountMicrocredits int64  `json:"amount_microcredits"`
-	MerchantId         string `json:"merchant_id"`
-}
-
-// CreditCheckRequest defines model for CreditCheckRequest.
-type CreditCheckRequest struct {
+// CheckSubscriptionCreditJSONBody defines parameters for CheckSubscriptionCredit.
+type CheckSubscriptionCreditJSONBody struct {
 	SubscriptionKeyHmac string `json:"subscription_key_hmac"`
 }
 
-// CreditCheckResponse defines model for CreditCheckResponse.
-type CreditCheckResponse struct {
-	AccountId             string                         `json:"account_id"`
-	AvailableMicrocredits int64                          `json:"available_microcredits"`
-	BillingMode           CreditCheckResponseBillingMode `json:"billing_mode"`
-	CheckedAt             time.Time                      `json:"checked_at"`
-	OwnerIdentityIssuer   string                         `json:"owner_identity_issuer"`
-	OwnerIdentitySubject  string                         `json:"owner_identity_subject"`
-	ProductId             string                         `json:"product_id"`
-	RecheckAfterSeconds   int64                          `json:"recheck_after_seconds"`
-	Status                CreditCheckResponseStatus      `json:"status"`
-	SubscriptionId        string                         `json:"subscription_id"`
-}
+// CheckSubscriptionCredit200JSONResponseBodyBillingMode defines parameters for CheckSubscriptionCredit.
+type CheckSubscriptionCredit200JSONResponseBodyBillingMode string
 
-// CreditCheckResponseBillingMode defines model for CreditCheckResponse.BillingMode.
-type CreditCheckResponseBillingMode string
-
-// CreditCheckResponseStatus defines model for CreditCheckResponse.Status.
-type CreditCheckResponseStatus string
+// CheckSubscriptionCredit200JSONResponseBodyStatus defines parameters for CheckSubscriptionCredit.
+type CheckSubscriptionCredit200JSONResponseBodyStatus string
 
 // CreatePAYGChargeJSONRequestBody defines body for CreatePAYGCharge for application/json ContentType.
-type CreatePAYGChargeJSONRequestBody = ChargeRequest
+type CreatePAYGChargeJSONRequestBody CreatePAYGChargeJSONBody
 
 // CheckSubscriptionCreditJSONRequestBody defines body for CheckSubscriptionCredit for application/json ContentType.
-type CheckSubscriptionCreditJSONRequestBody = CreditCheckRequest
+type CheckSubscriptionCreditJSONRequestBody CheckSubscriptionCreditJSONBody
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -468,11 +440,33 @@ type CreatePAYGChargeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Charge
+	JSON201 *struct {
+		ChargeId    string `json:"charge_id"`
+		Commissions *[]struct {
+			AmountMicrocredits int64  `json:"amount_microcredits"`
+			MerchantId         string `json:"merchant_id"`
+		} `json:"commissions,omitempty"`
+		ExternalOrderId             string `json:"external_order_id"`
+		GrossMicrocredits           int64  `json:"gross_microcredits"`
+		LedgerTransactionId         string `json:"ledger_transaction_id"`
+		MainMerchantNetMicrocredits int64  `json:"main_merchant_net_microcredits"`
+		PlatformFeeMicrocredits     int64  `json:"platform_fee_microcredits"`
+	}
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreatePAYGChargeResponse) GetJSON201() *Charge {
+func (r CreatePAYGChargeResponse) GetJSON201() *struct {
+	ChargeId    string `json:"charge_id"`
+	Commissions *[]struct {
+		AmountMicrocredits int64  `json:"amount_microcredits"`
+		MerchantId         string `json:"merchant_id"`
+	} `json:"commissions,omitempty"`
+	ExternalOrderId             string `json:"external_order_id"`
+	GrossMicrocredits           int64  `json:"gross_microcredits"`
+	LedgerTransactionId         string `json:"ledger_transaction_id"`
+	MainMerchantNetMicrocredits int64  `json:"main_merchant_net_microcredits"`
+	PlatformFeeMicrocredits     int64  `json:"platform_fee_microcredits"`
+} {
 	return r.JSON201
 }
 
@@ -509,11 +503,33 @@ type GetPAYGChargeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Charge
+	JSON200 *struct {
+		ChargeId    string `json:"charge_id"`
+		Commissions *[]struct {
+			AmountMicrocredits int64  `json:"amount_microcredits"`
+			MerchantId         string `json:"merchant_id"`
+		} `json:"commissions,omitempty"`
+		ExternalOrderId             string `json:"external_order_id"`
+		GrossMicrocredits           int64  `json:"gross_microcredits"`
+		LedgerTransactionId         string `json:"ledger_transaction_id"`
+		MainMerchantNetMicrocredits int64  `json:"main_merchant_net_microcredits"`
+		PlatformFeeMicrocredits     int64  `json:"platform_fee_microcredits"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetPAYGChargeResponse) GetJSON200() *Charge {
+func (r GetPAYGChargeResponse) GetJSON200() *struct {
+	ChargeId    string `json:"charge_id"`
+	Commissions *[]struct {
+		AmountMicrocredits int64  `json:"amount_microcredits"`
+		MerchantId         string `json:"merchant_id"`
+	} `json:"commissions,omitempty"`
+	ExternalOrderId             string `json:"external_order_id"`
+	GrossMicrocredits           int64  `json:"gross_microcredits"`
+	LedgerTransactionId         string `json:"ledger_transaction_id"`
+	MainMerchantNetMicrocredits int64  `json:"main_merchant_net_microcredits"`
+	PlatformFeeMicrocredits     int64  `json:"platform_fee_microcredits"`
+} {
 	return r.JSON200
 }
 
@@ -550,11 +566,35 @@ type CheckSubscriptionCreditResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *CreditCheckResponse
+	JSON200 *struct {
+		AccountId             string                                                `json:"account_id"`
+		AvailableMicrocredits int64                                                 `json:"available_microcredits"`
+		BillingMode           CheckSubscriptionCredit200JSONResponseBodyBillingMode `json:"billing_mode"`
+		CheckedAt             time.Time                                             `json:"checked_at"`
+		OwnerIdentityIssuer   string                                                `json:"owner_identity_issuer"`
+		OwnerIdentitySubject  string                                                `json:"owner_identity_subject"`
+		ProductId             string                                                `json:"product_id"`
+		RecheckAfterSeconds   int64                                                 `json:"recheck_after_seconds"`
+		Status                CheckSubscriptionCredit200JSONResponseBodyStatus      `json:"status"`
+		SubscriptionId        string                                                `json:"subscription_id"`
+		SubscriptionKeyId     string                                                `json:"subscription_key_id"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r CheckSubscriptionCreditResponse) GetJSON200() *CreditCheckResponse {
+func (r CheckSubscriptionCreditResponse) GetJSON200() *struct {
+	AccountId             string                                                `json:"account_id"`
+	AvailableMicrocredits int64                                                 `json:"available_microcredits"`
+	BillingMode           CheckSubscriptionCredit200JSONResponseBodyBillingMode `json:"billing_mode"`
+	CheckedAt             time.Time                                             `json:"checked_at"`
+	OwnerIdentityIssuer   string                                                `json:"owner_identity_issuer"`
+	OwnerIdentitySubject  string                                                `json:"owner_identity_subject"`
+	ProductId             string                                                `json:"product_id"`
+	RecheckAfterSeconds   int64                                                 `json:"recheck_after_seconds"`
+	Status                CheckSubscriptionCredit200JSONResponseBodyStatus      `json:"status"`
+	SubscriptionId        string                                                `json:"subscription_id"`
+	SubscriptionKeyId     string                                                `json:"subscription_key_id"`
+} {
 	return r.JSON200
 }
 
@@ -657,7 +697,18 @@ func ParseCreatePAYGChargeResponse(rsp *http.Response) (*CreatePAYGChargeRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Charge
+		var dest struct {
+			ChargeId    string `json:"charge_id"`
+			Commissions *[]struct {
+				AmountMicrocredits int64  `json:"amount_microcredits"`
+				MerchantId         string `json:"merchant_id"`
+			} `json:"commissions,omitempty"`
+			ExternalOrderId             string `json:"external_order_id"`
+			GrossMicrocredits           int64  `json:"gross_microcredits"`
+			LedgerTransactionId         string `json:"ledger_transaction_id"`
+			MainMerchantNetMicrocredits int64  `json:"main_merchant_net_microcredits"`
+			PlatformFeeMicrocredits     int64  `json:"platform_fee_microcredits"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -686,7 +737,18 @@ func ParseGetPAYGChargeResponse(rsp *http.Response) (*GetPAYGChargeResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Charge
+		var dest struct {
+			ChargeId    string `json:"charge_id"`
+			Commissions *[]struct {
+				AmountMicrocredits int64  `json:"amount_microcredits"`
+				MerchantId         string `json:"merchant_id"`
+			} `json:"commissions,omitempty"`
+			ExternalOrderId             string `json:"external_order_id"`
+			GrossMicrocredits           int64  `json:"gross_microcredits"`
+			LedgerTransactionId         string `json:"ledger_transaction_id"`
+			MainMerchantNetMicrocredits int64  `json:"main_merchant_net_microcredits"`
+			PlatformFeeMicrocredits     int64  `json:"platform_fee_microcredits"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -715,7 +777,19 @@ func ParseCheckSubscriptionCreditResponse(rsp *http.Response) (*CheckSubscriptio
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CreditCheckResponse
+		var dest struct {
+			AccountId             string                                                `json:"account_id"`
+			AvailableMicrocredits int64                                                 `json:"available_microcredits"`
+			BillingMode           CheckSubscriptionCredit200JSONResponseBodyBillingMode `json:"billing_mode"`
+			CheckedAt             time.Time                                             `json:"checked_at"`
+			OwnerIdentityIssuer   string                                                `json:"owner_identity_issuer"`
+			OwnerIdentitySubject  string                                                `json:"owner_identity_subject"`
+			ProductId             string                                                `json:"product_id"`
+			RecheckAfterSeconds   int64                                                 `json:"recheck_after_seconds"`
+			Status                CheckSubscriptionCredit200JSONResponseBodyStatus      `json:"status"`
+			SubscriptionId        string                                                `json:"subscription_id"`
+			SubscriptionKeyId     string                                                `json:"subscription_key_id"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -922,9 +996,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription-credit-checks", wrapper.CheckSubscriptionCredit)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/payg-charges", wrapper.CreatePAYGCharge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/payg-charges/{external_order_id}", wrapper.GetPAYGCharge)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription-credit-checks", wrapper.CheckSubscriptionCredit)
 
 	return m
 }
@@ -934,22 +1008,22 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"EgaYca6+PmE9llZPdt6Txxk0y+aPAAAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

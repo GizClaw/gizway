@@ -12,7 +12,6 @@ func TestMilestone03GizPayRouteBoundary(t *testing.T) {
 	business := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	server := NewMilestone03(SurfaceGizPay, "gizpay", business, nil)
 	for _, route := range []struct{ method, path string }{
-		{http.MethodPost, "/account/v1/initialize"},
 		{http.MethodGet, "/account/v1/accounts"},
 		{http.MethodPost, "/account/v1/accounts/account-1/topups"},
 		{http.MethodGet, "/account/v1/accounts/account-1/topups"},

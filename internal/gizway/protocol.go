@@ -34,7 +34,7 @@ type priceRow struct {
 type resolvedCall struct {
 	ProductID, ModelID, PublicModel, ProviderID, ProviderModel string
 	KeyID, MerchantID                                          string
-	AccountID, SubscriptionID                                  string
+	AccountID, SubscriptionID, SubscriptionKeyID               string
 	OwnerIssuer, OwnerSubject                                  string
 	Target                                                     store.ProviderExecutionTarget
 	Targets                                                    []store.ProviderExecutionTarget
@@ -145,6 +145,7 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 	keyHMAC := subscriptionkey.HMAC(h.config.HMACSecret, rawKey)
 	admission, admissionErr := h.admit(r.Context(), keyHMAC)
 	if admissionErr != nil {
+		h.diagnostic("Credit Check failed", admissionErr)
 		errJSON(w, http.StatusServiceUnavailable, "credit_check_unavailable", "Credit Check unavailable")
 		return
 	}
@@ -341,6 +342,9 @@ func (h *Handler) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 				executionErr = errors.New("realtime terminal event lacks usage")
 				return
 			}
+			if usedErr := h.markProviderKeyUsed(context.Background(), session.Call.KeyID, h.config.Now().UTC()); usedErr != nil {
+				h.diagnostic("update Provider Key last_used_at", usedErr, "selected_key_id", session.Call.KeyID)
+			}
 			gross, commission, rateErr := ratedUsage(usage, session.Call.CustomerPrices, session.Call.CommissionPrices)
 			if rateErr != nil {
 				executionErr = rateErr
@@ -412,6 +416,7 @@ func (state *creditState) snapshot() creditAdmission {
 func (admission creditAdmission) applyTo(call *resolvedCall) {
 	call.ProductID = admission.productID
 	call.AccountID, call.SubscriptionID = admission.accountID, admission.subscriptionID
+	call.SubscriptionKeyID = admission.subscriptionKeyID
 	call.OwnerIssuer, call.OwnerSubject = admission.ownerIssuer, admission.ownerSubject
 }
 
@@ -449,6 +454,7 @@ func (h *Handler) checkCredit(ctx context.Context, keyHMAC string) (creditCheckR
 		RecheckAfterSeconds int64     `json:"recheck_after_seconds"`
 		AccountID           string    `json:"account_id"`
 		SubscriptionID      string    `json:"subscription_id"`
+		SubscriptionKeyID   string    `json:"subscription_key_id"`
 		OwnerIssuer         string    `json:"owner_identity_issuer"`
 		OwnerSubject        string    `json:"owner_identity_subject"`
 		CheckedAt           time.Time `json:"checked_at"`
@@ -465,7 +471,8 @@ func (h *Handler) checkCredit(ctx context.Context, keyHMAC string) (creditCheckR
 	return creditCheckResult{
 		admission: creditAdmission{
 			accountID: result.AccountID, subscriptionID: result.SubscriptionID,
-			productID: result.ProductID, billing: result.BillingMode,
+			subscriptionKeyID: result.SubscriptionKeyID,
+			productID:         result.ProductID, billing: result.BillingMode,
 			ownerIssuer: result.OwnerIssuer, ownerSubject: result.OwnerSubject,
 			allowed: result.Status == "allowed",
 		},
@@ -684,6 +691,11 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request, keyHMAC string, a
 	}
 	failpoint := r.Header.Get("X-Gizway-Test-Failpoint")
 	actualSelectedKeyID := response.ExtraFields.RoutingInfo.Key
+	if actualSelectedKeyID != "" {
+		if usedErr := h.markProviderKeyUsed(context.WithoutCancel(r.Context()), actualSelectedKeyID, h.config.Now().UTC()); usedErr != nil {
+			h.diagnostic("update Provider Key last_used_at", usedErr, "selected_key_id", actualSelectedKeyID)
+		}
+	}
 	response.Model = body.Model
 	publicResponse, err := publicChatResponse(protocol, response, body.Model)
 	if err != nil {
@@ -852,6 +864,9 @@ func (h *Handler) streamChat(w http.ResponseWriter, r *http.Request, keyHMAC str
 		logCall := h.callForExecutionLog(call, selectedKeyID)
 		h.recordExecution(context.Background(), logCall, usage, 0, 0, "streaming", "", "error", streamErr, "")
 		return
+	}
+	if usedErr := h.markProviderKeyUsed(context.Background(), selectedKeyID, h.config.Now().UTC()); usedErr != nil {
+		h.diagnostic("update Provider Key last_used_at", usedErr, "selected_key_id", selectedKeyID)
 	}
 	switch protocol {
 	case "openai":
@@ -1057,7 +1072,7 @@ func (h *Handler) completeCall(ctx context.Context, keyHMAC string, call resolve
 	if failpoint == "ai_order_write" {
 		return errors.New("injected AI Order write failure")
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,billing_error,status,created_at,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`, orderID, externalID, call.KeyID, keyHMAC, call.AccountID, call.SubscriptionID, call.ProductID, call.OwnerIssuer, call.OwnerSubject, call.ModelID, call.ProviderID, gross, commission, string(pricingSnapshot), string(providerSnapshot), billingErrorValue, status, now, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO ai_orders(id,external_order_id,provider_key_id,subscription_key_hmac,subscription_key_id,account_id,subscription_id,product_id,owner_identity_issuer,owner_identity_subject,model_id,provider_id,gross_microcredits,commission_microcredits,pricing_snapshot,provider_snapshot,billing_error,status,created_at,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`, orderID, externalID, call.KeyID, keyHMAC, call.SubscriptionKeyID, call.AccountID, call.SubscriptionID, call.ProductID, call.OwnerIssuer, call.OwnerSubject, call.ModelID, call.ProviderID, gross, commission, string(pricingSnapshot), string(providerSnapshot), billingErrorValue, status, now, now)
 	if err != nil {
 		return err
 	}
@@ -1099,6 +1114,7 @@ func (h *Handler) reportOutbox(externalID string) {
 	}
 	token, err := h.config.ServiceToken(context.Background())
 	if err != nil {
+		h.diagnostic("obtain GizPay Charge service token", err, "external_order_id", externalID)
 		return
 	}
 	request, err := http.NewRequest(http.MethodPost, strings.TrimRight(h.config.GizPayURL, "/")+"/service/v1/payg-charges", bytes.NewReader(payload))
@@ -1121,6 +1137,7 @@ func (h *Handler) reportOutbox(externalID string) {
 	}
 	response, err := h.config.HTTPClient.Do(request)
 	if err != nil {
+		h.diagnostic("send GizPay Charge request", err, "external_order_id", externalID)
 		_, _ = h.config.DB.Exec(`UPDATE charge_outbox SET status='pending',recover_duplicate=true,updated_at=$1 WHERE id=$2`, h.config.Now().UTC(), outboxID)
 		return
 	}
@@ -1162,19 +1179,7 @@ func (h *Handler) reportOutbox(externalID string) {
 		getResponse.Body.Close()
 	}
 	if success {
-		result, updateErr := h.config.DB.Exec(`WITH reported AS (
-			UPDATE charge_outbox SET status='reported',recover_duplicate=false,updated_at=$1
-			WHERE id=$2 AND ai_order_id=$3
-			RETURNING ai_order_id
-		) UPDATE ai_orders SET status='charged'
-		  WHERE id=$3 AND id IN (SELECT ai_order_id FROM reported)`, h.config.Now().UTC(), outboxID, orderID)
-		if updateErr == nil {
-			var updated int64
-			updated, updateErr = result.RowsAffected()
-			if updateErr == nil && updated != 1 {
-				updateErr = errors.New("outbox completion updated no AI Order")
-			}
-		}
+		updateErr := h.markOutboxReported(outboxID, orderID)
 		if updateErr != nil {
 			// GizPay has accepted this logical Charge (either the POST returned
 			// 201 or recovery GET found it). If the local completion write fails,
@@ -1183,9 +1188,68 @@ func (h *Handler) reportOutbox(externalID string) {
 			_, _ = h.config.DB.Exec(`UPDATE charge_outbox SET status='pending',recover_duplicate=true,updated_at=$1 WHERE id=$2`, h.config.Now().UTC(), outboxID)
 		}
 	} else {
+		h.diagnostic("GizPay Charge request was rejected", fmt.Errorf("status %d", response.StatusCode), "external_order_id", externalID)
 		// Once a POST outcome is uncertain, a temporary POST/GET failure cannot
 		// prove that GizPay did not commit it. Preserve that state until recovery
 		// succeeds. A fresh, definitive non-409 failure remains a normal retry.
 		_, _ = h.config.DB.Exec(`UPDATE charge_outbox SET status='pending',recover_duplicate=$1,updated_at=$2 WHERE id=$3`, recoverDuplicate, h.config.Now().UTC(), outboxID)
 	}
+}
+
+func (h *Handler) markOutboxReported(outboxID, orderID string) error {
+	tx, err := h.config.DB.BeginTxx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var providerKeyID string
+	var commission int64
+	err = tx.QueryRowx(`SELECT provider_key_id,commission_microcredits FROM ai_orders WHERE id=$1 FOR UPDATE`, orderID).Scan(&providerKeyID, &commission)
+	if err != nil {
+		return err
+	}
+	result, err := tx.Exec(`UPDATE charge_outbox SET status='reported',recover_duplicate=false,updated_at=$1 WHERE id=$2 AND ai_order_id=$3 AND status IN('pending','sending')`, h.config.Now().UTC(), outboxID, orderID)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return errors.New("outbox completion updated no Outbox row")
+	}
+	if _, err = tx.Exec(`UPDATE ai_orders SET status='charged' WHERE id=$1`, orderID); err != nil {
+		return err
+	}
+	now := h.config.Now().UTC()
+	if _, err = tx.Exec(`UPDATE provider_key_billing SET earned_microcredits=earned_microcredits+$1,updated_at=$2 WHERE provider_key_id=$3`, commission, now, providerKeyID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE client_sync.provider_keys SET earned_microcredits=earned_microcredits+$1,updated_at=$2 WHERE id=$3`, commission, now, providerKeyID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (h *Handler) markProviderKeyUsed(ctx context.Context, providerKeyID string, usedAt time.Time) error {
+	tx, err := h.config.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE provider_key_billing SET last_used_at=CASE WHEN last_used_at IS NULL OR last_used_at < $1 THEN $1 ELSE last_used_at END,updated_at=CASE WHEN updated_at < $1 THEN $1 ELSE updated_at END WHERE provider_key_id=$2`, usedAt, providerKeyID)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return errors.New("provider key billing row was not updated")
+	}
+	result, err = tx.ExecContext(ctx, `UPDATE client_sync.provider_keys SET last_used_at=CASE WHEN last_used_at IS NULL OR last_used_at < $1 THEN $1 ELSE last_used_at END,updated_at=CASE WHEN updated_at < $1 THEN $1 ELSE updated_at END WHERE id=$2`, usedAt, providerKeyID)
+	if err != nil {
+		return err
+	}
+	updated, err = result.RowsAffected()
+	if err != nil || updated != 1 {
+		return errors.New("provider key sync row was not updated")
+	}
+	return tx.Commit()
 }
