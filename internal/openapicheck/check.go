@@ -105,8 +105,8 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 			return err
 		}
 	}
-	if rootCount != 4 {
-		return fmt.Errorf("expected 4 root OpenAPI documents, found %d", rootCount)
+	if rootCount != 5 {
+		return fmt.Errorf("expected 5 root OpenAPI documents, found %d", rootCount)
 	}
 	for route := range implemented {
 		path := strings.SplitN(route, " ", 2)[1]
@@ -123,7 +123,7 @@ func Check(openAPIDirectory, apiSourceDirectory, outputDirectory string) error {
 	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
 		return err
 	}
-	for _, name := range []string{"account.yaml", "gizway-user.yaml", "gizway-public.yaml", "internal-gizpay.yaml"} {
+	for _, name := range []string{"account.yaml", "gizpay-webhooks.yaml", "gizway-user.yaml", "gizway-public.yaml", "internal-gizpay.yaml"} {
 		bundled, err := bundleValue(docs, name, docs[name], map[string]bool{})
 		if err != nil {
 			return err

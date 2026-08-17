@@ -19,113 +19,248 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
 )
 
-// Defines values for CreateProviderKeyStatus.
+// Defines values for DisableProviderKey200JSONResponseBodyPricesMetric.
 const (
-	CreateProviderKeyStatusActive CreateProviderKeyStatus = "active"
+	DisableProviderKey200JSONResponseBodyPricesMetricInputTokens  DisableProviderKey200JSONResponseBodyPricesMetric = "input_tokens"
+	DisableProviderKey200JSONResponseBodyPricesMetricOutputTokens DisableProviderKey200JSONResponseBodyPricesMetric = "output_tokens"
 )
 
-// Valid indicates whether the value is a known member of the CreateProviderKeyStatus enum.
-func (e CreateProviderKeyStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the DisableProviderKey200JSONResponseBodyPricesMetric enum.
+func (e DisableProviderKey200JSONResponseBodyPricesMetric) Valid() bool {
 	switch e {
-	case CreateProviderKeyStatusActive:
+	case DisableProviderKey200JSONResponseBodyPricesMetricInputTokens:
+		return true
+	case DisableProviderKey200JSONResponseBodyPricesMetricOutputTokens:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for PriceMetric.
+// Defines values for DisableProviderKey200JSONResponseBodyStatus.
 const (
-	InputTokens  PriceMetric = "input_tokens"
-	OutputTokens PriceMetric = "output_tokens"
+	DisableProviderKey200JSONResponseBodyStatusActive   DisableProviderKey200JSONResponseBodyStatus = "active"
+	DisableProviderKey200JSONResponseBodyStatusDisabled DisableProviderKey200JSONResponseBodyStatus = "disabled"
 )
 
-// Valid indicates whether the value is a known member of the PriceMetric enum.
-func (e PriceMetric) Valid() bool {
+// Valid indicates whether the value is a known member of the DisableProviderKey200JSONResponseBodyStatus enum.
+func (e DisableProviderKey200JSONResponseBodyStatus) Valid() bool {
 	switch e {
-	case InputTokens:
+	case DisableProviderKey200JSONResponseBodyStatusActive:
 		return true
-	case OutputTokens:
+	case DisableProviderKey200JSONResponseBodyStatusDisabled:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ProviderKeyStatus.
+// Defines values for PutProviderKeyPricesJSONBodyPricesMetric.
 const (
-	ProviderKeyStatusActive   ProviderKeyStatus = "active"
-	ProviderKeyStatusDisabled ProviderKeyStatus = "disabled"
+	PutProviderKeyPricesJSONBodyPricesMetricInputTokens  PutProviderKeyPricesJSONBodyPricesMetric = "input_tokens"
+	PutProviderKeyPricesJSONBodyPricesMetricOutputTokens PutProviderKeyPricesJSONBodyPricesMetric = "output_tokens"
 )
 
-// Valid indicates whether the value is a known member of the ProviderKeyStatus enum.
-func (e ProviderKeyStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the PutProviderKeyPricesJSONBodyPricesMetric enum.
+func (e PutProviderKeyPricesJSONBodyPricesMetric) Valid() bool {
 	switch e {
-	case ProviderKeyStatusActive:
+	case PutProviderKeyPricesJSONBodyPricesMetricInputTokens:
 		return true
-	case ProviderKeyStatusDisabled:
+	case PutProviderKeyPricesJSONBodyPricesMetricOutputTokens:
 		return true
 	default:
 		return false
 	}
 }
 
-// CreateProviderKey defines model for CreateProviderKey.
-type CreateProviderKey struct {
-	Key    string                  `json:"key"`
-	Name   *string                 `json:"name,omitempty"`
-	Prices []Price                 `json:"prices"`
-	Status CreateProviderKeyStatus `json:"status"`
+// Defines values for PutProviderKeyPrices200JSONResponseBodyPricesMetric.
+const (
+	PutProviderKeyPrices200JSONResponseBodyPricesMetricInputTokens  PutProviderKeyPrices200JSONResponseBodyPricesMetric = "input_tokens"
+	PutProviderKeyPrices200JSONResponseBodyPricesMetricOutputTokens PutProviderKeyPrices200JSONResponseBodyPricesMetric = "output_tokens"
+)
+
+// Valid indicates whether the value is a known member of the PutProviderKeyPrices200JSONResponseBodyPricesMetric enum.
+func (e PutProviderKeyPrices200JSONResponseBodyPricesMetric) Valid() bool {
+	switch e {
+	case PutProviderKeyPrices200JSONResponseBodyPricesMetricInputTokens:
+		return true
+	case PutProviderKeyPrices200JSONResponseBodyPricesMetricOutputTokens:
+		return true
+	default:
+		return false
+	}
 }
 
-// CreateProviderKeyStatus defines model for CreateProviderKey.Status.
-type CreateProviderKeyStatus string
+// Defines values for CreateProviderKeyJSONBodyPricesMetric.
+const (
+	CreateProviderKeyJSONBodyPricesMetricInputTokens  CreateProviderKeyJSONBodyPricesMetric = "input_tokens"
+	CreateProviderKeyJSONBodyPricesMetricOutputTokens CreateProviderKeyJSONBodyPricesMetric = "output_tokens"
+)
 
-// Price defines model for Price.
-type Price struct {
-	Metric              PriceMetric `json:"metric"`
-	MicrocreditsPerUnit int64       `json:"microcredits_per_unit"`
-	ModelId             string      `json:"model_id"`
-	UnitSize            int64       `json:"unit_size"`
+// Valid indicates whether the value is a known member of the CreateProviderKeyJSONBodyPricesMetric enum.
+func (e CreateProviderKeyJSONBodyPricesMetric) Valid() bool {
+	switch e {
+	case CreateProviderKeyJSONBodyPricesMetricInputTokens:
+		return true
+	case CreateProviderKeyJSONBodyPricesMetricOutputTokens:
+		return true
+	default:
+		return false
+	}
 }
 
-// PriceMetric defines model for Price.Metric.
-type PriceMetric string
+// Defines values for CreateProviderKeyJSONBodyStatus.
+const (
+	CreateProviderKeyJSONBodyStatusActive CreateProviderKeyJSONBodyStatus = "active"
+)
 
-// Prices defines model for Prices.
-type Prices struct {
-	Prices []Price `json:"prices"`
+// Valid indicates whether the value is a known member of the CreateProviderKeyJSONBodyStatus enum.
+func (e CreateProviderKeyJSONBodyStatus) Valid() bool {
+	switch e {
+	case CreateProviderKeyJSONBodyStatusActive:
+		return true
+	default:
+		return false
+	}
 }
 
-// ProviderKey defines model for ProviderKey.
-type ProviderKey struct {
-	Key           string            `json:"key"`
-	MerchantId    string            `json:"merchant_id"`
-	Prices        *[]Price          `json:"prices,omitempty"`
-	ProviderId    string            `json:"provider_id"`
-	ProviderKeyId string            `json:"provider_key_id"`
-	Status        ProviderKeyStatus `json:"status"`
+// Defines values for CreateProviderKey200JSONResponseBodyPricesMetric.
+const (
+	CreateProviderKey200JSONResponseBodyPricesMetricInputTokens  CreateProviderKey200JSONResponseBodyPricesMetric = "input_tokens"
+	CreateProviderKey200JSONResponseBodyPricesMetricOutputTokens CreateProviderKey200JSONResponseBodyPricesMetric = "output_tokens"
+)
+
+// Valid indicates whether the value is a known member of the CreateProviderKey200JSONResponseBodyPricesMetric enum.
+func (e CreateProviderKey200JSONResponseBodyPricesMetric) Valid() bool {
+	switch e {
+	case CreateProviderKey200JSONResponseBodyPricesMetricInputTokens:
+		return true
+	case CreateProviderKey200JSONResponseBodyPricesMetricOutputTokens:
+		return true
+	default:
+		return false
+	}
 }
 
-// ProviderKeyStatus defines model for ProviderKey.Status.
-type ProviderKeyStatus string
+// Defines values for CreateProviderKey200JSONResponseBodyStatus.
+const (
+	CreateProviderKey200JSONResponseBodyStatusActive   CreateProviderKey200JSONResponseBodyStatus = "active"
+	CreateProviderKey200JSONResponseBodyStatusDisabled CreateProviderKey200JSONResponseBodyStatus = "disabled"
+)
 
-// ProviderId defines model for provider_id.
-type ProviderId = string
+// Valid indicates whether the value is a known member of the CreateProviderKey200JSONResponseBodyStatus enum.
+func (e CreateProviderKey200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateProviderKey200JSONResponseBodyStatusActive:
+		return true
+	case CreateProviderKey200JSONResponseBodyStatusDisabled:
+		return true
+	default:
+		return false
+	}
+}
 
-// ProviderKeyId defines model for provider_key_id.
-type ProviderKeyId = string
+// Defines values for CreateProviderKey201JSONResponseBodyPricesMetric.
+const (
+	CreateProviderKey201JSONResponseBodyPricesMetricInputTokens  CreateProviderKey201JSONResponseBodyPricesMetric = "input_tokens"
+	CreateProviderKey201JSONResponseBodyPricesMetricOutputTokens CreateProviderKey201JSONResponseBodyPricesMetric = "output_tokens"
+)
+
+// Valid indicates whether the value is a known member of the CreateProviderKey201JSONResponseBodyPricesMetric enum.
+func (e CreateProviderKey201JSONResponseBodyPricesMetric) Valid() bool {
+	switch e {
+	case CreateProviderKey201JSONResponseBodyPricesMetricInputTokens:
+		return true
+	case CreateProviderKey201JSONResponseBodyPricesMetricOutputTokens:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateProviderKey201JSONResponseBodyStatus.
+const (
+	CreateProviderKey201JSONResponseBodyStatusActive   CreateProviderKey201JSONResponseBodyStatus = "active"
+	CreateProviderKey201JSONResponseBodyStatusDisabled CreateProviderKey201JSONResponseBodyStatus = "disabled"
+)
+
+// Valid indicates whether the value is a known member of the CreateProviderKey201JSONResponseBodyStatus enum.
+func (e CreateProviderKey201JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateProviderKey201JSONResponseBodyStatusActive:
+		return true
+	case CreateProviderKey201JSONResponseBodyStatusDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// DisableProviderKey200JSONResponseBodyPricesMetric defines parameters for DisableProviderKey.
+type DisableProviderKey200JSONResponseBodyPricesMetric string
+
+// DisableProviderKey200JSONResponseBodyStatus defines parameters for DisableProviderKey.
+type DisableProviderKey200JSONResponseBodyStatus string
+
+// PutProviderKeyPricesJSONBody defines parameters for PutProviderKeyPrices.
+type PutProviderKeyPricesJSONBody struct {
+	Prices []struct {
+		Metric              PutProviderKeyPricesJSONBodyPricesMetric `json:"metric"`
+		MicrocreditsPerUnit int64                                    `json:"microcredits_per_unit"`
+		ModelId             string                                   `json:"model_id"`
+		UnitSize            int64                                    `json:"unit_size"`
+	} `json:"prices"`
+}
+
+// PutProviderKeyPricesJSONBodyPricesMetric defines parameters for PutProviderKeyPrices.
+type PutProviderKeyPricesJSONBodyPricesMetric string
+
+// PutProviderKeyPrices200JSONResponseBodyPricesMetric defines parameters for PutProviderKeyPrices.
+type PutProviderKeyPrices200JSONResponseBodyPricesMetric string
+
+// CreateProviderKeyJSONBody defines parameters for CreateProviderKey.
+type CreateProviderKeyJSONBody struct {
+	Id     string `json:"id"`
+	Key    string `json:"key"`
+	Name   string `json:"name"`
+	Prices []struct {
+		Metric              CreateProviderKeyJSONBodyPricesMetric `json:"metric"`
+		MicrocreditsPerUnit int64                                 `json:"microcredits_per_unit"`
+		ModelId             string                                `json:"model_id"`
+		UnitSize            int64                                 `json:"unit_size"`
+	} `json:"prices"`
+	Status CreateProviderKeyJSONBodyStatus `json:"status"`
+}
+
+// CreateProviderKeyJSONBodyPricesMetric defines parameters for CreateProviderKey.
+type CreateProviderKeyJSONBodyPricesMetric string
+
+// CreateProviderKeyJSONBodyStatus defines parameters for CreateProviderKey.
+type CreateProviderKeyJSONBodyStatus string
+
+// CreateProviderKey200JSONResponseBodyPricesMetric defines parameters for CreateProviderKey.
+type CreateProviderKey200JSONResponseBodyPricesMetric string
+
+// CreateProviderKey200JSONResponseBodyStatus defines parameters for CreateProviderKey.
+type CreateProviderKey200JSONResponseBodyStatus string
+
+// CreateProviderKey201JSONResponseBodyPricesMetric defines parameters for CreateProviderKey.
+type CreateProviderKey201JSONResponseBodyPricesMetric string
+
+// CreateProviderKey201JSONResponseBodyStatus defines parameters for CreateProviderKey.
+type CreateProviderKey201JSONResponseBodyStatus string
 
 // PutProviderKeyPricesJSONRequestBody defines body for PutProviderKeyPrices for application/json ContentType.
-type PutProviderKeyPricesJSONRequestBody = Prices
+type PutProviderKeyPricesJSONRequestBody PutProviderKeyPricesJSONBody
 
 // CreateProviderKeyJSONRequestBody defines body for CreateProviderKey for application/json ContentType.
-type CreateProviderKeyJSONRequestBody = CreateProviderKey
+type CreateProviderKeyJSONRequestBody CreateProviderKeyJSONBody
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -202,27 +337,27 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 type ClientInterface interface {
 
 	// DisableProviderKey performs a POST /provider-keys/{provider_key_id}/disable (the `DisableProviderKey` operationId) request.
-	DisableProviderKey(ctx context.Context, providerKeyId ProviderKeyId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DisableProviderKey(ctx context.Context, providerKeyId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutProviderKeyPricesWithBody performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request,
 	// with any type of body and a specified content type.
-	PutProviderKeyPricesWithBody(ctx context.Context, providerKeyId ProviderKeyId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutProviderKeyPricesWithBody(ctx context.Context, providerKeyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutProviderKeyPrices performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request.
 	// Takes a body of the `application/json` content type.
-	PutProviderKeyPrices(ctx context.Context, providerKeyId ProviderKeyId, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutProviderKeyPrices(ctx context.Context, providerKeyId string, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateProviderKeyWithBody performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request,
 	// with any type of body and a specified content type.
-	CreateProviderKeyWithBody(ctx context.Context, providerId ProviderId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateProviderKeyWithBody(ctx context.Context, providerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateProviderKey performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request.
 	// Takes a body of the `application/json` content type.
-	CreateProviderKey(ctx context.Context, providerId ProviderId, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateProviderKey(ctx context.Context, providerId string, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // DisableProviderKey performs a POST /provider-keys/{provider_key_id}/disable (the `DisableProviderKey` operationId) request.
-func (c *Client) DisableProviderKey(ctx context.Context, providerKeyId ProviderKeyId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) DisableProviderKey(ctx context.Context, providerKeyId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDisableProviderKeyRequest(c.Server, providerKeyId)
 	if err != nil {
 		return nil, err
@@ -236,7 +371,7 @@ func (c *Client) DisableProviderKey(ctx context.Context, providerKeyId ProviderK
 
 // PutProviderKeyPricesWithBody performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) PutProviderKeyPricesWithBody(ctx context.Context, providerKeyId ProviderKeyId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) PutProviderKeyPricesWithBody(ctx context.Context, providerKeyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutProviderKeyPricesRequestWithBody(c.Server, providerKeyId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -250,7 +385,7 @@ func (c *Client) PutProviderKeyPricesWithBody(ctx context.Context, providerKeyId
 
 // PutProviderKeyPrices performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) PutProviderKeyPrices(ctx context.Context, providerKeyId ProviderKeyId, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) PutProviderKeyPrices(ctx context.Context, providerKeyId string, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutProviderKeyPricesRequest(c.Server, providerKeyId, body)
 	if err != nil {
 		return nil, err
@@ -264,7 +399,7 @@ func (c *Client) PutProviderKeyPrices(ctx context.Context, providerKeyId Provide
 
 // CreateProviderKeyWithBody performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) CreateProviderKeyWithBody(ctx context.Context, providerId ProviderId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateProviderKeyWithBody(ctx context.Context, providerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateProviderKeyRequestWithBody(c.Server, providerId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -278,7 +413,7 @@ func (c *Client) CreateProviderKeyWithBody(ctx context.Context, providerId Provi
 
 // CreateProviderKey performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) CreateProviderKey(ctx context.Context, providerId ProviderId, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateProviderKey(ctx context.Context, providerId string, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateProviderKeyRequest(c.Server, providerId, body)
 	if err != nil {
 		return nil, err
@@ -291,7 +426,7 @@ func (c *Client) CreateProviderKey(ctx context.Context, providerId ProviderId, b
 }
 
 // NewDisableProviderKeyRequest constructs an http.Request for the DisableProviderKey method
-func NewDisableProviderKeyRequest(server string, providerKeyId ProviderKeyId) (*http.Request, error) {
+func NewDisableProviderKeyRequest(server string, providerKeyId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -325,7 +460,7 @@ func NewDisableProviderKeyRequest(server string, providerKeyId ProviderKeyId) (*
 }
 
 // NewPutProviderKeyPricesRequest calls the generic PutProviderKeyPrices builder with application/json body
-func NewPutProviderKeyPricesRequest(server string, providerKeyId ProviderKeyId, body PutProviderKeyPricesJSONRequestBody) (*http.Request, error) {
+func NewPutProviderKeyPricesRequest(server string, providerKeyId string, body PutProviderKeyPricesJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -336,7 +471,7 @@ func NewPutProviderKeyPricesRequest(server string, providerKeyId ProviderKeyId, 
 }
 
 // NewPutProviderKeyPricesRequestWithBody constructs an http.Request for the PutProviderKeyPrices method, with any body, and a specified content type
-func NewPutProviderKeyPricesRequestWithBody(server string, providerKeyId ProviderKeyId, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutProviderKeyPricesRequestWithBody(server string, providerKeyId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -372,7 +507,7 @@ func NewPutProviderKeyPricesRequestWithBody(server string, providerKeyId Provide
 }
 
 // NewCreateProviderKeyRequest calls the generic CreateProviderKey builder with application/json body
-func NewCreateProviderKeyRequest(server string, providerId ProviderId, body CreateProviderKeyJSONRequestBody) (*http.Request, error) {
+func NewCreateProviderKeyRequest(server string, providerId string, body CreateProviderKeyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -383,7 +518,7 @@ func NewCreateProviderKeyRequest(server string, providerId ProviderId, body Crea
 }
 
 // NewCreateProviderKeyRequestWithBody constructs an http.Request for the CreateProviderKey method, with any body, and a specified content type
-func NewCreateProviderKeyRequestWithBody(server string, providerId ProviderId, contentType string, body io.Reader) (*http.Request, error) {
+func NewCreateProviderKeyRequestWithBody(server string, providerId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -465,38 +600,68 @@ type ClientWithResponsesInterface interface {
 	// DisableProviderKeyWithResponse performs a POST /provider-keys/{provider_key_id}/disable (the `DisableProviderKey` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	DisableProviderKeyWithResponse(ctx context.Context, providerKeyId ProviderKeyId, reqEditors ...RequestEditorFn) (*DisableProviderKeyResponse, error)
+	DisableProviderKeyWithResponse(ctx context.Context, providerKeyId string, reqEditors ...RequestEditorFn) (*DisableProviderKeyResponse, error)
 
 	// PutProviderKeyPricesWithBodyWithResponse performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	PutProviderKeyPricesWithBodyWithResponse(ctx context.Context, providerKeyId ProviderKeyId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error)
+	PutProviderKeyPricesWithBodyWithResponse(ctx context.Context, providerKeyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error)
 
 	// PutProviderKeyPricesWithResponse performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	PutProviderKeyPricesWithResponse(ctx context.Context, providerKeyId ProviderKeyId, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error)
+	PutProviderKeyPricesWithResponse(ctx context.Context, providerKeyId string, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error)
 
 	// CreateProviderKeyWithBodyWithResponse performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	CreateProviderKeyWithBodyWithResponse(ctx context.Context, providerId ProviderId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error)
+	CreateProviderKeyWithBodyWithResponse(ctx context.Context, providerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error)
 
 	// CreateProviderKeyWithResponse performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	CreateProviderKeyWithResponse(ctx context.Context, providerId ProviderId, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error)
+	CreateProviderKeyWithResponse(ctx context.Context, providerId string, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error)
 }
 
 type DisableProviderKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ProviderKey
+	JSON200 *struct {
+		EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+		Key                string     `json:"key"`
+		LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+		MerchantId         string     `json:"merchant_id"`
+		Name               string     `json:"name"`
+		Prices             *[]struct {
+			Metric              DisableProviderKey200JSONResponseBodyPricesMetric `json:"metric"`
+			MicrocreditsPerUnit int64                                             `json:"microcredits_per_unit"`
+			ModelId             string                                            `json:"model_id"`
+			UnitSize            int64                                             `json:"unit_size"`
+		} `json:"prices,omitempty"`
+		ProviderId    string                                      `json:"provider_id"`
+		ProviderKeyId string                                      `json:"provider_key_id"`
+		Status        DisableProviderKey200JSONResponseBodyStatus `json:"status"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r DisableProviderKeyResponse) GetJSON200() *ProviderKey {
+func (r DisableProviderKeyResponse) GetJSON200() *struct {
+	EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+	Key                string     `json:"key"`
+	LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+	MerchantId         string     `json:"merchant_id"`
+	Name               string     `json:"name"`
+	Prices             *[]struct {
+		Metric              DisableProviderKey200JSONResponseBodyPricesMetric `json:"metric"`
+		MicrocreditsPerUnit int64                                             `json:"microcredits_per_unit"`
+		ModelId             string                                            `json:"model_id"`
+		UnitSize            int64                                             `json:"unit_size"`
+	} `json:"prices,omitempty"`
+	ProviderId    string                                      `json:"provider_id"`
+	ProviderKeyId string                                      `json:"provider_key_id"`
+	Status        DisableProviderKey200JSONResponseBodyStatus `json:"status"`
+} {
 	return r.JSON200
 }
 
@@ -533,11 +698,25 @@ type PutProviderKeyPricesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Prices
+	JSON200 *struct {
+		Prices []struct {
+			Metric              PutProviderKeyPrices200JSONResponseBodyPricesMetric `json:"metric"`
+			MicrocreditsPerUnit int64                                               `json:"microcredits_per_unit"`
+			ModelId             string                                              `json:"model_id"`
+			UnitSize            int64                                               `json:"unit_size"`
+		} `json:"prices"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutProviderKeyPricesResponse) GetJSON200() *Prices {
+func (r PutProviderKeyPricesResponse) GetJSON200() *struct {
+	Prices []struct {
+		Metric              PutProviderKeyPrices200JSONResponseBodyPricesMetric `json:"metric"`
+		MicrocreditsPerUnit int64                                               `json:"microcredits_per_unit"`
+		ModelId             string                                              `json:"model_id"`
+		UnitSize            int64                                               `json:"unit_size"`
+	} `json:"prices"`
+} {
 	return r.JSON200
 }
 
@@ -573,13 +752,182 @@ func (r PutProviderKeyPricesResponse) ContentType() string {
 type CreateProviderKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+		Key                string     `json:"key"`
+		LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+		MerchantId         string     `json:"merchant_id"`
+		Name               string     `json:"name"`
+		Prices             *[]struct {
+			Metric              CreateProviderKey200JSONResponseBodyPricesMetric `json:"metric"`
+			MicrocreditsPerUnit int64                                            `json:"microcredits_per_unit"`
+			ModelId             string                                           `json:"model_id"`
+			UnitSize            int64                                            `json:"unit_size"`
+		} `json:"prices,omitempty"`
+		ProviderId    string                                     `json:"provider_id"`
+		ProviderKeyId string                                     `json:"provider_key_id"`
+		Status        CreateProviderKey200JSONResponseBodyStatus `json:"status"`
+	}
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *ProviderKey
+	JSON201 *struct {
+		EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+		Key                string     `json:"key"`
+		LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+		MerchantId         string     `json:"merchant_id"`
+		Name               string     `json:"name"`
+		Prices             *[]struct {
+			Metric              CreateProviderKey201JSONResponseBodyPricesMetric `json:"metric"`
+			MicrocreditsPerUnit int64                                            `json:"microcredits_per_unit"`
+			ModelId             string                                           `json:"model_id"`
+			UnitSize            int64                                            `json:"unit_size"`
+		} `json:"prices,omitempty"`
+		ProviderId    string                                     `json:"provider_id"`
+		ProviderKeyId string                                     `json:"provider_key_id"`
+		Status        CreateProviderKey201JSONResponseBodyStatus `json:"status"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON200() *struct {
+	EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+	Key                string     `json:"key"`
+	LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+	MerchantId         string     `json:"merchant_id"`
+	Name               string     `json:"name"`
+	Prices             *[]struct {
+		Metric              CreateProviderKey200JSONResponseBodyPricesMetric `json:"metric"`
+		MicrocreditsPerUnit int64                                            `json:"microcredits_per_unit"`
+		ModelId             string                                           `json:"model_id"`
+		UnitSize            int64                                            `json:"unit_size"`
+	} `json:"prices,omitempty"`
+	ProviderId    string                                     `json:"provider_id"`
+	ProviderKeyId string                                     `json:"provider_key_id"`
+	Status        CreateProviderKey200JSONResponseBodyStatus `json:"status"`
+} {
+	return r.JSON200
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateProviderKeyResponse) GetJSON201() *ProviderKey {
+func (r CreateProviderKeyResponse) GetJSON201() *struct {
+	EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+	Key                string     `json:"key"`
+	LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+	MerchantId         string     `json:"merchant_id"`
+	Name               string     `json:"name"`
+	Prices             *[]struct {
+		Metric              CreateProviderKey201JSONResponseBodyPricesMetric `json:"metric"`
+		MicrocreditsPerUnit int64                                            `json:"microcredits_per_unit"`
+		ModelId             string                                           `json:"model_id"`
+		UnitSize            int64                                            `json:"unit_size"`
+	} `json:"prices,omitempty"`
+	ProviderId    string                                     `json:"provider_id"`
+	ProviderKeyId string                                     `json:"provider_key_id"`
+	Status        CreateProviderKey201JSONResponseBodyStatus `json:"status"`
+} {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON400() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON404() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON409() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON409
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON500() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON500
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r CreateProviderKeyResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -614,7 +962,7 @@ func (r CreateProviderKeyResponse) ContentType() string {
 // DisableProviderKeyWithResponse performs a POST /provider-keys/{provider_key_id}/disable (the `DisableProviderKey` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) DisableProviderKeyWithResponse(ctx context.Context, providerKeyId ProviderKeyId, reqEditors ...RequestEditorFn) (*DisableProviderKeyResponse, error) {
+func (c *ClientWithResponses) DisableProviderKeyWithResponse(ctx context.Context, providerKeyId string, reqEditors ...RequestEditorFn) (*DisableProviderKeyResponse, error) {
 	rsp, err := c.DisableProviderKey(ctx, providerKeyId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -626,7 +974,7 @@ func (c *ClientWithResponses) DisableProviderKeyWithResponse(ctx context.Context
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) PutProviderKeyPricesWithBodyWithResponse(ctx context.Context, providerKeyId ProviderKeyId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error) {
+func (c *ClientWithResponses) PutProviderKeyPricesWithBodyWithResponse(ctx context.Context, providerKeyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error) {
 	rsp, err := c.PutProviderKeyPricesWithBody(ctx, providerKeyId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -636,7 +984,7 @@ func (c *ClientWithResponses) PutProviderKeyPricesWithBodyWithResponse(ctx conte
 
 // PutProviderKeyPricesWithResponse performs a PUT /provider-keys/{provider_key_id}/prices (the `PutProviderKeyPrices` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) PutProviderKeyPricesWithResponse(ctx context.Context, providerKeyId ProviderKeyId, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error) {
+func (c *ClientWithResponses) PutProviderKeyPricesWithResponse(ctx context.Context, providerKeyId string, body PutProviderKeyPricesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutProviderKeyPricesResponse, error) {
 	rsp, err := c.PutProviderKeyPrices(ctx, providerKeyId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -648,7 +996,7 @@ func (c *ClientWithResponses) PutProviderKeyPricesWithResponse(ctx context.Conte
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateProviderKeyWithBodyWithResponse(ctx context.Context, providerId ProviderId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error) {
+func (c *ClientWithResponses) CreateProviderKeyWithBodyWithResponse(ctx context.Context, providerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error) {
 	rsp, err := c.CreateProviderKeyWithBody(ctx, providerId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -658,7 +1006,7 @@ func (c *ClientWithResponses) CreateProviderKeyWithBodyWithResponse(ctx context.
 
 // CreateProviderKeyWithResponse performs a POST /providers/{provider_id}/keys (the `CreateProviderKey` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateProviderKeyWithResponse(ctx context.Context, providerId ProviderId, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error) {
+func (c *ClientWithResponses) CreateProviderKeyWithResponse(ctx context.Context, providerId string, body CreateProviderKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProviderKeyResponse, error) {
 	rsp, err := c.CreateProviderKey(ctx, providerId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -681,7 +1029,22 @@ func ParseDisableProviderKeyResponse(rsp *http.Response) (*DisableProviderKeyRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ProviderKey
+		var dest struct {
+			EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+			Key                string     `json:"key"`
+			LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+			MerchantId         string     `json:"merchant_id"`
+			Name               string     `json:"name"`
+			Prices             *[]struct {
+				Metric              DisableProviderKey200JSONResponseBodyPricesMetric `json:"metric"`
+				MicrocreditsPerUnit int64                                             `json:"microcredits_per_unit"`
+				ModelId             string                                            `json:"model_id"`
+				UnitSize            int64                                             `json:"unit_size"`
+			} `json:"prices,omitempty"`
+			ProviderId    string                                      `json:"provider_id"`
+			ProviderKeyId string                                      `json:"provider_key_id"`
+			Status        DisableProviderKey200JSONResponseBodyStatus `json:"status"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -707,7 +1070,14 @@ func ParsePutProviderKeyPricesResponse(rsp *http.Response) (*PutProviderKeyPrice
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Prices
+		var dest struct {
+			Prices []struct {
+				Metric              PutProviderKeyPrices200JSONResponseBodyPricesMetric `json:"metric"`
+				MicrocreditsPerUnit int64                                               `json:"microcredits_per_unit"`
+				ModelId             string                                              `json:"model_id"`
+				UnitSize            int64                                               `json:"unit_size"`
+			} `json:"prices"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -732,12 +1102,121 @@ func ParseCreateProviderKeyResponse(rsp *http.Response) (*CreateProviderKeyRespo
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+			Key                string     `json:"key"`
+			LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+			MerchantId         string     `json:"merchant_id"`
+			Name               string     `json:"name"`
+			Prices             *[]struct {
+				Metric              CreateProviderKey200JSONResponseBodyPricesMetric `json:"metric"`
+				MicrocreditsPerUnit int64                                            `json:"microcredits_per_unit"`
+				ModelId             string                                           `json:"model_id"`
+				UnitSize            int64                                            `json:"unit_size"`
+			} `json:"prices,omitempty"`
+			ProviderId    string                                     `json:"provider_id"`
+			ProviderKeyId string                                     `json:"provider_key_id"`
+			Status        CreateProviderKey200JSONResponseBodyStatus `json:"status"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest ProviderKey
+		var dest struct {
+			EarnedMicrocredits *int64     `json:"earned_microcredits,omitempty"`
+			Key                string     `json:"key"`
+			LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
+			MerchantId         string     `json:"merchant_id"`
+			Name               string     `json:"name"`
+			Prices             *[]struct {
+				Metric              CreateProviderKey201JSONResponseBodyPricesMetric `json:"metric"`
+				MicrocreditsPerUnit int64                                            `json:"microcredits_per_unit"`
+				ModelId             string                                           `json:"model_id"`
+				UnitSize            int64                                            `json:"unit_size"`
+			} `json:"prices,omitempty"`
+			ProviderId    string                                     `json:"provider_id"`
+			ProviderKeyId string                                     `json:"provider_key_id"`
+			Status        CreateProviderKey201JSONResponseBodyStatus `json:"status"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -748,13 +1227,13 @@ func ParseCreateProviderKeyResponse(rsp *http.Response) (*CreateProviderKeyRespo
 type ServerInterface interface {
 
 	// (POST /provider-keys/{provider_key_id}/disable)
-	DisableProviderKey(w http.ResponseWriter, r *http.Request, providerKeyId ProviderKeyId)
+	DisableProviderKey(w http.ResponseWriter, r *http.Request, providerKeyId string)
 
 	// (PUT /provider-keys/{provider_key_id}/prices)
-	PutProviderKeyPrices(w http.ResponseWriter, r *http.Request, providerKeyId ProviderKeyId)
+	PutProviderKeyPrices(w http.ResponseWriter, r *http.Request, providerKeyId string)
 
 	// (POST /providers/{provider_id}/keys)
-	CreateProviderKey(w http.ResponseWriter, r *http.Request, providerId ProviderId)
+	CreateProviderKey(w http.ResponseWriter, r *http.Request, providerId string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -773,7 +1252,7 @@ func (siw *ServerInterfaceWrapper) DisableProviderKey(w http.ResponseWriter, r *
 	_ = err
 
 	// ------------- Path parameter "provider_key_id" -------------
-	var providerKeyId ProviderKeyId
+	var providerKeyId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "provider_key_id", r.PathValue("provider_key_id"), &providerKeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -799,7 +1278,7 @@ func (siw *ServerInterfaceWrapper) PutProviderKeyPrices(w http.ResponseWriter, r
 	_ = err
 
 	// ------------- Path parameter "provider_key_id" -------------
-	var providerKeyId ProviderKeyId
+	var providerKeyId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "provider_key_id", r.PathValue("provider_key_id"), &providerKeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -825,7 +1304,7 @@ func (siw *ServerInterfaceWrapper) CreateProviderKey(w http.ResponseWriter, r *h
 	_ = err
 
 	// ------------- Path parameter "provider_id" -------------
-	var providerId ProviderId
+	var providerId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "provider_id", r.PathValue("provider_id"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -964,9 +1443,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/providers/{provider_id}/keys", wrapper.CreateProviderKey)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/provider-keys/{provider_key_id}/prices", wrapper.PutProviderKeyPrices)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/provider-keys/{provider_key_id}/disable", wrapper.DisableProviderKey)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/provider-keys/{provider_key_id}/prices", wrapper.PutProviderKeyPrices)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/providers/{provider_id}/keys", wrapper.CreateProviderKey)
 
 	return m
 }
@@ -976,19 +1455,23 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

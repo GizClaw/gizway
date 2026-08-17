@@ -6,7 +6,7 @@ export class GizWayConnector extends APIConnector {
     if (table === 'my_provider_keys' && operation === 'PUT') {
       return {
         method: 'POST', path: `/user/v1/providers/${segment(data.provider_id)}/keys`,
-        body: { key: data.key, status: data.status, prices: prices(data.prices_json) }
+        body: { id, name: data.name, key: data.key, status: data.status, prices: prices(data.prices_json) }
       };
     }
     if (table === 'my_provider_keys' && operation === 'PATCH' && data.status === 'disabled') {

@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,7 +17,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
 type MachineTokenConfig struct {
@@ -102,7 +102,7 @@ func (s *MachineTokenSource) Token(ctx context.Context) (string, error) {
 	if assertionAudience == "" {
 		assertionAudience = s.config.TokenURL
 	}
-	claims := jwt.MapClaims{"iss": s.config.Subject, "sub": s.config.Subject, "aud": assertionAudience, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "jti": uuid.NewString()}
+	claims := jwt.MapClaims{"iss": s.config.Subject, "sub": s.config.Subject, "aud": assertionAudience, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix()}
 	assertion := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	assertion.Header["kid"] = s.config.KeyID
 	signed, err := assertion.SignedString(s.key)
@@ -133,12 +133,16 @@ func (s *MachineTokenSource) Token(ctx context.Context) (string, error) {
 		return "", err
 	}
 	defer response.Body.Close()
+	raw, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if readErr != nil {
+		return "", readErr
+	}
 	var result struct {
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int64  `json:"expires_in"`
 	}
-	if json.NewDecoder(response.Body).Decode(&result) != nil || response.StatusCode != http.StatusOK || result.AccessToken == "" {
-		return "", fmt.Errorf("machine token endpoint returned %d", response.StatusCode)
+	if json.Unmarshal(raw, &result) != nil || response.StatusCode != http.StatusOK || result.AccessToken == "" {
+		return "", fmt.Errorf("machine token endpoint returned %d: %s", response.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	s.token, s.expires = result.AccessToken, now.Add(time.Duration(result.ExpiresIn)*time.Second)
 	return s.token, nil

@@ -80,19 +80,20 @@ func TestPostgreSQLMilestone03SubscriptionKeyIsImmutableAfterCreation(t *testing
 	db := testdb.OpenGizPay(t).SQL
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO users(id,identity_issuer,identity_subject,status,created_at)
-		VALUES ('user-m03-key','https://issuer.test','subject-m03-key','active',now());
+		INSERT INTO users(id,identity_issuer,identity_subject,email,display_name,status,created_at)
+		VALUES ('user-m03-key','https://issuer.test','subject-m03-key','','M03 Key User','active',now());
 		INSERT INTO accounts(id,owner_user_id,status,created_at)
 		VALUES ('account-m03-key','user-m03-key','active',now());
 		INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at)
 		VALUES ('merchant-m03-key','account-m03-key','M03 Key Merchant','M03 Key Merchant',true,'active',now(),now());
 		INSERT INTO products(id,merchant_id,name,billing_mode,published,status,terms_version,created_at,updated_at)
-		VALUES ('product-m03-key','merchant-m03-key','M03 PAYG','pay_as_you_go',true,'active','v1',now(),now());
+		VALUES ('product-m03-key','merchant-m03-key','M03 PAYG','pay_as_you_go',true,'active','v1',now(),now()),
+		       ('product-m03-other','merchant-m03-key','M03 Other','pay_as_you_go',true,'active','v1',now(),now());
 		INSERT INTO subscriptions(id,account_id,product_id,status,created_at)
 		VALUES ('subscription-m03-key','account-m03-key','product-m03-key','active',now()),
-		       ('subscription-m03-other','account-m03-key','product-m03-key','active',now());
-		INSERT INTO subscription_keys(id,subscription_id,key,subscription_key_hmac,status,created_at)
-		VALUES ('key-m03','subscription-m03-key','gsk_m03_plaintext','m03-hmac','active',now());
+		       ('subscription-m03-other','account-m03-key','product-m03-other','active',now());
+		INSERT INTO subscription_keys(id,subscription_id,name,key,subscription_key_hmac,status,created_at)
+		VALUES ('key-m03','subscription-m03-key','M03 Key','gsk_m03_plaintext','m03-hmac','active',now());
 	`)
 	if err != nil {
 		t.Fatalf("create Milestone 03 key fixture: %v", err)
@@ -114,6 +115,9 @@ func TestPostgreSQLMilestone03SubscriptionKeyIsImmutableAfterCreation(t *testing
 	if _, err := db.ExecContext(ctx, `UPDATE subscription_keys SET status='revoked',revoked_at=now() WHERE id='key-m03'`); err != nil {
 		t.Fatalf("active to revoked transition: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, `UPDATE subscription_keys SET last_used_at=now() WHERE id='key-m03'`); err != nil {
+		t.Fatalf("record invocation that started before revocation: %v", err)
+	}
 	if _, err := db.ExecContext(ctx, `UPDATE subscription_keys SET status='active',revoked_at=NULL WHERE id='key-m03'`); err == nil {
 		t.Fatal("revoked Subscription Key became active")
 	}
@@ -123,8 +127,8 @@ func TestPostgreSQLMilestone03LedgerEntryMoveChecksOriginalTransaction(t *testin
 	db := testdb.OpenGizPay(t).SQL
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO users(id,identity_issuer,identity_subject,status,created_at)
-		VALUES ('user-ledger-move','https://issuer.test','subject-ledger-move','active',now());
+		INSERT INTO users(id,identity_issuer,identity_subject,email,display_name,status,created_at)
+		VALUES ('user-ledger-move','https://issuer.test','subject-ledger-move','','Ledger User','active',now());
 		INSERT INTO accounts(id,owner_user_id,status,created_at)
 		VALUES ('account-ledger-move','user-ledger-move','active',now());
 		INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status)
@@ -154,8 +158,8 @@ func assertDefaultMerchantUniquePerAccount(t *testing.T, db interface {
 	t.Helper()
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO users(id,identity_issuer,identity_subject,status,created_at)
-		VALUES ('user-default-merchant','https://issuer.test','subject-default-merchant','active',now());
+		INSERT INTO users(id,identity_issuer,identity_subject,email,display_name,status,created_at)
+		VALUES ('user-default-merchant','https://issuer.test','subject-default-merchant','','Merchant User','active',now());
 		INSERT INTO accounts(id,owner_user_id,status,created_at)
 		VALUES ('account-default-merchant','user-default-merchant','active',now());
 		INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at)

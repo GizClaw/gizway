@@ -1,12 +1,30 @@
 Log:
   Level: info
 
-ExternalDomain: zitadel
-ExternalPort: 8080
+ExternalDomain: identity.e2e.gizway.test
+ExternalPort: 18080
 ExternalSecure: false
 
 TLS:
   Enabled: false
+
+# The isolated E2E network uses Docker Desktop's 192.168/16 bridge. Keep the
+# production SSRF deny-list shape, but permit that one test-only network so an
+# Actions V2 target can call the in-stack GizPay webhook.
+HTTPClient:
+  DenyList:
+    - localhost
+    - "0.0.0.0/8"
+    - "10.0.0.0/8"
+    - "100.64.0.0/10"
+    - "127.0.0.0/8"
+    - "169.254.0.0/16"
+    - "172.16.0.0/12"
+    - "198.18.0.0/15"
+    - "::/128"
+    - "::1/128"
+    - "fc00::/7"
+    - "fe80::/10"
 
 Database:
   postgres:

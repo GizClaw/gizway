@@ -24,6 +24,7 @@ import (
 
 	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
 	"github.com/idy/gizway/internal/api"
+	"github.com/idy/gizway/internal/catalogtoken"
 	payservice "github.com/idy/gizway/internal/gizpay"
 	wayservice "github.com/idy/gizway/internal/gizway"
 	"github.com/idy/gizway/internal/identity"
@@ -46,15 +47,40 @@ type ProcessConfig struct {
 		ListenAddress   string `yaml:"listen_address" json:"listen_address"`
 		ShutdownTimeout string `yaml:"shutdown_timeout" json:"shutdown_timeout,omitempty"`
 	} `yaml:"server" json:"server"`
+	Site struct {
+		Hostname string `yaml:"hostname" json:"hostname"`
+	} `yaml:"site" json:"site"`
+	Identity struct {
+		Issuer                string `yaml:"issuer" json:"issuer"`
+		ClientID              string `yaml:"client_id" json:"client_id"`
+		RedirectURI           string `yaml:"redirect_uri" json:"redirect_uri"`
+		PostLogoutRedirectURI string `yaml:"post_logout_redirect_uri" json:"post_logout_redirect_uri"`
+		PublicCatalog         struct {
+			ClientID        string `yaml:"client_id" json:"client_id"`
+			ClientSecret    string `yaml:"client_secret" json:"-"`
+			AccessTokenType string `yaml:"access_token_type" json:"access_token_type"`
+			Scope           string `yaml:"scope" json:"scope"`
+			TokenTTL        string `yaml:"token_ttl" json:"token_ttl"`
+			RefreshBefore   string `yaml:"refresh_before" json:"refresh_before"`
+		} `yaml:"public_catalog_service_account" json:"-"`
+	} `yaml:"identity" json:"identity"`
+	Services struct {
+		PublicCatalogTokenURL string `yaml:"public_catalog_token_url" json:"public_catalog_token_url"`
+		GizPayPowerSyncURL    string `yaml:"gizpay_powersync_url" json:"gizpay_powersync_url"`
+		GizPayAPIURL          string `yaml:"gizpay_api_url" json:"gizpay_api_url"`
+		GizWayPowerSyncURL    string `yaml:"gizway_powersync_url" json:"gizway_powersync_url"`
+		GizWayAPIURL          string `yaml:"gizway_api_url" json:"gizway_api_url"`
+	} `yaml:"services" json:"services"`
 	Database       StoreConfig `yaml:"database" json:"database"`
 	Authentication struct {
 		ZITADEL struct {
-			Issuer              string              `yaml:"issuer" json:"issuer"`
-			JWKSURL             string              `yaml:"jwks_url" json:"jwks_url"`
-			HumanAudience       string              `yaml:"human_audience" json:"human_audience,omitempty"`
-			ServiceAudience     string              `yaml:"service_audience" json:"service_audience,omitempty"`
-			ManagementClient    MachineClientConfig `yaml:"management_client" json:"management_client"`
-			JWKSRefreshInterval string              `yaml:"jwks_refresh_interval" json:"jwks_refresh_interval,omitempty"`
+			Issuer               string              `yaml:"issuer" json:"issuer"`
+			JWKSURL              string              `yaml:"jwks_url" json:"jwks_url"`
+			HumanAudience        string              `yaml:"human_audience" json:"human_audience,omitempty"`
+			ServiceAudience      string              `yaml:"service_audience" json:"service_audience,omitempty"`
+			ManagementClient     MachineClientConfig `yaml:"management_client" json:"management_client"`
+			JWKSRefreshInterval  string              `yaml:"jwks_refresh_interval" json:"jwks_refresh_interval,omitempty"`
+			ActionSigningKeyFile string              `yaml:"action_signing_key_file" json:"action_signing_key_file,omitempty"`
 		} `yaml:"zitadel" json:"zitadel"`
 		ServiceAccount MachineClientConfig `yaml:"service_account" json:"service_account"`
 	} `yaml:"authentication" json:"authentication"`
@@ -180,6 +206,7 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 		config.TLS.CertificateFile,
 		config.TLS.PrivateKeyFile,
 		config.ProviderCallbacks.CallbackSecretFile,
+		config.Authentication.ZITADEL.ActionSigningKeyFile,
 	}
 	for _, path := range files {
 		if path == "" {
@@ -224,6 +251,11 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 		}
 		if config.GizPay.ServiceDSN == "" {
 			return errors.New("gizpay.service_dsn is required")
+		}
+		if config.Site.Hostname != "" || config.Identity.ClientID != "" || config.Identity.PublicCatalog.ClientID != "" {
+			if err := validateM04SiteConfig(config); err != nil {
+				return err
+			}
 		}
 		if config.Bifrost.ConfigStore.Type != "postgresql" || config.Bifrost.ConfigStore.DSN == "" || config.Bifrost.ConfigStore.Schema == "" {
 			return errors.New("bifrost.config_store PostgreSQL DSN and schema are required")
@@ -287,6 +319,48 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 		return errors.New("TLS is enabled but server certificate files are missing")
 	}
 	return nil
+}
+
+func validateM04SiteConfig(config ProcessConfig) error {
+	catalog := config.Identity.PublicCatalog
+	if config.Site.Hostname == "" || config.Identity.Issuer == "" || config.Identity.ClientID == "" ||
+		config.Identity.RedirectURI == "" || config.Identity.PostLogoutRedirectURI == "" ||
+		catalog.ClientID == "" || catalog.ClientSecret == "" || catalog.Scope == "" ||
+		config.Services.PublicCatalogTokenURL == "" || config.Services.GizPayPowerSyncURL == "" ||
+		config.Services.GizPayAPIURL == "" || config.Services.GizWayPowerSyncURL == "" || config.Services.GizWayAPIURL == "" {
+		return errors.New("M04 site, identity, Public Catalog, and service URLs are required")
+	}
+	if config.Identity.Issuer != config.Authentication.ZITADEL.Issuer {
+		return errors.New("identity.issuer must match authentication.zitadel.issuer")
+	}
+	if catalog.AccessTokenType != "JWT" {
+		return errors.New("identity.public_catalog_service_account.access_token_type must be JWT")
+	}
+	ttl, err := time.ParseDuration(catalog.TokenTTL)
+	if err != nil || ttl <= 0 || ttl > 24*time.Hour {
+		return errors.New("identity.public_catalog_service_account.token_ttl must be positive and at most 24h")
+	}
+	refreshBefore, err := time.ParseDuration(catalog.RefreshBefore)
+	if err != nil || refreshBefore <= 0 || refreshBefore >= ttl {
+		return errors.New("identity.public_catalog_service_account.refresh_before must be positive and less than token_ttl")
+	}
+	return nil
+}
+
+func (config ProcessConfig) MarshalPublicRuntimeConfig() ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"site": map[string]string{"hostname": config.Site.Hostname},
+		"identity": map[string]string{
+			"issuer": config.Identity.Issuer, "client_id": config.Identity.ClientID,
+			"redirect_uri": config.Identity.RedirectURI, "post_logout_redirect_uri": config.Identity.PostLogoutRedirectURI,
+			"audience": config.Authentication.ZITADEL.HumanAudience,
+		},
+		"services": map[string]string{
+			"public_catalog_token_url": config.Services.PublicCatalogTokenURL,
+			"gizpay_powersync_url":     config.Services.GizPayPowerSyncURL, "gizpay_api_url": config.Services.GizPayAPIURL,
+			"gizway_powersync_url": config.Services.GizWayPowerSyncURL, "gizway_api_url": config.Services.GizWayAPIURL,
+		},
+	})
 }
 
 func validServerName(name string) bool {
@@ -373,6 +447,14 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 		if err != nil {
 			return err
 		}
+		actionSigningKey, err := readConfiguredSecret(config, config.Authentication.ZITADEL.ActionSigningKeyFile)
+		if err != nil {
+			return err
+		}
+		actionSigningKeyFile := config.Authentication.ZITADEL.ActionSigningKeyFile
+		if !filepath.IsAbs(actionSigningKeyFile) {
+			actionSigningKeyFile = filepath.Join(config.configDirectory, actionSigningKeyFile)
+		}
 		management := config.Authentication.ZITADEL.ManagementClient
 		managementKeyFile := management.PrivateKeyFile
 		if !filepath.IsAbs(managementKeyFile) {
@@ -412,6 +494,9 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 			RecheckInterval:       recheckInterval,
 			MaxOrderMetadataBytes: config.PAYGCharges.MaxOrderMetadataBytes,
 			MaxCommissions:        config.PAYGCharges.MaxCommissions,
+			ZITADELIssuer:         config.Authentication.ZITADEL.Issuer,
+			ActionSigningKey:      actionSigningKey,
+			ActionSigningKeyFile:  actionSigningKeyFile,
 		})
 		if err != nil {
 			return err
@@ -469,6 +554,50 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 		}
 		defer bifrostStores.Close(context.Background())
 		verifier := identity.NewVerifierWithRefreshAndClient(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.JWKSURL, durationOr(config.Authentication.ZITADEL.JWKSRefreshInterval, 5*time.Minute), zitadelClient)
+		var publicCatalogToken func(context.Context) (catalogtoken.Token, error)
+		var publicCatalogManager *catalogtoken.Manager
+		publicRuntimeConfig, runtimeConfigErr := config.MarshalPublicRuntimeConfig()
+		if runtimeConfigErr != nil {
+			return runtimeConfigErr
+		}
+		if config.Identity.PublicCatalog.ClientID != "" {
+			ttl, _ := time.ParseDuration(config.Identity.PublicCatalog.TokenTTL)
+			refreshBefore, _ := time.ParseDuration(config.Identity.PublicCatalog.RefreshBefore)
+			regionRole := "public_catalog_global"
+			if strings.HasPrefix(strings.ToLower(config.Site.Hostname), "cn.") {
+				regionRole = "public_catalog_cn"
+			}
+			manager, managerErr := catalogtoken.New(catalogtoken.Config{
+				TokenURL: strings.TrimRight(config.Identity.Issuer, "/") + "/oauth/v2/token",
+				ClientID: config.Identity.PublicCatalog.ClientID, ClientSecret: config.Identity.PublicCatalog.ClientSecret,
+				Scope: config.Identity.PublicCatalog.Scope, TTL: ttl, RefreshBefore: refreshBefore,
+				HTTPClient: zitadelClient, Now: now,
+				ValidateJWT: func(raw string) error {
+					request, requestErr := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://catalog-token.invalid", nil)
+					if requestErr != nil {
+						return requestErr
+					}
+					request.Header.Set("Authorization", "Bearer "+raw)
+					principal, verifyErr := verifier.Authenticate(request, config.Authentication.ZITADEL.HumanAudience)
+					if verifyErr != nil {
+						return verifyErr
+					}
+					if !principal.Roles["public_catalog"] || !principal.Roles[regionRole] {
+						return errors.New("catalog token lacks the required regional roles")
+					}
+					return nil
+				},
+			})
+			if managerErr != nil {
+				return managerErr
+			}
+			if managerErr = manager.Start(context.Background()); managerErr != nil {
+				return fmt.Errorf("obtain initial Public Catalog token: %w", managerErr)
+			}
+			publicCatalogManager = manager
+			defer publicCatalogManager.Close()
+			publicCatalogToken = manager.Current
+		}
 		business, err = wayservice.New(wayservice.Config{
 			DB:                         database.SQL,
 			DatabaseSchema:             config.Database.Schema,
@@ -483,6 +612,8 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 			Logger:                     logger,
 			ProviderCallbackBaseURL:    config.ProviderCallbacks.PublicBaseURL,
 			ProviderCallbackSecret:     callbackSecret,
+			PublicCatalogToken:         publicCatalogToken,
+			PublicRuntimeConfig:        publicRuntimeConfig,
 			OutboxBatchSize:            positiveOr(config.ChargeOutbox.MaxBatchSize, 20),
 			OutboxRetryInterval:        durationOr(config.ChargeOutbox.RetryInterval, 250*time.Millisecond),
 			OutboxAbandonAfter:         durationOr(config.ChargeOutbox.AbandonAfter, 24*time.Hour),

@@ -11,7 +11,7 @@ import (
 
 func TestMilestone03OpenAPIRootsReplaceAdminAndOldKeyContract(t *testing.T) {
 	root := filepath.Join("..", "..", "api", "openapi")
-	for _, name := range []string{"account.yaml", "internal-gizpay.yaml", "gizway-public.yaml", "gizway-user.yaml"} {
+	for _, name := range []string{"account.yaml", "gizpay-webhooks.yaml", "internal-gizpay.yaml", "gizway-public.yaml", "gizway-user.yaml"} {
 		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
 			t.Errorf("Milestone 03 OpenAPI root %s: %v", name, err)
 		}
@@ -38,7 +38,6 @@ func TestMilestone03DocumentedOperationsHaveHurlRequests(t *testing.T) {
 	root := filepath.Join("..", "..", "tests", "api", "stories", "24-milestone-03")
 	expected := map[string][]string{
 		"01-initialize-and-account.hurl": {
-			"POST {{pay_url}}/account/v1/initialize",
 			"GET {{pay_url}}/account/v1/accounts",
 			"GET {{pay_url}}/account/v1/accounts/{{account_id}}/balance",
 			"GET {{pay_url}}/account/v1/accounts/{{account_id}}/transactions",

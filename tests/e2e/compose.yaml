@@ -6,7 +6,11 @@ x-postgres: &postgres
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: postgres
   healthcheck:
-    test: [CMD-SHELL, 'pg_isready -U postgres -d "$${POSTGRES_DB}"']
+    # pg_isready also succeeds against the temporary server used by the
+    # official image while /docker-entrypoint-initdb.d is still running. PID 1
+    # becomes postgres only after that initialization server has shut down and
+    # the final server has started.
+    test: [CMD-SHELL, 'test "$$(cat /proc/1/comm)" = postgres && pg_isready -U postgres -d "$${POSTGRES_DB}"']
     interval: 1s
     timeout: 3s
     retries: 60
@@ -93,7 +97,7 @@ services:
     environment: [POWERSYNC_CONFIG_PATH=/config/service.yaml]
     volumes:
       - ../powersync/config/gizway-cn-service.yaml:/config/service.yaml:ro
-      - ../powersync/config/gizway-sync-config.yaml:/config/sync-config.yaml:ro
+      - ../powersync/config/gizway-cn-sync-config.yaml:/config/sync-config.yaml:ro
     ports: ["127.0.0.1::8080"]
 
   powersync-global:
@@ -107,7 +111,7 @@ services:
     environment: [POWERSYNC_CONFIG_PATH=/config/service.yaml]
     volumes:
       - ../powersync/config/gizway-global-service.yaml:/config/service.yaml:ro
-      - ../powersync/config/gizway-sync-config.yaml:/config/sync-config.yaml:ro
+      - ../powersync/config/gizway-global-sync-config.yaml:/config/sync-config.yaml:ro
     ports: ["127.0.0.1::8080"]
 
   zitadel-fixtures-init:
@@ -139,26 +143,59 @@ services:
       - fixtures:/fixtures
     healthcheck:
       test:
-        - CMD-SHELL
-        - >-
-          for attempt in $$(seq 1 60); do
-            /app/zitadel ready --config /config/zitadel.config.yaml --config /config/zitadel.secrets.yaml && exit 0;
-            sleep 1;
-          done;
-          exit 1
+        - CMD
+        - /app/zitadel
+        - ready
+        - --config
+        - /config/zitadel.config.yaml
+        - --config
+        - /config/zitadel.secrets.yaml
       interval: 2s
-      timeout: 75s
-      retries: 3
+      timeout: 5s
+      retries: 60
+
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.16.2
+    user: "0"
+    depends_on:
+      zitadel: {condition: service_healthy}
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /fixtures/zitadel-login-client.pat
+      CUSTOM_REQUEST_HEADERS: Host:identity.e2e.gizway.test,X-Forwarded-Proto:http
+    volumes: [fixtures:/fixtures:ro]
+    healthcheck:
+      test: [CMD-SHELL, node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  identity-proxy:
+    image: nginx:1.29.1-alpine
+    depends_on:
+      zitadel: {condition: service_healthy}
+      zitadel-login: {condition: service_healthy}
+    volumes:
+      - ./zitadel/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      default:
+        aliases: [identity.e2e.gizway.test]
+    healthcheck:
+      test: [CMD-SHELL, wget --quiet --spider http://127.0.0.1:18080/debug/healthz]
+      interval: 2s
+      timeout: 5s
+      retries: 60
 
   zitadel-bootstrap:
     <<: *app
     depends_on:
-      zitadel: {condition: service_started}
+      identity-proxy: {condition: service_healthy}
     volumes: [fixtures:/fixtures]
     command:
       - e2e-bootstrap
       - --mode=zitadel
-      - --zitadel-url=http://zitadel:8080
+      - --zitadel-url=http://identity.e2e.gizway.test:18080
       - --output-directory=/fixtures
 
   fake-provider-cn:
@@ -227,7 +264,7 @@ services:
     <<: *app
     depends_on:
       zitadel: {condition: service_started}
-    command: [fake-oauth-spy, --address=0.0.0.0:19500, --upstream=http://zitadel:8080]
+    command: [fake-oauth-spy, --address=0.0.0.0:19500, --upstream=http://identity.e2e.gizway.test:18080]
 
   gizway-cn:
     <<: *app
@@ -238,10 +275,10 @@ services:
       oauth-spy: {condition: service_started}
       zitadel-bootstrap: {condition: service_completed_successfully}
     volumes:
-      - ./config/gizway-cn.yaml:/config/gizway.yaml:ro
+      - fixtures:/config:ro
       - ./secrets:/secrets:ro
       - fixtures:/fixtures:ro
-    command: [gizway, --config=/config/gizway.yaml, --initialize]
+    command: [gizway, --config=/config/gizway-cn.yaml, --initialize]
     ports: ["127.0.0.1::8080"]
     healthcheck:
       test: [CMD-SHELL, curl --fail --silent http://localhost:8080/healthz]
@@ -258,10 +295,10 @@ services:
       oauth-spy: {condition: service_started}
       zitadel-bootstrap: {condition: service_completed_successfully}
     volumes:
-      - ./config/gizway-global.yaml:/config/gizway.yaml:ro
+      - fixtures:/config:ro
       - ./secrets:/secrets:ro
       - fixtures:/fixtures:ro
-    command: [gizway, --config=/config/gizway.yaml, --initialize]
+    command: [gizway, --config=/config/gizway-global.yaml, --initialize]
     ports: ["127.0.0.1::8080"]
     healthcheck:
       test: [CMD-SHELL, curl --fail --silent http://localhost:8080/healthz]
@@ -281,7 +318,7 @@ services:
     command:
       - e2e-bootstrap
       - --mode=milestone-03
-      - --zitadel-url=http://zitadel:8080
+      - --zitadel-url=http://identity.e2e.gizway.test:18080
       - --gizpay-url=http://gizpay:8081
       - --cn-url=http://gizway-cn:8080
       - --global-url=http://gizway-global:8080
@@ -293,6 +330,23 @@ services:
       - --hmac-secret-file=/secrets/subscription-key-hmac
       - --cn-provider-url=http://fake-provider-cn:19000
       - --global-provider-url=http://fake-provider-global:19000
+
+  web:
+    profiles: [web]
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.web
+    depends_on:
+      bootstrap-milestone-03: {condition: service_completed_successfully}
+      powersync-gizpay: {condition: service_started}
+      powersync-cn: {condition: service_started}
+      powersync-global: {condition: service_started}
+    ports: ["127.0.0.1:3000:3000"]
+    healthcheck:
+      test: [CMD-SHELL, "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 2s
+      timeout: 5s
+      retries: 60
 
   hurl-api:
     image: ghcr.io/orange-opensource/hurl:7.0.0

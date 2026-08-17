@@ -4,7 +4,7 @@ import "net/http"
 
 func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 	for _, route := range []string{
-		"POST /account/v1/initialize",
+		"POST /webhooks/v1/zitadel/user-authenticated",
 		"GET /account/v1/accounts",
 		"GET /account/v1/accounts/{account_id}/balance",
 		"GET /account/v1/accounts/{account_id}/transactions",
@@ -37,6 +37,8 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 		"POST /user/v1/providers/{provider_id}/keys",
 		"PUT /user/v1/provider-keys/{provider_key_id}/prices",
 		"POST /user/v1/provider-keys/{provider_key_id}/disable",
+		"GET /auth/catalog-token",
+		"GET /auth/runtime-config",
 		"GET /v1/models",
 		"POST /v1/chat/completions",
 		"POST /v1/messages",

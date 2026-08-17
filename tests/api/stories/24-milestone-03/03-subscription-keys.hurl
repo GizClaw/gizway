@@ -5,7 +5,7 @@
 POST {{pay_url}}/account/v1/subscriptions/{{seeded_subscription_id}}/keys
 Authorization: Bearer {{human_token}}
 Content-Type: application/json
-{}
+{"id":"skey_m03_retained","name":"M03 retained key"}
 
 HTTP 201
 [Captures]
@@ -34,6 +34,15 @@ Authorization: Bearer {{human_token}}
 HTTP 200
 [Asserts]
 jsonpath "$.key" == "{{subscription_key}}"
+
+
+POST {{pay_url}}/account/v1/subscriptions/{{subscription_id}}/keys/{{subscription_key_id}}/revoke
+Authorization: Bearer {{human_token}}
+
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "revoked"
+jsonpath "$.revoked_at" exists
 
 
 POST {{pay_url}}/account/v1/subscriptions/{{subscription_id}}/keys/{{subscription_key_id}}/revoke

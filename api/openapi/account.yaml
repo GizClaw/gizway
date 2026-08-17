@@ -1,13 +1,8 @@
 openapi: 3.1.0
-info: {title: GizPay Account API, version: 3.0.0}
+info: {title: GizPay Account API, version: 4.0.0}
 servers: [{url: https://pay.gizway.com/account/v1}]
 security: [{humanBearer: []}]
 paths:
-  /initialize:
-    post:
-      operationId: initializeUser
-      responses:
-        '200': {description: "Stable User, Account, Ledger Account, and default Merchant IDs", content: {application/json: {schema: {$ref: '#/components/schemas/Initialization'}}}}
   /accounts:
     get: {operationId: listAccounts, responses: {'200': {$ref: '#/components/responses/AccountList'}}}
   /accounts/{account_id}/balance:
@@ -28,7 +23,13 @@ paths:
     post:
       operationId: createAccountTopup
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateTopup'}}}}
-      responses: {'201': {description: Posted Top-up, content: {application/json: {schema: {$ref: '#/components/schemas/Topup'}}}}}
+      responses:
+        '200': {description: Existing identical Top-up, content: {application/json: {schema: {$ref: '#/components/schemas/Topup'}}}}
+        '201': {description: Posted Top-up, content: {application/json: {schema: {$ref: '#/components/schemas/Topup'}}}}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {description: "resource_id_conflict or duplicate_external_reference", content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
   /service-accounts:
     get: {operationId: listServiceAccounts, responses: {'200': {$ref: '#/components/responses/ServiceAccountList'}}}
     post:
@@ -72,7 +73,13 @@ paths:
     post:
       operationId: createProductSubscription
       requestBody: {$ref: '#/components/requestBodies/CreateSubscription'}
-      responses: {'201': {$ref: '#/components/responses/Subscription'}}
+      responses:
+        '200': {$ref: '#/components/responses/Subscription'}
+        '201': {$ref: '#/components/responses/Subscription'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {description: "resource_id_conflict, subscription_already_exists, or terms_version_mismatch", content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
   /subscriptions:
     get: {operationId: listSubscriptions, responses: {'200': {$ref: '#/components/responses/SubscriptionList'}}}
   /subscriptions/{subscription_id}:
@@ -85,7 +92,16 @@ paths:
   /subscriptions/{subscription_id}/keys:
     parameters: [{$ref: '#/components/parameters/subscription_id'}]
     get: {operationId: listSubscriptionKeys, responses: {'200': {$ref: '#/components/responses/KeyList'}}}
-    post: {operationId: createSubscriptionKey, responses: {'201': {$ref: '#/components/responses/Key'}}}
+    post:
+      operationId: createSubscriptionKey
+      requestBody: {$ref: '#/components/requestBodies/CreateSubscriptionKey'}
+      responses:
+        '200': {$ref: '#/components/responses/Key'}
+        '201': {$ref: '#/components/responses/Key'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {description: resource_id_conflict, content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
   /subscriptions/{subscription_id}/keys/{subscription_key_id}:
     parameters: [{$ref: '#/components/parameters/subscription_id'}, {$ref: '#/components/parameters/subscription_key_id'}]
     get: {operationId: getSubscriptionKey, responses: {'200': {$ref: '#/components/responses/Key'}}}
@@ -114,14 +130,7 @@ components:
         asset: {type: string, const: GIZ_CREDIT}
         created_at: {type: string, format: date-time}
         ledger_accounts: {type: array, items: {type: object, additionalProperties: true}}
-    Initialization:
-      type: object
-      required: [user_id, account_id, ledger_account_id, default_merchant_id]
-      properties:
-        user_id: {type: string}
-        account_id: {type: string}
-        ledger_account_id: {type: string}
-        default_merchant_id: {type: string}
+    ErrorResponse: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}
     Merchant:
       type: object
       required: [id, settlement_account_id, legal_name, public_name, is_default, status]
@@ -158,13 +167,15 @@ components:
         canceled_at: {type: [string, 'null'], format: date-time}
     SubscriptionKey:
       type: object
-      required: [id, subscription_id, key, status]
+      required: [id, subscription_id, name, key, status]
       properties:
         id: {type: string}
         subscription_id: {type: string}
+        name: {type: string, minLength: 1}
         key: {type: string, minLength: 32, writeOnly: false}
         status: {type: string, enum: [active, revoked]}
         created_at: {type: string, format: date-time}
+        last_used_at: {type: [string, 'null'], format: date-time}
         revoked_at: {type: [string, 'null'], format: date-time}
     ServiceAccount:
       type: object
@@ -188,8 +199,10 @@ components:
       properties: {account_id: {type: string}, balance_microcredits: {type: integer, format: int64}}
     CreateTopup:
       type: object
-      required: [channel, external_reference, amount_microcredits]
+      additionalProperties: false
+      required: [id, channel, external_reference, amount_microcredits]
       properties:
+        id: {type: string, minLength: 1}
         channel: {type: string, const: fake}
         external_reference: {type: string, minLength: 1}
         amount_microcredits: {type: integer, format: int64, minimum: 1}
@@ -203,7 +216,8 @@ components:
     UpdateMerchant: {required: true, content: {application/json: {schema: {type: object, minProperties: 1, properties: {public_name: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}}}}}
     CreateProduct: {required: true, content: {application/json: {schema: {type: object, required: [name, billing_mode, terms_version], properties: {name: {type: string, minLength: 1}, billing_mode: {type: string, const: pay_as_you_go}, terms_version: {type: string, minLength: 1}}}}}}
     UpdateProduct: {required: true, content: {application/json: {schema: {type: object, properties: {name: {type: string, minLength: 1}, status: {$ref: '#/components/schemas/Status'}}}}}}
-    CreateSubscription: {required: true, content: {application/json: {schema: {type: object, required: [account_id, terms_version], properties: {account_id: {type: string}, terms_version: {type: string, minLength: 1}}}}}}
+    CreateSubscription: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [id, account_id, terms_version], properties: {id: {type: string, minLength: 1}, account_id: {type: string}, terms_version: {type: string, minLength: 1}}}}}}
+    CreateSubscriptionKey: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [id, name], properties: {id: {type: string, minLength: 1}, name: {type: string, minLength: 1}}}}}}
     UpdateSubscription: {required: true, content: {application/json: {schema: {type: object, required: [status], properties: {status: {type: string, enum: [active, paused, inactive]}}}}}}
   responses:
     AccountList: {description: Accounts, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Account'}}}}}}}

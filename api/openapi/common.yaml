@@ -1,0 +1,40 @@
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string, pattern: '^[a-z0-9_]+$'}
+            message: {type: string, minLength: 1}
+  responses:
+    BadRequest:
+      description: Invalid request
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unauthorized:
+      description: Authentication failed
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Forbidden:
+      description: Operation is not permitted
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    NotFound:
+      description: Resource was not found
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Conflict:
+      description: Resource state or client-generated ID conflicts with the request, including resource_id_conflict
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    TooManyRequests:
+      description: Retryable rate limit
+      headers: {Retry-After: {schema: {type: string}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    InternalError:
+      description: Internal service error
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    ServiceUnavailable:
+      description: Temporary dependency failure
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}

@@ -1,0 +1,14 @@
+# Runner-owned values. M04 stories start after the ZITADEL Action has
+# initialized both Human accounts.
+variables:
+  pay_url: GizPay base URL
+  way_url: GizWay base URL for the selected region
+  human_token: primary ZITADEL Human JWT
+  human_token_two: second ZITADEL Human JWT
+  account_id: initialized Account owned by human_token
+  account_id_two: initialized Account owned by human_token_two
+  default_merchant_id: default Merchant owned by human_token
+  seeded_subscription_id: active PAYG Subscription owned by human_token
+  provider_id: seeded regional Provider ID
+  seeded_model_id: active regional Model ID
+  provider_key_secret_two: disposable Provider Key value

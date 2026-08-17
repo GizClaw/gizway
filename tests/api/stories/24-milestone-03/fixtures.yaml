@@ -12,7 +12,9 @@ variables:
   revoked_at: revocation timestamp for the revoked Subscription Key
   after_revocation_time: timestamp strictly after revoked_at
   negative_balance_hmac: HMAC of the low-balance second-user Subscription Key
+  account_id: initialized Account owned by human_token
   account_id_two: initialized Account owned by human_token_two
+  default_merchant_id: default Merchant owned by human_token
   seeded_subscription_id: active PAYG Subscription owned by human_token
   hidden_product_id: active but unpublished PAYG Product
   seeded_model_id: active regional Bifrost Model ID

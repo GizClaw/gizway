@@ -26,13 +26,13 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
-// Defines values for AccountAsset.
+// Defines values for ListAccounts200JSONResponseBodyDataAsset.
 const (
-	GIZCREDIT AccountAsset = "GIZ_CREDIT"
+	GIZCREDIT ListAccounts200JSONResponseBodyDataAsset = "GIZ_CREDIT"
 )
 
-// Valid indicates whether the value is a known member of the AccountAsset enum.
-func (e AccountAsset) Valid() bool {
+// Valid indicates whether the value is a known member of the ListAccounts200JSONResponseBodyDataAsset enum.
+func (e ListAccounts200JSONResponseBodyDataAsset) Valid() bool {
 	switch e {
 	case GIZCREDIT:
 		return true
@@ -41,13 +41,13 @@ func (e AccountAsset) Valid() bool {
 	}
 }
 
-// Defines values for AccountKind.
+// Defines values for ListAccounts200JSONResponseBodyDataKind.
 const (
-	Personal AccountKind = "personal"
+	Personal ListAccounts200JSONResponseBodyDataKind = "personal"
 )
 
-// Valid indicates whether the value is a known member of the AccountKind enum.
-func (e AccountKind) Valid() bool {
+// Valid indicates whether the value is a known member of the ListAccounts200JSONResponseBodyDataKind enum.
+func (e ListAccounts200JSONResponseBodyDataKind) Valid() bool {
 	switch e {
 	case Personal:
 		return true
@@ -56,171 +56,216 @@ func (e AccountKind) Valid() bool {
 	}
 }
 
-// Defines values for CreateTopupChannel.
+// Defines values for ListAccounts200JSONResponseBodyDataStatus.
 const (
-	CreateTopupChannelFake CreateTopupChannel = "fake"
+	ListAccounts200JSONResponseBodyDataStatusActive   ListAccounts200JSONResponseBodyDataStatus = "active"
+	ListAccounts200JSONResponseBodyDataStatusInactive ListAccounts200JSONResponseBodyDataStatus = "inactive"
 )
 
-// Valid indicates whether the value is a known member of the CreateTopupChannel enum.
-func (e CreateTopupChannel) Valid() bool {
+// Valid indicates whether the value is a known member of the ListAccounts200JSONResponseBodyDataStatus enum.
+func (e ListAccounts200JSONResponseBodyDataStatus) Valid() bool {
 	switch e {
-	case CreateTopupChannelFake:
+	case ListAccounts200JSONResponseBodyDataStatusActive:
+		return true
+	case ListAccounts200JSONResponseBodyDataStatusInactive:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ProductBillingMode.
+// Defines values for CreateAccountTopupJSONBodyChannel.
 const (
-	ProductBillingModePayAsYouGo ProductBillingMode = "pay_as_you_go"
+	CreateAccountTopupJSONBodyChannelFake CreateAccountTopupJSONBodyChannel = "fake"
 )
 
-// Valid indicates whether the value is a known member of the ProductBillingMode enum.
-func (e ProductBillingMode) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateAccountTopupJSONBodyChannel enum.
+func (e CreateAccountTopupJSONBodyChannel) Valid() bool {
 	switch e {
-	case ProductBillingModePayAsYouGo:
+	case CreateAccountTopupJSONBodyChannelFake:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ServiceAccountStatus.
+// Defines values for CreateAccountTopup200JSONResponseBodyChannel.
 const (
-	ServiceAccountStatusActive  ServiceAccountStatus = "active"
-	ServiceAccountStatusRevoked ServiceAccountStatus = "revoked"
+	CreateAccountTopup200JSONResponseBodyChannelFake CreateAccountTopup200JSONResponseBodyChannel = "fake"
 )
 
-// Valid indicates whether the value is a known member of the ServiceAccountStatus enum.
-func (e ServiceAccountStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateAccountTopup200JSONResponseBodyChannel enum.
+func (e CreateAccountTopup200JSONResponseBodyChannel) Valid() bool {
 	switch e {
-	case ServiceAccountStatusActive:
-		return true
-	case ServiceAccountStatusRevoked:
+	case CreateAccountTopup200JSONResponseBodyChannelFake:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for Status.
+// Defines values for CreateAccountTopup200JSONResponseBodyStatus.
 const (
-	StatusActive   Status = "active"
-	StatusInactive Status = "inactive"
+	CreateAccountTopup200JSONResponseBodyStatusSucceeded CreateAccountTopup200JSONResponseBodyStatus = "succeeded"
 )
 
-// Valid indicates whether the value is a known member of the Status enum.
-func (e Status) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateAccountTopup200JSONResponseBodyStatus enum.
+func (e CreateAccountTopup200JSONResponseBodyStatus) Valid() bool {
 	switch e {
-	case StatusActive:
-		return true
-	case StatusInactive:
+	case CreateAccountTopup200JSONResponseBodyStatusSucceeded:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for SubscriptionStatus.
+// Defines values for CreateAccountTopup201JSONResponseBodyChannel.
 const (
-	SubscriptionStatusActive   SubscriptionStatus = "active"
-	SubscriptionStatusInactive SubscriptionStatus = "inactive"
-	SubscriptionStatusPaused   SubscriptionStatus = "paused"
+	CreateAccountTopup201JSONResponseBodyChannelFake CreateAccountTopup201JSONResponseBodyChannel = "fake"
 )
 
-// Valid indicates whether the value is a known member of the SubscriptionStatus enum.
-func (e SubscriptionStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateAccountTopup201JSONResponseBodyChannel enum.
+func (e CreateAccountTopup201JSONResponseBodyChannel) Valid() bool {
 	switch e {
-	case SubscriptionStatusActive:
-		return true
-	case SubscriptionStatusInactive:
-		return true
-	case SubscriptionStatusPaused:
+	case CreateAccountTopup201JSONResponseBodyChannelFake:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for SubscriptionKeyStatus.
+// Defines values for CreateAccountTopup201JSONResponseBodyStatus.
 const (
-	SubscriptionKeyStatusActive  SubscriptionKeyStatus = "active"
-	SubscriptionKeyStatusRevoked SubscriptionKeyStatus = "revoked"
+	CreateAccountTopup201JSONResponseBodyStatusSucceeded CreateAccountTopup201JSONResponseBodyStatus = "succeeded"
 )
 
-// Valid indicates whether the value is a known member of the SubscriptionKeyStatus enum.
-func (e SubscriptionKeyStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateAccountTopup201JSONResponseBodyStatus enum.
+func (e CreateAccountTopup201JSONResponseBodyStatus) Valid() bool {
 	switch e {
-	case SubscriptionKeyStatusActive:
-		return true
-	case SubscriptionKeyStatusRevoked:
+	case CreateAccountTopup201JSONResponseBodyStatusSucceeded:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for TopupChannel.
+// Defines values for ListMerchants200JSONResponseBodyDataStatus.
 const (
-	TopupChannelFake TopupChannel = "fake"
+	ListMerchants200JSONResponseBodyDataStatusActive   ListMerchants200JSONResponseBodyDataStatus = "active"
+	ListMerchants200JSONResponseBodyDataStatusInactive ListMerchants200JSONResponseBodyDataStatus = "inactive"
 )
 
-// Valid indicates whether the value is a known member of the TopupChannel enum.
-func (e TopupChannel) Valid() bool {
+// Valid indicates whether the value is a known member of the ListMerchants200JSONResponseBodyDataStatus enum.
+func (e ListMerchants200JSONResponseBodyDataStatus) Valid() bool {
 	switch e {
-	case TopupChannelFake:
+	case ListMerchants200JSONResponseBodyDataStatusActive:
+		return true
+	case ListMerchants200JSONResponseBodyDataStatusInactive:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for TopupStatus.
+// Defines values for CreateMerchant201JSONResponseBodyStatus.
 const (
-	Succeeded TopupStatus = "succeeded"
+	CreateMerchant201JSONResponseBodyStatusActive   CreateMerchant201JSONResponseBodyStatus = "active"
+	CreateMerchant201JSONResponseBodyStatusInactive CreateMerchant201JSONResponseBodyStatus = "inactive"
 )
 
-// Valid indicates whether the value is a known member of the TopupStatus enum.
-func (e TopupStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateMerchant201JSONResponseBodyStatus enum.
+func (e CreateMerchant201JSONResponseBodyStatus) Valid() bool {
 	switch e {
-	case Succeeded:
+	case CreateMerchant201JSONResponseBodyStatusActive:
+		return true
+	case CreateMerchant201JSONResponseBodyStatusInactive:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for CreateProductBillingMode.
+// Defines values for GetMerchant200JSONResponseBodyStatus.
 const (
-	CreateProductBillingModePayAsYouGo CreateProductBillingMode = "pay_as_you_go"
+	GetMerchant200JSONResponseBodyStatusActive   GetMerchant200JSONResponseBodyStatus = "active"
+	GetMerchant200JSONResponseBodyStatusInactive GetMerchant200JSONResponseBodyStatus = "inactive"
 )
 
-// Valid indicates whether the value is a known member of the CreateProductBillingMode enum.
-func (e CreateProductBillingMode) Valid() bool {
+// Valid indicates whether the value is a known member of the GetMerchant200JSONResponseBodyStatus enum.
+func (e GetMerchant200JSONResponseBodyStatus) Valid() bool {
 	switch e {
-	case CreateProductBillingModePayAsYouGo:
+	case GetMerchant200JSONResponseBodyStatusActive:
+		return true
+	case GetMerchant200JSONResponseBodyStatusInactive:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for UpdateSubscriptionStatus.
+// Defines values for UpdateMerchantJSONBodyStatus.
 const (
-	UpdateSubscriptionStatusActive   UpdateSubscriptionStatus = "active"
-	UpdateSubscriptionStatusInactive UpdateSubscriptionStatus = "inactive"
-	UpdateSubscriptionStatusPaused   UpdateSubscriptionStatus = "paused"
+	UpdateMerchantJSONBodyStatusActive   UpdateMerchantJSONBodyStatus = "active"
+	UpdateMerchantJSONBodyStatusInactive UpdateMerchantJSONBodyStatus = "inactive"
 )
 
-// Valid indicates whether the value is a known member of the UpdateSubscriptionStatus enum.
-func (e UpdateSubscriptionStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateMerchantJSONBodyStatus enum.
+func (e UpdateMerchantJSONBodyStatus) Valid() bool {
 	switch e {
-	case UpdateSubscriptionStatusActive:
+	case UpdateMerchantJSONBodyStatusActive:
 		return true
-	case UpdateSubscriptionStatusInactive:
+	case UpdateMerchantJSONBodyStatusInactive:
 		return true
-	case UpdateSubscriptionStatusPaused:
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateMerchant200JSONResponseBodyStatus.
+const (
+	UpdateMerchant200JSONResponseBodyStatusActive   UpdateMerchant200JSONResponseBodyStatus = "active"
+	UpdateMerchant200JSONResponseBodyStatusInactive UpdateMerchant200JSONResponseBodyStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the UpdateMerchant200JSONResponseBodyStatus enum.
+func (e UpdateMerchant200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case UpdateMerchant200JSONResponseBodyStatusActive:
+		return true
+	case UpdateMerchant200JSONResponseBodyStatusInactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListMerchantProducts200JSONResponseBodyDataBillingMode.
+const (
+	ListMerchantProducts200JSONResponseBodyDataBillingModePayAsYouGo ListMerchantProducts200JSONResponseBodyDataBillingMode = "pay_as_you_go"
+)
+
+// Valid indicates whether the value is a known member of the ListMerchantProducts200JSONResponseBodyDataBillingMode enum.
+func (e ListMerchantProducts200JSONResponseBodyDataBillingMode) Valid() bool {
+	switch e {
+	case ListMerchantProducts200JSONResponseBodyDataBillingModePayAsYouGo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListMerchantProducts200JSONResponseBodyDataStatus.
+const (
+	ListMerchantProducts200JSONResponseBodyDataStatusActive   ListMerchantProducts200JSONResponseBodyDataStatus = "active"
+	ListMerchantProducts200JSONResponseBodyDataStatusInactive ListMerchantProducts200JSONResponseBodyDataStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the ListMerchantProducts200JSONResponseBodyDataStatus enum.
+func (e ListMerchantProducts200JSONResponseBodyDataStatus) Valid() bool {
+	switch e {
+	case ListMerchantProducts200JSONResponseBodyDataStatusActive:
+		return true
+	case ListMerchantProducts200JSONResponseBodyDataStatusInactive:
 		return true
 	default:
 		return false
@@ -236,6 +281,276 @@ const (
 func (e CreateMerchantProductJSONBodyBillingMode) Valid() bool {
 	switch e {
 	case CreateMerchantProductJSONBodyBillingModePayAsYouGo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateMerchantProduct201JSONResponseBodyBillingMode.
+const (
+	CreateMerchantProduct201JSONResponseBodyBillingModePayAsYouGo CreateMerchantProduct201JSONResponseBodyBillingMode = "pay_as_you_go"
+)
+
+// Valid indicates whether the value is a known member of the CreateMerchantProduct201JSONResponseBodyBillingMode enum.
+func (e CreateMerchantProduct201JSONResponseBodyBillingMode) Valid() bool {
+	switch e {
+	case CreateMerchantProduct201JSONResponseBodyBillingModePayAsYouGo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateMerchantProduct201JSONResponseBodyStatus.
+const (
+	CreateMerchantProduct201JSONResponseBodyStatusActive   CreateMerchantProduct201JSONResponseBodyStatus = "active"
+	CreateMerchantProduct201JSONResponseBodyStatusInactive CreateMerchantProduct201JSONResponseBodyStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the CreateMerchantProduct201JSONResponseBodyStatus enum.
+func (e CreateMerchantProduct201JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateMerchantProduct201JSONResponseBodyStatusActive:
+		return true
+	case CreateMerchantProduct201JSONResponseBodyStatusInactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListProducts200JSONResponseBodyDataBillingMode.
+const (
+	ListProducts200JSONResponseBodyDataBillingModePayAsYouGo ListProducts200JSONResponseBodyDataBillingMode = "pay_as_you_go"
+)
+
+// Valid indicates whether the value is a known member of the ListProducts200JSONResponseBodyDataBillingMode enum.
+func (e ListProducts200JSONResponseBodyDataBillingMode) Valid() bool {
+	switch e {
+	case ListProducts200JSONResponseBodyDataBillingModePayAsYouGo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListProducts200JSONResponseBodyDataStatus.
+const (
+	ListProducts200JSONResponseBodyDataStatusActive   ListProducts200JSONResponseBodyDataStatus = "active"
+	ListProducts200JSONResponseBodyDataStatusInactive ListProducts200JSONResponseBodyDataStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the ListProducts200JSONResponseBodyDataStatus enum.
+func (e ListProducts200JSONResponseBodyDataStatus) Valid() bool {
+	switch e {
+	case ListProducts200JSONResponseBodyDataStatusActive:
+		return true
+	case ListProducts200JSONResponseBodyDataStatusInactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetProduct200JSONResponseBodyBillingMode.
+const (
+	GetProduct200JSONResponseBodyBillingModePayAsYouGo GetProduct200JSONResponseBodyBillingMode = "pay_as_you_go"
+)
+
+// Valid indicates whether the value is a known member of the GetProduct200JSONResponseBodyBillingMode enum.
+func (e GetProduct200JSONResponseBodyBillingMode) Valid() bool {
+	switch e {
+	case GetProduct200JSONResponseBodyBillingModePayAsYouGo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetProduct200JSONResponseBodyStatus.
+const (
+	GetProduct200JSONResponseBodyStatusActive   GetProduct200JSONResponseBodyStatus = "active"
+	GetProduct200JSONResponseBodyStatusInactive GetProduct200JSONResponseBodyStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the GetProduct200JSONResponseBodyStatus enum.
+func (e GetProduct200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case GetProduct200JSONResponseBodyStatusActive:
+		return true
+	case GetProduct200JSONResponseBodyStatusInactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateProductJSONBodyStatus.
+const (
+	UpdateProductJSONBodyStatusActive   UpdateProductJSONBodyStatus = "active"
+	UpdateProductJSONBodyStatusInactive UpdateProductJSONBodyStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the UpdateProductJSONBodyStatus enum.
+func (e UpdateProductJSONBodyStatus) Valid() bool {
+	switch e {
+	case UpdateProductJSONBodyStatusActive:
+		return true
+	case UpdateProductJSONBodyStatusInactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateProduct200JSONResponseBodyBillingMode.
+const (
+	UpdateProduct200JSONResponseBodyBillingModePayAsYouGo UpdateProduct200JSONResponseBodyBillingMode = "pay_as_you_go"
+)
+
+// Valid indicates whether the value is a known member of the UpdateProduct200JSONResponseBodyBillingMode enum.
+func (e UpdateProduct200JSONResponseBodyBillingMode) Valid() bool {
+	switch e {
+	case UpdateProduct200JSONResponseBodyBillingModePayAsYouGo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateProduct200JSONResponseBodyStatus.
+const (
+	UpdateProduct200JSONResponseBodyStatusActive   UpdateProduct200JSONResponseBodyStatus = "active"
+	UpdateProduct200JSONResponseBodyStatusInactive UpdateProduct200JSONResponseBodyStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the UpdateProduct200JSONResponseBodyStatus enum.
+func (e UpdateProduct200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case UpdateProduct200JSONResponseBodyStatusActive:
+		return true
+	case UpdateProduct200JSONResponseBodyStatusInactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateProductSubscription200JSONResponseBodyStatus.
+const (
+	CreateProductSubscription200JSONResponseBodyStatusActive   CreateProductSubscription200JSONResponseBodyStatus = "active"
+	CreateProductSubscription200JSONResponseBodyStatusInactive CreateProductSubscription200JSONResponseBodyStatus = "inactive"
+	CreateProductSubscription200JSONResponseBodyStatusPaused   CreateProductSubscription200JSONResponseBodyStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the CreateProductSubscription200JSONResponseBodyStatus enum.
+func (e CreateProductSubscription200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateProductSubscription200JSONResponseBodyStatusActive:
+		return true
+	case CreateProductSubscription200JSONResponseBodyStatusInactive:
+		return true
+	case CreateProductSubscription200JSONResponseBodyStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateProductSubscription201JSONResponseBodyStatus.
+const (
+	CreateProductSubscription201JSONResponseBodyStatusActive   CreateProductSubscription201JSONResponseBodyStatus = "active"
+	CreateProductSubscription201JSONResponseBodyStatusInactive CreateProductSubscription201JSONResponseBodyStatus = "inactive"
+	CreateProductSubscription201JSONResponseBodyStatusPaused   CreateProductSubscription201JSONResponseBodyStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the CreateProductSubscription201JSONResponseBodyStatus enum.
+func (e CreateProductSubscription201JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateProductSubscription201JSONResponseBodyStatusActive:
+		return true
+	case CreateProductSubscription201JSONResponseBodyStatusInactive:
+		return true
+	case CreateProductSubscription201JSONResponseBodyStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListServiceAccounts200JSONResponseBodyDataStatus.
+const (
+	ListServiceAccounts200JSONResponseBodyDataStatusActive  ListServiceAccounts200JSONResponseBodyDataStatus = "active"
+	ListServiceAccounts200JSONResponseBodyDataStatusRevoked ListServiceAccounts200JSONResponseBodyDataStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the ListServiceAccounts200JSONResponseBodyDataStatus enum.
+func (e ListServiceAccounts200JSONResponseBodyDataStatus) Valid() bool {
+	switch e {
+	case ListServiceAccounts200JSONResponseBodyDataStatusActive:
+		return true
+	case ListServiceAccounts200JSONResponseBodyDataStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateServiceAccount201JSONResponseBodyStatus.
+const (
+	CreateServiceAccount201JSONResponseBodyStatusActive  CreateServiceAccount201JSONResponseBodyStatus = "active"
+	CreateServiceAccount201JSONResponseBodyStatusRevoked CreateServiceAccount201JSONResponseBodyStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the CreateServiceAccount201JSONResponseBodyStatus enum.
+func (e CreateServiceAccount201JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateServiceAccount201JSONResponseBodyStatusActive:
+		return true
+	case CreateServiceAccount201JSONResponseBodyStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSubscriptions200JSONResponseBodyDataStatus.
+const (
+	ListSubscriptions200JSONResponseBodyDataStatusActive   ListSubscriptions200JSONResponseBodyDataStatus = "active"
+	ListSubscriptions200JSONResponseBodyDataStatusInactive ListSubscriptions200JSONResponseBodyDataStatus = "inactive"
+	ListSubscriptions200JSONResponseBodyDataStatusPaused   ListSubscriptions200JSONResponseBodyDataStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the ListSubscriptions200JSONResponseBodyDataStatus enum.
+func (e ListSubscriptions200JSONResponseBodyDataStatus) Valid() bool {
+	switch e {
+	case ListSubscriptions200JSONResponseBodyDataStatusActive:
+		return true
+	case ListSubscriptions200JSONResponseBodyDataStatusInactive:
+		return true
+	case ListSubscriptions200JSONResponseBodyDataStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetSubscription200JSONResponseBodyStatus.
+const (
+	GetSubscription200JSONResponseBodyStatusActive   GetSubscription200JSONResponseBodyStatus = "active"
+	GetSubscription200JSONResponseBodyStatusInactive GetSubscription200JSONResponseBodyStatus = "inactive"
+	GetSubscription200JSONResponseBodyStatusPaused   GetSubscription200JSONResponseBodyStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the GetSubscription200JSONResponseBodyStatus enum.
+func (e GetSubscription200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case GetSubscription200JSONResponseBodyStatusActive:
+		return true
+	case GetSubscription200JSONResponseBodyStatusInactive:
+		return true
+	case GetSubscription200JSONResponseBodyStatusPaused:
 		return true
 	default:
 		return false
@@ -263,248 +578,156 @@ func (e UpdateSubscriptionJSONBodyStatus) Valid() bool {
 	}
 }
 
-// Account defines model for Account.
-type Account struct {
-	Asset          AccountAsset              `json:"asset"`
-	CreatedAt      time.Time                 `json:"created_at"`
-	Id             string                    `json:"id"`
-	Kind           AccountKind               `json:"kind"`
-	LedgerAccounts *[]map[string]interface{} `json:"ledger_accounts,omitempty"`
-	Status         Status                    `json:"status"`
+// Defines values for UpdateSubscription200JSONResponseBodyStatus.
+const (
+	UpdateSubscription200JSONResponseBodyStatusActive   UpdateSubscription200JSONResponseBodyStatus = "active"
+	UpdateSubscription200JSONResponseBodyStatusInactive UpdateSubscription200JSONResponseBodyStatus = "inactive"
+	UpdateSubscription200JSONResponseBodyStatusPaused   UpdateSubscription200JSONResponseBodyStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the UpdateSubscription200JSONResponseBodyStatus enum.
+func (e UpdateSubscription200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case UpdateSubscription200JSONResponseBodyStatusActive:
+		return true
+	case UpdateSubscription200JSONResponseBodyStatusInactive:
+		return true
+	case UpdateSubscription200JSONResponseBodyStatusPaused:
+		return true
+	default:
+		return false
+	}
 }
 
-// AccountAsset defines model for Account.Asset.
-type AccountAsset string
+// Defines values for ListSubscriptionKeys200JSONResponseBodyDataStatus.
+const (
+	ListSubscriptionKeys200JSONResponseBodyDataStatusActive  ListSubscriptionKeys200JSONResponseBodyDataStatus = "active"
+	ListSubscriptionKeys200JSONResponseBodyDataStatusRevoked ListSubscriptionKeys200JSONResponseBodyDataStatus = "revoked"
+)
 
-// AccountKind defines model for Account.Kind.
-type AccountKind string
-
-// Balance defines model for Balance.
-type Balance struct {
-	AccountId           string `json:"account_id"`
-	BalanceMicrocredits int64  `json:"balance_microcredits"`
+// Valid indicates whether the value is a known member of the ListSubscriptionKeys200JSONResponseBodyDataStatus enum.
+func (e ListSubscriptionKeys200JSONResponseBodyDataStatus) Valid() bool {
+	switch e {
+	case ListSubscriptionKeys200JSONResponseBodyDataStatusActive:
+		return true
+	case ListSubscriptionKeys200JSONResponseBodyDataStatusRevoked:
+		return true
+	default:
+		return false
+	}
 }
 
-// CreateTopup defines model for CreateTopup.
-type CreateTopup struct {
-	AmountMicrocredits int64              `json:"amount_microcredits"`
-	Channel            CreateTopupChannel `json:"channel"`
-	ExternalReference  string             `json:"external_reference"`
+// Defines values for CreateSubscriptionKey200JSONResponseBodyStatus.
+const (
+	CreateSubscriptionKey200JSONResponseBodyStatusActive  CreateSubscriptionKey200JSONResponseBodyStatus = "active"
+	CreateSubscriptionKey200JSONResponseBodyStatusRevoked CreateSubscriptionKey200JSONResponseBodyStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the CreateSubscriptionKey200JSONResponseBodyStatus enum.
+func (e CreateSubscriptionKey200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateSubscriptionKey200JSONResponseBodyStatusActive:
+		return true
+	case CreateSubscriptionKey200JSONResponseBodyStatusRevoked:
+		return true
+	default:
+		return false
+	}
 }
 
-// CreateTopupChannel defines model for CreateTopup.Channel.
-type CreateTopupChannel string
+// Defines values for CreateSubscriptionKey201JSONResponseBodyStatus.
+const (
+	CreateSubscriptionKey201JSONResponseBodyStatusActive  CreateSubscriptionKey201JSONResponseBodyStatus = "active"
+	CreateSubscriptionKey201JSONResponseBodyStatusRevoked CreateSubscriptionKey201JSONResponseBodyStatus = "revoked"
+)
 
-// Initialization defines model for Initialization.
-type Initialization struct {
-	AccountId         string `json:"account_id"`
-	DefaultMerchantId string `json:"default_merchant_id"`
-	LedgerAccountId   string `json:"ledger_account_id"`
-	UserId            string `json:"user_id"`
+// Valid indicates whether the value is a known member of the CreateSubscriptionKey201JSONResponseBodyStatus enum.
+func (e CreateSubscriptionKey201JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case CreateSubscriptionKey201JSONResponseBodyStatusActive:
+		return true
+	case CreateSubscriptionKey201JSONResponseBodyStatusRevoked:
+		return true
+	default:
+		return false
+	}
 }
 
-// Merchant defines model for Merchant.
-type Merchant struct {
-	CreatedAt           *time.Time `json:"created_at,omitempty"`
-	Id                  string     `json:"id"`
-	IsDefault           bool       `json:"is_default"`
-	LegalName           string     `json:"legal_name"`
-	PublicName          string     `json:"public_name"`
-	SettlementAccountId string     `json:"settlement_account_id"`
-	Status              Status     `json:"status"`
-	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
+// Defines values for GetSubscriptionKey200JSONResponseBodyStatus.
+const (
+	GetSubscriptionKey200JSONResponseBodyStatusActive  GetSubscriptionKey200JSONResponseBodyStatus = "active"
+	GetSubscriptionKey200JSONResponseBodyStatusRevoked GetSubscriptionKey200JSONResponseBodyStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the GetSubscriptionKey200JSONResponseBodyStatus enum.
+func (e GetSubscriptionKey200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case GetSubscriptionKey200JSONResponseBodyStatusActive:
+		return true
+	case GetSubscriptionKey200JSONResponseBodyStatusRevoked:
+		return true
+	default:
+		return false
+	}
 }
 
-// Product defines model for Product.
-type Product struct {
-	BillingMode  ProductBillingMode `json:"billing_mode"`
-	Id           string             `json:"id"`
-	MerchantId   string             `json:"merchant_id"`
-	Name         string             `json:"name"`
-	Status       Status             `json:"status"`
-	TermsVersion string             `json:"terms_version"`
+// Defines values for RevokeSubscriptionKey200JSONResponseBodyStatus.
+const (
+	RevokeSubscriptionKey200JSONResponseBodyStatusActive  RevokeSubscriptionKey200JSONResponseBodyStatus = "active"
+	RevokeSubscriptionKey200JSONResponseBodyStatusRevoked RevokeSubscriptionKey200JSONResponseBodyStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the RevokeSubscriptionKey200JSONResponseBodyStatus enum.
+func (e RevokeSubscriptionKey200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case RevokeSubscriptionKey200JSONResponseBodyStatusActive:
+		return true
+	case RevokeSubscriptionKey200JSONResponseBodyStatusRevoked:
+		return true
+	default:
+		return false
+	}
 }
 
-// ProductBillingMode defines model for Product.BillingMode.
-type ProductBillingMode string
+// ListAccounts200JSONResponseBodyDataAsset defines parameters for ListAccounts.
+type ListAccounts200JSONResponseBodyDataAsset string
 
-// Resource defines model for Resource.
-type Resource map[string]interface{}
+// ListAccounts200JSONResponseBodyDataKind defines parameters for ListAccounts.
+type ListAccounts200JSONResponseBodyDataKind string
 
-// ResourceList defines model for ResourceList.
-type ResourceList struct {
-	Data []Resource `json:"data"`
+// ListAccounts200JSONResponseBodyDataStatus defines parameters for ListAccounts.
+type ListAccounts200JSONResponseBodyDataStatus string
+
+// CreateAccountTopupJSONBody defines parameters for CreateAccountTopup.
+type CreateAccountTopupJSONBody struct {
+	AmountMicrocredits int64                             `json:"amount_microcredits"`
+	Channel            CreateAccountTopupJSONBodyChannel `json:"channel"`
+	ExternalReference  string                            `json:"external_reference"`
+	Id                 string                            `json:"id"`
 }
 
-// ServiceAccount defines model for ServiceAccount.
-type ServiceAccount struct {
-	CreatedAt  *time.Time              `json:"created_at,omitempty"`
-	Credential *map[string]interface{} `json:"credential,omitempty"`
-	Id         string                  `json:"id"`
-	Name       *string                 `json:"name,omitempty"`
-	RevokedAt  *time.Time              `json:"revoked_at,omitempty"`
-	Roles      *[]string               `json:"roles,omitempty"`
-	Status     ServiceAccountStatus    `json:"status"`
-}
+// CreateAccountTopupJSONBodyChannel defines parameters for CreateAccountTopup.
+type CreateAccountTopupJSONBodyChannel string
 
-// ServiceAccountStatus defines model for ServiceAccount.Status.
-type ServiceAccountStatus string
+// CreateAccountTopup200JSONResponseBodyChannel defines parameters for CreateAccountTopup.
+type CreateAccountTopup200JSONResponseBodyChannel string
 
-// Status defines model for Status.
-type Status string
+// CreateAccountTopup200JSONResponseBodyStatus defines parameters for CreateAccountTopup.
+type CreateAccountTopup200JSONResponseBodyStatus string
 
-// Subscription defines model for Subscription.
-type Subscription struct {
-	AcceptedAt   *time.Time         `json:"accepted_at,omitempty"`
-	AccountId    string             `json:"account_id"`
-	CanceledAt   *time.Time         `json:"canceled_at,omitempty"`
-	CreatedAt    *time.Time         `json:"created_at,omitempty"`
-	Id           string             `json:"id"`
-	ProductId    string             `json:"product_id"`
-	Status       SubscriptionStatus `json:"status"`
-	TermsVersion string             `json:"terms_version"`
-}
+// CreateAccountTopup201JSONResponseBodyChannel defines parameters for CreateAccountTopup.
+type CreateAccountTopup201JSONResponseBodyChannel string
 
-// SubscriptionStatus defines model for Subscription.Status.
-type SubscriptionStatus string
-
-// SubscriptionKey defines model for SubscriptionKey.
-type SubscriptionKey struct {
-	CreatedAt      *time.Time            `json:"created_at,omitempty"`
-	Id             string                `json:"id"`
-	Key            string                `json:"key"`
-	RevokedAt      *time.Time            `json:"revoked_at,omitempty"`
-	Status         SubscriptionKeyStatus `json:"status"`
-	SubscriptionId string                `json:"subscription_id"`
-}
-
-// SubscriptionKeyStatus defines model for SubscriptionKey.Status.
-type SubscriptionKeyStatus string
-
-// Topup defines model for Topup.
-type Topup struct {
-	AccountId          string       `json:"account_id"`
-	AmountMicrocredits int64        `json:"amount_microcredits"`
-	Channel            TopupChannel `json:"channel"`
-	CreditedAt         time.Time    `json:"credited_at"`
-	ExternalReference  string       `json:"external_reference"`
-	Id                 string       `json:"id"`
-	Status             TopupStatus  `json:"status"`
-}
-
-// TopupChannel defines model for Topup.Channel.
-type TopupChannel string
-
-// TopupStatus defines model for Topup.Status.
-type TopupStatus string
-
-// AccountId defines model for account_id.
-type AccountId = string
-
-// MerchantId defines model for merchant_id.
-type MerchantId = string
-
-// ProductId defines model for product_id.
-type ProductId = string
-
-// ServiceAccountId defines model for service_account_id.
-type ServiceAccountId = string
-
-// SubscriptionId defines model for subscription_id.
-type SubscriptionId = string
-
-// SubscriptionKeyId defines model for subscription_key_id.
-type SubscriptionKeyId = string
-
-// AccountList defines model for AccountList.
-type AccountList struct {
-	Data []Account `json:"data"`
-}
-
-// Key defines model for Key.
-type Key = SubscriptionKey
-
-// KeyList defines model for KeyList.
-type KeyList struct {
-	Data []SubscriptionKey `json:"data"`
-}
-
-// MerchantList defines model for MerchantList.
-type MerchantList struct {
-	Data []Merchant `json:"data"`
-}
-
-// ProductList defines model for ProductList.
-type ProductList struct {
-	Data []Product `json:"data"`
-}
-
-// ServiceAccountCreated defines model for ServiceAccountCreated.
-type ServiceAccountCreated = ServiceAccount
-
-// ServiceAccountList defines model for ServiceAccountList.
-type ServiceAccountList struct {
-	Data []ServiceAccount `json:"data"`
-}
-
-// SubscriptionList defines model for SubscriptionList.
-type SubscriptionList struct {
-	Data []Subscription `json:"data"`
-}
-
-// CreateMerchant defines model for CreateMerchant.
-type CreateMerchant struct {
-	LegalName           string `json:"legal_name"`
-	PublicName          string `json:"public_name"`
-	SettlementAccountId string `json:"settlement_account_id"`
-}
-
-// CreateProduct defines model for CreateProduct.
-type CreateProduct struct {
-	BillingMode  CreateProductBillingMode `json:"billing_mode"`
-	Name         string                   `json:"name"`
-	TermsVersion string                   `json:"terms_version"`
-}
-
-// CreateProductBillingMode defines model for CreateProduct.BillingMode.
-type CreateProductBillingMode string
-
-// CreateServiceAccount defines model for CreateServiceAccount.
-type CreateServiceAccount struct {
-	Name  string   `json:"name"`
-	Roles []string `json:"roles"`
-}
-
-// CreateSubscription defines model for CreateSubscription.
-type CreateSubscription struct {
-	AccountId    string `json:"account_id"`
-	TermsVersion string `json:"terms_version"`
-}
-
-// UpdateMerchant defines model for UpdateMerchant.
-type UpdateMerchant struct {
-	PublicName *string `json:"public_name,omitempty"`
-	Status     *Status `json:"status,omitempty"`
-}
-
-// UpdateProduct defines model for UpdateProduct.
-type UpdateProduct struct {
-	Name   *string `json:"name,omitempty"`
-	Status *Status `json:"status,omitempty"`
-}
-
-// UpdateSubscription defines model for UpdateSubscription.
-type UpdateSubscription struct {
-	Status UpdateSubscriptionStatus `json:"status"`
-}
-
-// UpdateSubscriptionStatus defines model for UpdateSubscription.Status.
-type UpdateSubscriptionStatus string
+// CreateAccountTopup201JSONResponseBodyStatus defines parameters for CreateAccountTopup.
+type CreateAccountTopup201JSONResponseBodyStatus string
 
 // ListAccountTransactionsParams defines parameters for ListAccountTransactions.
 type ListAccountTransactionsParams struct {
 	LedgerTransactionId *string `form:"ledger_transaction_id,omitempty" json:"ledger_transaction_id,omitempty"`
 }
+
+// ListMerchants200JSONResponseBodyDataStatus defines parameters for ListMerchants.
+type ListMerchants200JSONResponseBodyDataStatus string
 
 // CreateMerchantJSONBody defines parameters for CreateMerchant.
 type CreateMerchantJSONBody struct {
@@ -513,11 +736,29 @@ type CreateMerchantJSONBody struct {
 	SettlementAccountId string `json:"settlement_account_id"`
 }
 
+// CreateMerchant201JSONResponseBodyStatus defines parameters for CreateMerchant.
+type CreateMerchant201JSONResponseBodyStatus string
+
+// GetMerchant200JSONResponseBodyStatus defines parameters for GetMerchant.
+type GetMerchant200JSONResponseBodyStatus string
+
 // UpdateMerchantJSONBody defines parameters for UpdateMerchant.
 type UpdateMerchantJSONBody struct {
-	PublicName *string `json:"public_name,omitempty"`
-	Status     *Status `json:"status,omitempty"`
+	PublicName *string                       `json:"public_name,omitempty"`
+	Status     *UpdateMerchantJSONBodyStatus `json:"status,omitempty"`
 }
+
+// UpdateMerchantJSONBodyStatus defines parameters for UpdateMerchant.
+type UpdateMerchantJSONBodyStatus string
+
+// UpdateMerchant200JSONResponseBodyStatus defines parameters for UpdateMerchant.
+type UpdateMerchant200JSONResponseBodyStatus string
+
+// ListMerchantProducts200JSONResponseBodyDataBillingMode defines parameters for ListMerchantProducts.
+type ListMerchantProducts200JSONResponseBodyDataBillingMode string
+
+// ListMerchantProducts200JSONResponseBodyDataStatus defines parameters for ListMerchantProducts.
+type ListMerchantProducts200JSONResponseBodyDataStatus string
 
 // CreateMerchantProductJSONBody defines parameters for CreateMerchantProduct.
 type CreateMerchantProductJSONBody struct {
@@ -529,23 +770,69 @@ type CreateMerchantProductJSONBody struct {
 // CreateMerchantProductJSONBodyBillingMode defines parameters for CreateMerchantProduct.
 type CreateMerchantProductJSONBodyBillingMode string
 
+// CreateMerchantProduct201JSONResponseBodyBillingMode defines parameters for CreateMerchantProduct.
+type CreateMerchantProduct201JSONResponseBodyBillingMode string
+
+// CreateMerchantProduct201JSONResponseBodyStatus defines parameters for CreateMerchantProduct.
+type CreateMerchantProduct201JSONResponseBodyStatus string
+
+// ListProducts200JSONResponseBodyDataBillingMode defines parameters for ListProducts.
+type ListProducts200JSONResponseBodyDataBillingMode string
+
+// ListProducts200JSONResponseBodyDataStatus defines parameters for ListProducts.
+type ListProducts200JSONResponseBodyDataStatus string
+
+// GetProduct200JSONResponseBodyBillingMode defines parameters for GetProduct.
+type GetProduct200JSONResponseBodyBillingMode string
+
+// GetProduct200JSONResponseBodyStatus defines parameters for GetProduct.
+type GetProduct200JSONResponseBodyStatus string
+
 // UpdateProductJSONBody defines parameters for UpdateProduct.
 type UpdateProductJSONBody struct {
-	Name   *string `json:"name,omitempty"`
-	Status *Status `json:"status,omitempty"`
+	Name   *string                      `json:"name,omitempty"`
+	Status *UpdateProductJSONBodyStatus `json:"status,omitempty"`
 }
+
+// UpdateProductJSONBodyStatus defines parameters for UpdateProduct.
+type UpdateProductJSONBodyStatus string
+
+// UpdateProduct200JSONResponseBodyBillingMode defines parameters for UpdateProduct.
+type UpdateProduct200JSONResponseBodyBillingMode string
+
+// UpdateProduct200JSONResponseBodyStatus defines parameters for UpdateProduct.
+type UpdateProduct200JSONResponseBodyStatus string
 
 // CreateProductSubscriptionJSONBody defines parameters for CreateProductSubscription.
 type CreateProductSubscriptionJSONBody struct {
 	AccountId    string `json:"account_id"`
+	Id           string `json:"id"`
 	TermsVersion string `json:"terms_version"`
 }
+
+// CreateProductSubscription200JSONResponseBodyStatus defines parameters for CreateProductSubscription.
+type CreateProductSubscription200JSONResponseBodyStatus string
+
+// CreateProductSubscription201JSONResponseBodyStatus defines parameters for CreateProductSubscription.
+type CreateProductSubscription201JSONResponseBodyStatus string
+
+// ListServiceAccounts200JSONResponseBodyDataStatus defines parameters for ListServiceAccounts.
+type ListServiceAccounts200JSONResponseBodyDataStatus string
 
 // CreateServiceAccountJSONBody defines parameters for CreateServiceAccount.
 type CreateServiceAccountJSONBody struct {
 	Name  string   `json:"name"`
 	Roles []string `json:"roles"`
 }
+
+// CreateServiceAccount201JSONResponseBodyStatus defines parameters for CreateServiceAccount.
+type CreateServiceAccount201JSONResponseBodyStatus string
+
+// ListSubscriptions200JSONResponseBodyDataStatus defines parameters for ListSubscriptions.
+type ListSubscriptions200JSONResponseBodyDataStatus string
+
+// GetSubscription200JSONResponseBodyStatus defines parameters for GetSubscription.
+type GetSubscription200JSONResponseBodyStatus string
 
 // UpdateSubscriptionJSONBody defines parameters for UpdateSubscription.
 type UpdateSubscriptionJSONBody struct {
@@ -555,8 +842,32 @@ type UpdateSubscriptionJSONBody struct {
 // UpdateSubscriptionJSONBodyStatus defines parameters for UpdateSubscription.
 type UpdateSubscriptionJSONBodyStatus string
 
+// UpdateSubscription200JSONResponseBodyStatus defines parameters for UpdateSubscription.
+type UpdateSubscription200JSONResponseBodyStatus string
+
+// ListSubscriptionKeys200JSONResponseBodyDataStatus defines parameters for ListSubscriptionKeys.
+type ListSubscriptionKeys200JSONResponseBodyDataStatus string
+
+// CreateSubscriptionKeyJSONBody defines parameters for CreateSubscriptionKey.
+type CreateSubscriptionKeyJSONBody struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// CreateSubscriptionKey200JSONResponseBodyStatus defines parameters for CreateSubscriptionKey.
+type CreateSubscriptionKey200JSONResponseBodyStatus string
+
+// CreateSubscriptionKey201JSONResponseBodyStatus defines parameters for CreateSubscriptionKey.
+type CreateSubscriptionKey201JSONResponseBodyStatus string
+
+// GetSubscriptionKey200JSONResponseBodyStatus defines parameters for GetSubscriptionKey.
+type GetSubscriptionKey200JSONResponseBodyStatus string
+
+// RevokeSubscriptionKey200JSONResponseBodyStatus defines parameters for RevokeSubscriptionKey.
+type RevokeSubscriptionKey200JSONResponseBodyStatus string
+
 // CreateAccountTopupJSONRequestBody defines body for CreateAccountTopup for application/json ContentType.
-type CreateAccountTopupJSONRequestBody = CreateTopup
+type CreateAccountTopupJSONRequestBody CreateAccountTopupJSONBody
 
 // CreateMerchantJSONRequestBody defines body for CreateMerchant for application/json ContentType.
 type CreateMerchantJSONRequestBody CreateMerchantJSONBody
@@ -578,6 +889,9 @@ type CreateServiceAccountJSONRequestBody CreateServiceAccountJSONBody
 
 // UpdateSubscriptionJSONRequestBody defines body for UpdateSubscription for application/json ContentType.
 type UpdateSubscriptionJSONRequestBody UpdateSubscriptionJSONBody
+
+// CreateSubscriptionKeyJSONRequestBody defines body for CreateSubscriptionKey for application/json ContentType.
+type CreateSubscriptionKeyJSONRequestBody CreateSubscriptionKeyJSONBody
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -657,27 +971,24 @@ type ClientInterface interface {
 	ListAccounts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAccountBalance performs a GET /accounts/{account_id}/balance (the `GetAccountBalance` operationId) request.
-	GetAccountBalance(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetAccountBalance(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAccountCharges performs a GET /accounts/{account_id}/charges (the `ListAccountCharges` operationId) request.
-	ListAccountCharges(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListAccountCharges(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAccountTopups performs a GET /accounts/{account_id}/topups (the `ListAccountTopups` operationId) request.
-	ListAccountTopups(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListAccountTopups(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateAccountTopupWithBody performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request,
 	// with any type of body and a specified content type.
-	CreateAccountTopupWithBody(ctx context.Context, accountId AccountId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateAccountTopupWithBody(ctx context.Context, accountId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateAccountTopup performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request.
 	// Takes a body of the `application/json` content type.
-	CreateAccountTopup(ctx context.Context, accountId AccountId, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateAccountTopup(ctx context.Context, accountId string, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAccountTransactions performs a GET /accounts/{account_id}/transactions (the `ListAccountTransactions` operationId) request.
-	ListAccountTransactions(ctx context.Context, accountId AccountId, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// InitializeUser performs a POST /initialize (the `InitializeUser` operationId) request.
-	InitializeUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListAccountTransactions(ctx context.Context, accountId string, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListMerchants performs a GET /merchants (the `ListMerchants` operationId) request.
 	ListMerchants(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -691,48 +1002,48 @@ type ClientInterface interface {
 	CreateMerchant(ctx context.Context, body CreateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMerchant performs a GET /merchants/{merchant_id} (the `GetMerchant` operationId) request.
-	GetMerchant(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetMerchant(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateMerchantWithBody performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request,
 	// with any type of body and a specified content type.
-	UpdateMerchantWithBody(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateMerchantWithBody(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateMerchant performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request.
 	// Takes a body of the `application/json` content type.
-	UpdateMerchant(ctx context.Context, merchantId MerchantId, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateMerchant(ctx context.Context, merchantId string, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListMerchantProducts performs a GET /merchants/{merchant_id}/products (the `ListMerchantProducts` operationId) request.
-	ListMerchantProducts(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListMerchantProducts(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateMerchantProductWithBody performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request,
 	// with any type of body and a specified content type.
-	CreateMerchantProductWithBody(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateMerchantProductWithBody(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateMerchantProduct performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request.
 	// Takes a body of the `application/json` content type.
-	CreateMerchantProduct(ctx context.Context, merchantId MerchantId, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateMerchantProduct(ctx context.Context, merchantId string, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListProducts performs a GET /products (the `ListProducts` operationId) request.
 	ListProducts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetProduct performs a GET /products/{product_id} (the `GetProduct` operationId) request.
-	GetProduct(ctx context.Context, productId ProductId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetProduct(ctx context.Context, productId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateProductWithBody performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request,
 	// with any type of body and a specified content type.
-	UpdateProductWithBody(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateProductWithBody(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateProduct performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request.
 	// Takes a body of the `application/json` content type.
-	UpdateProduct(ctx context.Context, productId ProductId, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateProduct(ctx context.Context, productId string, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateProductSubscriptionWithBody performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request,
 	// with any type of body and a specified content type.
-	CreateProductSubscriptionWithBody(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateProductSubscriptionWithBody(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateProductSubscription performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request.
 	// Takes a body of the `application/json` content type.
-	CreateProductSubscription(ctx context.Context, productId ProductId, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	CreateProductSubscription(ctx context.Context, productId string, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListServiceAccounts performs a GET /service-accounts (the `ListServiceAccounts` operationId) request.
 	ListServiceAccounts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -746,33 +1057,38 @@ type ClientInterface interface {
 	CreateServiceAccount(ctx context.Context, body CreateServiceAccountJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RevokeServiceAccount performs a DELETE /service-accounts/{service_account_id} (the `RevokeServiceAccount` operationId) request.
-	RevokeServiceAccount(ctx context.Context, serviceAccountId ServiceAccountId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	RevokeServiceAccount(ctx context.Context, serviceAccountId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListSubscriptions performs a GET /subscriptions (the `ListSubscriptions` operationId) request.
 	ListSubscriptions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSubscription performs a GET /subscriptions/{subscription_id} (the `GetSubscription` operationId) request.
-	GetSubscription(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetSubscription(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateSubscriptionWithBody performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request,
 	// with any type of body and a specified content type.
-	UpdateSubscriptionWithBody(ctx context.Context, subscriptionId SubscriptionId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateSubscriptionWithBody(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateSubscription performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request.
 	// Takes a body of the `application/json` content type.
-	UpdateSubscription(ctx context.Context, subscriptionId SubscriptionId, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateSubscription(ctx context.Context, subscriptionId string, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListSubscriptionKeys performs a GET /subscriptions/{subscription_id}/keys (the `ListSubscriptionKeys` operationId) request.
-	ListSubscriptionKeys(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListSubscriptionKeys(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSubscriptionKeyWithBody performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request,
+	// with any type of body and a specified content type.
+	CreateSubscriptionKeyWithBody(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateSubscriptionKey performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request.
-	CreateSubscriptionKey(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	CreateSubscriptionKey(ctx context.Context, subscriptionId string, body CreateSubscriptionKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSubscriptionKey performs a GET /subscriptions/{subscription_id}/keys/{subscription_key_id} (the `GetSubscriptionKey` operationId) request.
-	GetSubscriptionKey(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetSubscriptionKey(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RevokeSubscriptionKey performs a POST /subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke (the `RevokeSubscriptionKey` operationId) request.
-	RevokeSubscriptionKey(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*http.Response, error)
+	RevokeSubscriptionKey(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // ListAccounts performs a GET /accounts (the `ListAccounts` operationId) request.
@@ -789,7 +1105,7 @@ func (c *Client) ListAccounts(ctx context.Context, reqEditors ...RequestEditorFn
 }
 
 // GetAccountBalance performs a GET /accounts/{account_id}/balance (the `GetAccountBalance` operationId) request.
-func (c *Client) GetAccountBalance(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetAccountBalance(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAccountBalanceRequest(c.Server, accountId)
 	if err != nil {
 		return nil, err
@@ -802,7 +1118,7 @@ func (c *Client) GetAccountBalance(ctx context.Context, accountId AccountId, req
 }
 
 // ListAccountCharges performs a GET /accounts/{account_id}/charges (the `ListAccountCharges` operationId) request.
-func (c *Client) ListAccountCharges(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) ListAccountCharges(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListAccountChargesRequest(c.Server, accountId)
 	if err != nil {
 		return nil, err
@@ -815,7 +1131,7 @@ func (c *Client) ListAccountCharges(ctx context.Context, accountId AccountId, re
 }
 
 // ListAccountTopups performs a GET /accounts/{account_id}/topups (the `ListAccountTopups` operationId) request.
-func (c *Client) ListAccountTopups(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) ListAccountTopups(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListAccountTopupsRequest(c.Server, accountId)
 	if err != nil {
 		return nil, err
@@ -829,7 +1145,7 @@ func (c *Client) ListAccountTopups(ctx context.Context, accountId AccountId, req
 
 // CreateAccountTopupWithBody performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) CreateAccountTopupWithBody(ctx context.Context, accountId AccountId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateAccountTopupWithBody(ctx context.Context, accountId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateAccountTopupRequestWithBody(c.Server, accountId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -843,7 +1159,7 @@ func (c *Client) CreateAccountTopupWithBody(ctx context.Context, accountId Accou
 
 // CreateAccountTopup performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) CreateAccountTopup(ctx context.Context, accountId AccountId, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateAccountTopup(ctx context.Context, accountId string, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateAccountTopupRequest(c.Server, accountId, body)
 	if err != nil {
 		return nil, err
@@ -856,21 +1172,8 @@ func (c *Client) CreateAccountTopup(ctx context.Context, accountId AccountId, bo
 }
 
 // ListAccountTransactions performs a GET /accounts/{account_id}/transactions (the `ListAccountTransactions` operationId) request.
-func (c *Client) ListAccountTransactions(ctx context.Context, accountId AccountId, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) ListAccountTransactions(ctx context.Context, accountId string, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListAccountTransactionsRequest(c.Server, accountId, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// InitializeUser performs a POST /initialize (the `InitializeUser` operationId) request.
-func (c *Client) InitializeUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewInitializeUserRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -923,7 +1226,7 @@ func (c *Client) CreateMerchant(ctx context.Context, body CreateMerchantJSONRequ
 }
 
 // GetMerchant performs a GET /merchants/{merchant_id} (the `GetMerchant` operationId) request.
-func (c *Client) GetMerchant(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetMerchant(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMerchantRequest(c.Server, merchantId)
 	if err != nil {
 		return nil, err
@@ -937,7 +1240,7 @@ func (c *Client) GetMerchant(ctx context.Context, merchantId MerchantId, reqEdit
 
 // UpdateMerchantWithBody performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) UpdateMerchantWithBody(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) UpdateMerchantWithBody(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateMerchantRequestWithBody(c.Server, merchantId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -951,7 +1254,7 @@ func (c *Client) UpdateMerchantWithBody(ctx context.Context, merchantId Merchant
 
 // UpdateMerchant performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) UpdateMerchant(ctx context.Context, merchantId MerchantId, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) UpdateMerchant(ctx context.Context, merchantId string, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateMerchantRequest(c.Server, merchantId, body)
 	if err != nil {
 		return nil, err
@@ -964,7 +1267,7 @@ func (c *Client) UpdateMerchant(ctx context.Context, merchantId MerchantId, body
 }
 
 // ListMerchantProducts performs a GET /merchants/{merchant_id}/products (the `ListMerchantProducts` operationId) request.
-func (c *Client) ListMerchantProducts(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) ListMerchantProducts(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListMerchantProductsRequest(c.Server, merchantId)
 	if err != nil {
 		return nil, err
@@ -978,7 +1281,7 @@ func (c *Client) ListMerchantProducts(ctx context.Context, merchantId MerchantId
 
 // CreateMerchantProductWithBody performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) CreateMerchantProductWithBody(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateMerchantProductWithBody(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateMerchantProductRequestWithBody(c.Server, merchantId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -992,7 +1295,7 @@ func (c *Client) CreateMerchantProductWithBody(ctx context.Context, merchantId M
 
 // CreateMerchantProduct performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) CreateMerchantProduct(ctx context.Context, merchantId MerchantId, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateMerchantProduct(ctx context.Context, merchantId string, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateMerchantProductRequest(c.Server, merchantId, body)
 	if err != nil {
 		return nil, err
@@ -1018,7 +1321,7 @@ func (c *Client) ListProducts(ctx context.Context, reqEditors ...RequestEditorFn
 }
 
 // GetProduct performs a GET /products/{product_id} (the `GetProduct` operationId) request.
-func (c *Client) GetProduct(ctx context.Context, productId ProductId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetProduct(ctx context.Context, productId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetProductRequest(c.Server, productId)
 	if err != nil {
 		return nil, err
@@ -1032,7 +1335,7 @@ func (c *Client) GetProduct(ctx context.Context, productId ProductId, reqEditors
 
 // UpdateProductWithBody performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) UpdateProductWithBody(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) UpdateProductWithBody(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateProductRequestWithBody(c.Server, productId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -1046,7 +1349,7 @@ func (c *Client) UpdateProductWithBody(ctx context.Context, productId ProductId,
 
 // UpdateProduct performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) UpdateProduct(ctx context.Context, productId ProductId, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) UpdateProduct(ctx context.Context, productId string, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateProductRequest(c.Server, productId, body)
 	if err != nil {
 		return nil, err
@@ -1060,7 +1363,7 @@ func (c *Client) UpdateProduct(ctx context.Context, productId ProductId, body Up
 
 // CreateProductSubscriptionWithBody performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) CreateProductSubscriptionWithBody(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateProductSubscriptionWithBody(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateProductSubscriptionRequestWithBody(c.Server, productId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -1074,7 +1377,7 @@ func (c *Client) CreateProductSubscriptionWithBody(ctx context.Context, productI
 
 // CreateProductSubscription performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) CreateProductSubscription(ctx context.Context, productId ProductId, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) CreateProductSubscription(ctx context.Context, productId string, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateProductSubscriptionRequest(c.Server, productId, body)
 	if err != nil {
 		return nil, err
@@ -1128,7 +1431,7 @@ func (c *Client) CreateServiceAccount(ctx context.Context, body CreateServiceAcc
 }
 
 // RevokeServiceAccount performs a DELETE /service-accounts/{service_account_id} (the `RevokeServiceAccount` operationId) request.
-func (c *Client) RevokeServiceAccount(ctx context.Context, serviceAccountId ServiceAccountId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) RevokeServiceAccount(ctx context.Context, serviceAccountId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRevokeServiceAccountRequest(c.Server, serviceAccountId)
 	if err != nil {
 		return nil, err
@@ -1154,7 +1457,7 @@ func (c *Client) ListSubscriptions(ctx context.Context, reqEditors ...RequestEdi
 }
 
 // GetSubscription performs a GET /subscriptions/{subscription_id} (the `GetSubscription` operationId) request.
-func (c *Client) GetSubscription(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetSubscription(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSubscriptionRequest(c.Server, subscriptionId)
 	if err != nil {
 		return nil, err
@@ -1168,7 +1471,7 @@ func (c *Client) GetSubscription(ctx context.Context, subscriptionId Subscriptio
 
 // UpdateSubscriptionWithBody performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) UpdateSubscriptionWithBody(ctx context.Context, subscriptionId SubscriptionId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) UpdateSubscriptionWithBody(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateSubscriptionRequestWithBody(c.Server, subscriptionId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -1182,7 +1485,7 @@ func (c *Client) UpdateSubscriptionWithBody(ctx context.Context, subscriptionId 
 
 // UpdateSubscription performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) UpdateSubscription(ctx context.Context, subscriptionId SubscriptionId, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) UpdateSubscription(ctx context.Context, subscriptionId string, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateSubscriptionRequest(c.Server, subscriptionId, body)
 	if err != nil {
 		return nil, err
@@ -1195,7 +1498,7 @@ func (c *Client) UpdateSubscription(ctx context.Context, subscriptionId Subscrip
 }
 
 // ListSubscriptionKeys performs a GET /subscriptions/{subscription_id}/keys (the `ListSubscriptionKeys` operationId) request.
-func (c *Client) ListSubscriptionKeys(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) ListSubscriptionKeys(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListSubscriptionKeysRequest(c.Server, subscriptionId)
 	if err != nil {
 		return nil, err
@@ -1207,9 +1510,24 @@ func (c *Client) ListSubscriptionKeys(ctx context.Context, subscriptionId Subscr
 	return c.Client.Do(req)
 }
 
+// CreateSubscriptionKeyWithBody performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) CreateSubscriptionKeyWithBody(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSubscriptionKeyRequestWithBody(c.Server, subscriptionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // CreateSubscriptionKey performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request.
-func (c *Client) CreateSubscriptionKey(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateSubscriptionKeyRequest(c.Server, subscriptionId)
+// Takes a body of the `application/json` content type.
+func (c *Client) CreateSubscriptionKey(ctx context.Context, subscriptionId string, body CreateSubscriptionKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSubscriptionKeyRequest(c.Server, subscriptionId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,7 +1539,7 @@ func (c *Client) CreateSubscriptionKey(ctx context.Context, subscriptionId Subsc
 }
 
 // GetSubscriptionKey performs a GET /subscriptions/{subscription_id}/keys/{subscription_key_id} (the `GetSubscriptionKey` operationId) request.
-func (c *Client) GetSubscriptionKey(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetSubscriptionKey(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSubscriptionKeyRequest(c.Server, subscriptionId, subscriptionKeyId)
 	if err != nil {
 		return nil, err
@@ -1234,7 +1552,7 @@ func (c *Client) GetSubscriptionKey(ctx context.Context, subscriptionId Subscrip
 }
 
 // RevokeSubscriptionKey performs a POST /subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke (the `RevokeSubscriptionKey` operationId) request.
-func (c *Client) RevokeSubscriptionKey(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) RevokeSubscriptionKey(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRevokeSubscriptionKeyRequest(c.Server, subscriptionId, subscriptionKeyId)
 	if err != nil {
 		return nil, err
@@ -1274,7 +1592,7 @@ func NewListAccountsRequest(server string) (*http.Request, error) {
 }
 
 // NewGetAccountBalanceRequest constructs an http.Request for the GetAccountBalance method
-func NewGetAccountBalanceRequest(server string, accountId AccountId) (*http.Request, error) {
+func NewGetAccountBalanceRequest(server string, accountId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1308,7 +1626,7 @@ func NewGetAccountBalanceRequest(server string, accountId AccountId) (*http.Requ
 }
 
 // NewListAccountChargesRequest constructs an http.Request for the ListAccountCharges method
-func NewListAccountChargesRequest(server string, accountId AccountId) (*http.Request, error) {
+func NewListAccountChargesRequest(server string, accountId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1342,7 +1660,7 @@ func NewListAccountChargesRequest(server string, accountId AccountId) (*http.Req
 }
 
 // NewListAccountTopupsRequest constructs an http.Request for the ListAccountTopups method
-func NewListAccountTopupsRequest(server string, accountId AccountId) (*http.Request, error) {
+func NewListAccountTopupsRequest(server string, accountId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1376,7 +1694,7 @@ func NewListAccountTopupsRequest(server string, accountId AccountId) (*http.Requ
 }
 
 // NewCreateAccountTopupRequest calls the generic CreateAccountTopup builder with application/json body
-func NewCreateAccountTopupRequest(server string, accountId AccountId, body CreateAccountTopupJSONRequestBody) (*http.Request, error) {
+func NewCreateAccountTopupRequest(server string, accountId string, body CreateAccountTopupJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -1387,7 +1705,7 @@ func NewCreateAccountTopupRequest(server string, accountId AccountId, body Creat
 }
 
 // NewCreateAccountTopupRequestWithBody constructs an http.Request for the CreateAccountTopup method, with any body, and a specified content type
-func NewCreateAccountTopupRequestWithBody(server string, accountId AccountId, contentType string, body io.Reader) (*http.Request, error) {
+func NewCreateAccountTopupRequestWithBody(server string, accountId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1423,7 +1741,7 @@ func NewCreateAccountTopupRequestWithBody(server string, accountId AccountId, co
 }
 
 // NewListAccountTransactionsRequest constructs an http.Request for the ListAccountTransactions method
-func NewListAccountTransactionsRequest(server string, accountId AccountId, params *ListAccountTransactionsParams) (*http.Request, error) {
+func NewListAccountTransactionsRequest(server string, accountId string, params *ListAccountTransactionsParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1476,33 +1794,6 @@ func NewListAccountTransactionsRequest(server string, accountId AccountId, param
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewInitializeUserRequest constructs an http.Request for the InitializeUser method
-func NewInitializeUserRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/initialize")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1578,7 +1869,7 @@ func NewCreateMerchantRequestWithBody(server string, contentType string, body io
 }
 
 // NewGetMerchantRequest constructs an http.Request for the GetMerchant method
-func NewGetMerchantRequest(server string, merchantId MerchantId) (*http.Request, error) {
+func NewGetMerchantRequest(server string, merchantId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1612,7 +1903,7 @@ func NewGetMerchantRequest(server string, merchantId MerchantId) (*http.Request,
 }
 
 // NewUpdateMerchantRequest calls the generic UpdateMerchant builder with application/json body
-func NewUpdateMerchantRequest(server string, merchantId MerchantId, body UpdateMerchantJSONRequestBody) (*http.Request, error) {
+func NewUpdateMerchantRequest(server string, merchantId string, body UpdateMerchantJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -1623,7 +1914,7 @@ func NewUpdateMerchantRequest(server string, merchantId MerchantId, body UpdateM
 }
 
 // NewUpdateMerchantRequestWithBody constructs an http.Request for the UpdateMerchant method, with any body, and a specified content type
-func NewUpdateMerchantRequestWithBody(server string, merchantId MerchantId, contentType string, body io.Reader) (*http.Request, error) {
+func NewUpdateMerchantRequestWithBody(server string, merchantId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1659,7 +1950,7 @@ func NewUpdateMerchantRequestWithBody(server string, merchantId MerchantId, cont
 }
 
 // NewListMerchantProductsRequest constructs an http.Request for the ListMerchantProducts method
-func NewListMerchantProductsRequest(server string, merchantId MerchantId) (*http.Request, error) {
+func NewListMerchantProductsRequest(server string, merchantId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1693,7 +1984,7 @@ func NewListMerchantProductsRequest(server string, merchantId MerchantId) (*http
 }
 
 // NewCreateMerchantProductRequest calls the generic CreateMerchantProduct builder with application/json body
-func NewCreateMerchantProductRequest(server string, merchantId MerchantId, body CreateMerchantProductJSONRequestBody) (*http.Request, error) {
+func NewCreateMerchantProductRequest(server string, merchantId string, body CreateMerchantProductJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -1704,7 +1995,7 @@ func NewCreateMerchantProductRequest(server string, merchantId MerchantId, body 
 }
 
 // NewCreateMerchantProductRequestWithBody constructs an http.Request for the CreateMerchantProduct method, with any body, and a specified content type
-func NewCreateMerchantProductRequestWithBody(server string, merchantId MerchantId, contentType string, body io.Reader) (*http.Request, error) {
+func NewCreateMerchantProductRequestWithBody(server string, merchantId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1767,7 +2058,7 @@ func NewListProductsRequest(server string) (*http.Request, error) {
 }
 
 // NewGetProductRequest constructs an http.Request for the GetProduct method
-func NewGetProductRequest(server string, productId ProductId) (*http.Request, error) {
+func NewGetProductRequest(server string, productId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1801,7 +2092,7 @@ func NewGetProductRequest(server string, productId ProductId) (*http.Request, er
 }
 
 // NewUpdateProductRequest calls the generic UpdateProduct builder with application/json body
-func NewUpdateProductRequest(server string, productId ProductId, body UpdateProductJSONRequestBody) (*http.Request, error) {
+func NewUpdateProductRequest(server string, productId string, body UpdateProductJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -1812,7 +2103,7 @@ func NewUpdateProductRequest(server string, productId ProductId, body UpdateProd
 }
 
 // NewUpdateProductRequestWithBody constructs an http.Request for the UpdateProduct method, with any body, and a specified content type
-func NewUpdateProductRequestWithBody(server string, productId ProductId, contentType string, body io.Reader) (*http.Request, error) {
+func NewUpdateProductRequestWithBody(server string, productId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1848,7 +2139,7 @@ func NewUpdateProductRequestWithBody(server string, productId ProductId, content
 }
 
 // NewCreateProductSubscriptionRequest calls the generic CreateProductSubscription builder with application/json body
-func NewCreateProductSubscriptionRequest(server string, productId ProductId, body CreateProductSubscriptionJSONRequestBody) (*http.Request, error) {
+func NewCreateProductSubscriptionRequest(server string, productId string, body CreateProductSubscriptionJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -1859,7 +2150,7 @@ func NewCreateProductSubscriptionRequest(server string, productId ProductId, bod
 }
 
 // NewCreateProductSubscriptionRequestWithBody constructs an http.Request for the CreateProductSubscription method, with any body, and a specified content type
-func NewCreateProductSubscriptionRequestWithBody(server string, productId ProductId, contentType string, body io.Reader) (*http.Request, error) {
+func NewCreateProductSubscriptionRequestWithBody(server string, productId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1962,7 +2253,7 @@ func NewCreateServiceAccountRequestWithBody(server string, contentType string, b
 }
 
 // NewRevokeServiceAccountRequest constructs an http.Request for the RevokeServiceAccount method
-func NewRevokeServiceAccountRequest(server string, serviceAccountId ServiceAccountId) (*http.Request, error) {
+func NewRevokeServiceAccountRequest(server string, serviceAccountId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2023,7 +2314,7 @@ func NewListSubscriptionsRequest(server string) (*http.Request, error) {
 }
 
 // NewGetSubscriptionRequest constructs an http.Request for the GetSubscription method
-func NewGetSubscriptionRequest(server string, subscriptionId SubscriptionId) (*http.Request, error) {
+func NewGetSubscriptionRequest(server string, subscriptionId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2057,7 +2348,7 @@ func NewGetSubscriptionRequest(server string, subscriptionId SubscriptionId) (*h
 }
 
 // NewUpdateSubscriptionRequest calls the generic UpdateSubscription builder with application/json body
-func NewUpdateSubscriptionRequest(server string, subscriptionId SubscriptionId, body UpdateSubscriptionJSONRequestBody) (*http.Request, error) {
+func NewUpdateSubscriptionRequest(server string, subscriptionId string, body UpdateSubscriptionJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -2068,7 +2359,7 @@ func NewUpdateSubscriptionRequest(server string, subscriptionId SubscriptionId, 
 }
 
 // NewUpdateSubscriptionRequestWithBody constructs an http.Request for the UpdateSubscription method, with any body, and a specified content type
-func NewUpdateSubscriptionRequestWithBody(server string, subscriptionId SubscriptionId, contentType string, body io.Reader) (*http.Request, error) {
+func NewUpdateSubscriptionRequestWithBody(server string, subscriptionId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2104,7 +2395,7 @@ func NewUpdateSubscriptionRequestWithBody(server string, subscriptionId Subscrip
 }
 
 // NewListSubscriptionKeysRequest constructs an http.Request for the ListSubscriptionKeys method
-func NewListSubscriptionKeysRequest(server string, subscriptionId SubscriptionId) (*http.Request, error) {
+func NewListSubscriptionKeysRequest(server string, subscriptionId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2137,8 +2428,19 @@ func NewListSubscriptionKeysRequest(server string, subscriptionId SubscriptionId
 	return req, nil
 }
 
-// NewCreateSubscriptionKeyRequest constructs an http.Request for the CreateSubscriptionKey method
-func NewCreateSubscriptionKeyRequest(server string, subscriptionId SubscriptionId) (*http.Request, error) {
+// NewCreateSubscriptionKeyRequest calls the generic CreateSubscriptionKey builder with application/json body
+func NewCreateSubscriptionKeyRequest(server string, subscriptionId string, body CreateSubscriptionKeyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSubscriptionKeyRequestWithBody(server, subscriptionId, "application/json", bodyReader)
+}
+
+// NewCreateSubscriptionKeyRequestWithBody constructs an http.Request for the CreateSubscriptionKey method, with any body, and a specified content type
+func NewCreateSubscriptionKeyRequestWithBody(server string, subscriptionId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2163,16 +2465,18 @@ func NewCreateSubscriptionKeyRequest(server string, subscriptionId SubscriptionI
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
 
 // NewGetSubscriptionKeyRequest constructs an http.Request for the GetSubscriptionKey method
-func NewGetSubscriptionKeyRequest(server string, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId) (*http.Request, error) {
+func NewGetSubscriptionKeyRequest(server string, subscriptionId string, subscriptionKeyId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2213,7 +2517,7 @@ func NewGetSubscriptionKeyRequest(server string, subscriptionId SubscriptionId, 
 }
 
 // NewRevokeSubscriptionKeyRequest constructs an http.Request for the RevokeSubscriptionKey method
-func NewRevokeSubscriptionKeyRequest(server string, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId) (*http.Request, error) {
+func NewRevokeSubscriptionKeyRequest(server string, subscriptionId string, subscriptionKeyId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2305,37 +2609,32 @@ type ClientWithResponsesInterface interface {
 	// GetAccountBalanceWithResponse performs a GET /accounts/{account_id}/balance (the `GetAccountBalance` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetAccountBalanceWithResponse(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*GetAccountBalanceResponse, error)
+	GetAccountBalanceWithResponse(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*GetAccountBalanceResponse, error)
 
 	// ListAccountChargesWithResponse performs a GET /accounts/{account_id}/charges (the `ListAccountCharges` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	ListAccountChargesWithResponse(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*ListAccountChargesResponse, error)
+	ListAccountChargesWithResponse(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*ListAccountChargesResponse, error)
 
 	// ListAccountTopupsWithResponse performs a GET /accounts/{account_id}/topups (the `ListAccountTopups` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	ListAccountTopupsWithResponse(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*ListAccountTopupsResponse, error)
+	ListAccountTopupsWithResponse(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*ListAccountTopupsResponse, error)
 
 	// CreateAccountTopupWithBodyWithResponse performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	CreateAccountTopupWithBodyWithResponse(ctx context.Context, accountId AccountId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error)
+	CreateAccountTopupWithBodyWithResponse(ctx context.Context, accountId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error)
 
 	// CreateAccountTopupWithResponse performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	CreateAccountTopupWithResponse(ctx context.Context, accountId AccountId, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error)
+	CreateAccountTopupWithResponse(ctx context.Context, accountId string, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error)
 
 	// ListAccountTransactionsWithResponse performs a GET /accounts/{account_id}/transactions (the `ListAccountTransactions` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	ListAccountTransactionsWithResponse(ctx context.Context, accountId AccountId, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*ListAccountTransactionsResponse, error)
-
-	// InitializeUserWithResponse performs a POST /initialize (the `InitializeUser` operationId) request.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	InitializeUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*InitializeUserResponse, error)
+	ListAccountTransactionsWithResponse(ctx context.Context, accountId string, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*ListAccountTransactionsResponse, error)
 
 	// ListMerchantsWithResponse performs a GET /merchants (the `ListMerchants` operationId) request.
 	//
@@ -2355,32 +2654,32 @@ type ClientWithResponsesInterface interface {
 	// GetMerchantWithResponse performs a GET /merchants/{merchant_id} (the `GetMerchant` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetMerchantWithResponse(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*GetMerchantResponse, error)
+	GetMerchantWithResponse(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*GetMerchantResponse, error)
 
 	// UpdateMerchantWithBodyWithResponse performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	UpdateMerchantWithBodyWithResponse(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error)
+	UpdateMerchantWithBodyWithResponse(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error)
 
 	// UpdateMerchantWithResponse performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	UpdateMerchantWithResponse(ctx context.Context, merchantId MerchantId, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error)
+	UpdateMerchantWithResponse(ctx context.Context, merchantId string, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error)
 
 	// ListMerchantProductsWithResponse performs a GET /merchants/{merchant_id}/products (the `ListMerchantProducts` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	ListMerchantProductsWithResponse(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*ListMerchantProductsResponse, error)
+	ListMerchantProductsWithResponse(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*ListMerchantProductsResponse, error)
 
 	// CreateMerchantProductWithBodyWithResponse performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	CreateMerchantProductWithBodyWithResponse(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error)
+	CreateMerchantProductWithBodyWithResponse(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error)
 
 	// CreateMerchantProductWithResponse performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	CreateMerchantProductWithResponse(ctx context.Context, merchantId MerchantId, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error)
+	CreateMerchantProductWithResponse(ctx context.Context, merchantId string, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error)
 
 	// ListProductsWithResponse performs a GET /products (the `ListProducts` operationId) request.
 	//
@@ -2390,27 +2689,27 @@ type ClientWithResponsesInterface interface {
 	// GetProductWithResponse performs a GET /products/{product_id} (the `GetProduct` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetProductWithResponse(ctx context.Context, productId ProductId, reqEditors ...RequestEditorFn) (*GetProductResponse, error)
+	GetProductWithResponse(ctx context.Context, productId string, reqEditors ...RequestEditorFn) (*GetProductResponse, error)
 
 	// UpdateProductWithBodyWithResponse performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	UpdateProductWithBodyWithResponse(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error)
+	UpdateProductWithBodyWithResponse(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error)
 
 	// UpdateProductWithResponse performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	UpdateProductWithResponse(ctx context.Context, productId ProductId, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error)
+	UpdateProductWithResponse(ctx context.Context, productId string, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error)
 
 	// CreateProductSubscriptionWithBodyWithResponse performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	CreateProductSubscriptionWithBodyWithResponse(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error)
+	CreateProductSubscriptionWithBodyWithResponse(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error)
 
 	// CreateProductSubscriptionWithResponse performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	CreateProductSubscriptionWithResponse(ctx context.Context, productId ProductId, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error)
+	CreateProductSubscriptionWithResponse(ctx context.Context, productId string, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error)
 
 	// ListServiceAccountsWithResponse performs a GET /service-accounts (the `ListServiceAccounts` operationId) request.
 	//
@@ -2430,7 +2729,7 @@ type ClientWithResponsesInterface interface {
 	// RevokeServiceAccountWithResponse performs a DELETE /service-accounts/{service_account_id} (the `RevokeServiceAccount` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	RevokeServiceAccountWithResponse(ctx context.Context, serviceAccountId ServiceAccountId, reqEditors ...RequestEditorFn) (*RevokeServiceAccountResponse, error)
+	RevokeServiceAccountWithResponse(ctx context.Context, serviceAccountId string, reqEditors ...RequestEditorFn) (*RevokeServiceAccountResponse, error)
 
 	// ListSubscriptionsWithResponse performs a GET /subscriptions (the `ListSubscriptions` operationId) request.
 	//
@@ -2440,48 +2739,71 @@ type ClientWithResponsesInterface interface {
 	// GetSubscriptionWithResponse performs a GET /subscriptions/{subscription_id} (the `GetSubscription` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetSubscriptionWithResponse(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*GetSubscriptionResponse, error)
+	GetSubscriptionWithResponse(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*GetSubscriptionResponse, error)
 
 	// UpdateSubscriptionWithBodyWithResponse performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	UpdateSubscriptionWithBodyWithResponse(ctx context.Context, subscriptionId SubscriptionId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error)
+	UpdateSubscriptionWithBodyWithResponse(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error)
 
 	// UpdateSubscriptionWithResponse performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	UpdateSubscriptionWithResponse(ctx context.Context, subscriptionId SubscriptionId, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error)
+	UpdateSubscriptionWithResponse(ctx context.Context, subscriptionId string, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error)
 
 	// ListSubscriptionKeysWithResponse performs a GET /subscriptions/{subscription_id}/keys (the `ListSubscriptionKeys` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	ListSubscriptionKeysWithResponse(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*ListSubscriptionKeysResponse, error)
+	ListSubscriptionKeysWithResponse(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*ListSubscriptionKeysResponse, error)
 
-	// CreateSubscriptionKeyWithResponse performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request.
+	// CreateSubscriptionKeyWithBodyWithResponse performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request,
+	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	CreateSubscriptionKeyWithResponse(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*CreateSubscriptionKeyResponse, error)
+	CreateSubscriptionKeyWithBodyWithResponse(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSubscriptionKeyResponse, error)
+
+	// CreateSubscriptionKeyWithResponse performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	CreateSubscriptionKeyWithResponse(ctx context.Context, subscriptionId string, body CreateSubscriptionKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSubscriptionKeyResponse, error)
 
 	// GetSubscriptionKeyWithResponse performs a GET /subscriptions/{subscription_id}/keys/{subscription_key_id} (the `GetSubscriptionKey` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetSubscriptionKeyWithResponse(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*GetSubscriptionKeyResponse, error)
+	GetSubscriptionKeyWithResponse(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*GetSubscriptionKeyResponse, error)
 
 	// RevokeSubscriptionKeyWithResponse performs a POST /subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke (the `RevokeSubscriptionKey` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	RevokeSubscriptionKeyWithResponse(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*RevokeSubscriptionKeyResponse, error)
+	RevokeSubscriptionKeyWithResponse(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*RevokeSubscriptionKeyResponse, error)
 }
 
 type ListAccountsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *AccountList
+	JSON200 *struct {
+		Data []struct {
+			Asset          ListAccounts200JSONResponseBodyDataAsset  `json:"asset"`
+			CreatedAt      time.Time                                 `json:"created_at"`
+			Id             string                                    `json:"id"`
+			Kind           ListAccounts200JSONResponseBodyDataKind   `json:"kind"`
+			LedgerAccounts *[]map[string]interface{}                 `json:"ledger_accounts,omitempty"`
+			Status         ListAccounts200JSONResponseBodyDataStatus `json:"status"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListAccountsResponse) GetJSON200() *AccountList {
+func (r ListAccountsResponse) GetJSON200() *struct {
+	Data []struct {
+		Asset          ListAccounts200JSONResponseBodyDataAsset  `json:"asset"`
+		CreatedAt      time.Time                                 `json:"created_at"`
+		Id             string                                    `json:"id"`
+		Kind           ListAccounts200JSONResponseBodyDataKind   `json:"kind"`
+		LedgerAccounts *[]map[string]interface{}                 `json:"ledger_accounts,omitempty"`
+		Status         ListAccounts200JSONResponseBodyDataStatus `json:"status"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -2518,11 +2840,17 @@ type GetAccountBalanceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Balance
+	JSON200 *struct {
+		AccountId           string `json:"account_id"`
+		BalanceMicrocredits int64  `json:"balance_microcredits"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetAccountBalanceResponse) GetJSON200() *Balance {
+func (r GetAccountBalanceResponse) GetJSON200() *struct {
+	AccountId           string `json:"account_id"`
+	BalanceMicrocredits int64  `json:"balance_microcredits"`
+} {
 	return r.JSON200
 }
 
@@ -2559,11 +2887,15 @@ type ListAccountChargesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ResourceList
+	JSON200 *struct {
+		Data []map[string]interface{} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListAccountChargesResponse) GetJSON200() *ResourceList {
+func (r ListAccountChargesResponse) GetJSON200() *struct {
+	Data []map[string]interface{} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -2600,11 +2932,15 @@ type ListAccountTopupsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ResourceList
+	JSON200 *struct {
+		Data []map[string]interface{} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListAccountTopupsResponse) GetJSON200() *ResourceList {
+func (r ListAccountTopupsResponse) GetJSON200() *struct {
+	Data []map[string]interface{} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -2640,13 +2976,120 @@ func (r ListAccountTopupsResponse) ContentType() string {
 type CreateAccountTopupResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		AccountId          string                                       `json:"account_id"`
+		AmountMicrocredits int64                                        `json:"amount_microcredits"`
+		Channel            CreateAccountTopup200JSONResponseBodyChannel `json:"channel"`
+		CreditedAt         time.Time                                    `json:"credited_at"`
+		ExternalReference  string                                       `json:"external_reference"`
+		Id                 string                                       `json:"id"`
+		Status             CreateAccountTopup200JSONResponseBodyStatus  `json:"status"`
+	}
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Topup
+	JSON201 *struct {
+		AccountId          string                                       `json:"account_id"`
+		AmountMicrocredits int64                                        `json:"amount_microcredits"`
+		Channel            CreateAccountTopup201JSONResponseBodyChannel `json:"channel"`
+		CreditedAt         time.Time                                    `json:"credited_at"`
+		ExternalReference  string                                       `json:"external_reference"`
+		Id                 string                                       `json:"id"`
+		Status             CreateAccountTopup201JSONResponseBodyStatus  `json:"status"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CreateAccountTopupResponse) GetJSON200() *struct {
+	AccountId          string                                       `json:"account_id"`
+	AmountMicrocredits int64                                        `json:"amount_microcredits"`
+	Channel            CreateAccountTopup200JSONResponseBodyChannel `json:"channel"`
+	CreditedAt         time.Time                                    `json:"credited_at"`
+	ExternalReference  string                                       `json:"external_reference"`
+	Id                 string                                       `json:"id"`
+	Status             CreateAccountTopup200JSONResponseBodyStatus  `json:"status"`
+} {
+	return r.JSON200
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateAccountTopupResponse) GetJSON201() *Topup {
+func (r CreateAccountTopupResponse) GetJSON201() *struct {
+	AccountId          string                                       `json:"account_id"`
+	AmountMicrocredits int64                                        `json:"amount_microcredits"`
+	Channel            CreateAccountTopup201JSONResponseBodyChannel `json:"channel"`
+	CreditedAt         time.Time                                    `json:"credited_at"`
+	ExternalReference  string                                       `json:"external_reference"`
+	Id                 string                                       `json:"id"`
+	Status             CreateAccountTopup201JSONResponseBodyStatus  `json:"status"`
+} {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateAccountTopupResponse) GetJSON400() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r CreateAccountTopupResponse) GetJSON404() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r CreateAccountTopupResponse) GetJSON409() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON409
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r CreateAccountTopupResponse) GetJSON500() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON500
 }
 
 // GetBody returns the raw response body bytes
@@ -2682,11 +3125,15 @@ type ListAccountTransactionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ResourceList
+	JSON200 *struct {
+		Data []map[string]interface{} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListAccountTransactionsResponse) GetJSON200() *ResourceList {
+func (r ListAccountTransactionsResponse) GetJSON200() *struct {
+	Data []map[string]interface{} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -2719,56 +3166,37 @@ func (r ListAccountTransactionsResponse) ContentType() string {
 	return ""
 }
 
-type InitializeUserResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Initialization
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r InitializeUserResponse) GetJSON200() *Initialization {
-	return r.JSON200
-}
-
-// GetBody returns the raw response body bytes
-func (r InitializeUserResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r InitializeUserResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r InitializeUserResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r InitializeUserResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type ListMerchantsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *MerchantList
+	JSON200 *struct {
+		Data []struct {
+			CreatedAt           *time.Time                                 `json:"created_at,omitempty"`
+			Id                  string                                     `json:"id"`
+			IsDefault           bool                                       `json:"is_default"`
+			LegalName           string                                     `json:"legal_name"`
+			PublicName          string                                     `json:"public_name"`
+			SettlementAccountId string                                     `json:"settlement_account_id"`
+			Status              ListMerchants200JSONResponseBodyDataStatus `json:"status"`
+			UpdatedAt           *time.Time                                 `json:"updated_at,omitempty"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListMerchantsResponse) GetJSON200() *MerchantList {
+func (r ListMerchantsResponse) GetJSON200() *struct {
+	Data []struct {
+		CreatedAt           *time.Time                                 `json:"created_at,omitempty"`
+		Id                  string                                     `json:"id"`
+		IsDefault           bool                                       `json:"is_default"`
+		LegalName           string                                     `json:"legal_name"`
+		PublicName          string                                     `json:"public_name"`
+		SettlementAccountId string                                     `json:"settlement_account_id"`
+		Status              ListMerchants200JSONResponseBodyDataStatus `json:"status"`
+		UpdatedAt           *time.Time                                 `json:"updated_at,omitempty"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -2805,11 +3233,29 @@ type CreateMerchantResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Merchant
+	JSON201 *struct {
+		CreatedAt           *time.Time                              `json:"created_at,omitempty"`
+		Id                  string                                  `json:"id"`
+		IsDefault           bool                                    `json:"is_default"`
+		LegalName           string                                  `json:"legal_name"`
+		PublicName          string                                  `json:"public_name"`
+		SettlementAccountId string                                  `json:"settlement_account_id"`
+		Status              CreateMerchant201JSONResponseBodyStatus `json:"status"`
+		UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+	}
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateMerchantResponse) GetJSON201() *Merchant {
+func (r CreateMerchantResponse) GetJSON201() *struct {
+	CreatedAt           *time.Time                              `json:"created_at,omitempty"`
+	Id                  string                                  `json:"id"`
+	IsDefault           bool                                    `json:"is_default"`
+	LegalName           string                                  `json:"legal_name"`
+	PublicName          string                                  `json:"public_name"`
+	SettlementAccountId string                                  `json:"settlement_account_id"`
+	Status              CreateMerchant201JSONResponseBodyStatus `json:"status"`
+	UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+} {
 	return r.JSON201
 }
 
@@ -2846,11 +3292,29 @@ type GetMerchantResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Merchant
+	JSON200 *struct {
+		CreatedAt           *time.Time                           `json:"created_at,omitempty"`
+		Id                  string                               `json:"id"`
+		IsDefault           bool                                 `json:"is_default"`
+		LegalName           string                               `json:"legal_name"`
+		PublicName          string                               `json:"public_name"`
+		SettlementAccountId string                               `json:"settlement_account_id"`
+		Status              GetMerchant200JSONResponseBodyStatus `json:"status"`
+		UpdatedAt           *time.Time                           `json:"updated_at,omitempty"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetMerchantResponse) GetJSON200() *Merchant {
+func (r GetMerchantResponse) GetJSON200() *struct {
+	CreatedAt           *time.Time                           `json:"created_at,omitempty"`
+	Id                  string                               `json:"id"`
+	IsDefault           bool                                 `json:"is_default"`
+	LegalName           string                               `json:"legal_name"`
+	PublicName          string                               `json:"public_name"`
+	SettlementAccountId string                               `json:"settlement_account_id"`
+	Status              GetMerchant200JSONResponseBodyStatus `json:"status"`
+	UpdatedAt           *time.Time                           `json:"updated_at,omitempty"`
+} {
 	return r.JSON200
 }
 
@@ -2887,11 +3351,29 @@ type UpdateMerchantResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Merchant
+	JSON200 *struct {
+		CreatedAt           *time.Time                              `json:"created_at,omitempty"`
+		Id                  string                                  `json:"id"`
+		IsDefault           bool                                    `json:"is_default"`
+		LegalName           string                                  `json:"legal_name"`
+		PublicName          string                                  `json:"public_name"`
+		SettlementAccountId string                                  `json:"settlement_account_id"`
+		Status              UpdateMerchant200JSONResponseBodyStatus `json:"status"`
+		UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r UpdateMerchantResponse) GetJSON200() *Merchant {
+func (r UpdateMerchantResponse) GetJSON200() *struct {
+	CreatedAt           *time.Time                              `json:"created_at,omitempty"`
+	Id                  string                                  `json:"id"`
+	IsDefault           bool                                    `json:"is_default"`
+	LegalName           string                                  `json:"legal_name"`
+	PublicName          string                                  `json:"public_name"`
+	SettlementAccountId string                                  `json:"settlement_account_id"`
+	Status              UpdateMerchant200JSONResponseBodyStatus `json:"status"`
+	UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+} {
 	return r.JSON200
 }
 
@@ -2928,11 +3410,29 @@ type ListMerchantProductsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ProductList
+	JSON200 *struct {
+		Data []struct {
+			BillingMode  ListMerchantProducts200JSONResponseBodyDataBillingMode `json:"billing_mode"`
+			Id           string                                                 `json:"id"`
+			MerchantId   string                                                 `json:"merchant_id"`
+			Name         string                                                 `json:"name"`
+			Status       ListMerchantProducts200JSONResponseBodyDataStatus      `json:"status"`
+			TermsVersion string                                                 `json:"terms_version"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListMerchantProductsResponse) GetJSON200() *ProductList {
+func (r ListMerchantProductsResponse) GetJSON200() *struct {
+	Data []struct {
+		BillingMode  ListMerchantProducts200JSONResponseBodyDataBillingMode `json:"billing_mode"`
+		Id           string                                                 `json:"id"`
+		MerchantId   string                                                 `json:"merchant_id"`
+		Name         string                                                 `json:"name"`
+		Status       ListMerchantProducts200JSONResponseBodyDataStatus      `json:"status"`
+		TermsVersion string                                                 `json:"terms_version"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -2969,11 +3469,25 @@ type CreateMerchantProductResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Product
+	JSON201 *struct {
+		BillingMode  CreateMerchantProduct201JSONResponseBodyBillingMode `json:"billing_mode"`
+		Id           string                                              `json:"id"`
+		MerchantId   string                                              `json:"merchant_id"`
+		Name         string                                              `json:"name"`
+		Status       CreateMerchantProduct201JSONResponseBodyStatus      `json:"status"`
+		TermsVersion string                                              `json:"terms_version"`
+	}
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateMerchantProductResponse) GetJSON201() *Product {
+func (r CreateMerchantProductResponse) GetJSON201() *struct {
+	BillingMode  CreateMerchantProduct201JSONResponseBodyBillingMode `json:"billing_mode"`
+	Id           string                                              `json:"id"`
+	MerchantId   string                                              `json:"merchant_id"`
+	Name         string                                              `json:"name"`
+	Status       CreateMerchantProduct201JSONResponseBodyStatus      `json:"status"`
+	TermsVersion string                                              `json:"terms_version"`
+} {
 	return r.JSON201
 }
 
@@ -3010,11 +3524,29 @@ type ListProductsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ProductList
+	JSON200 *struct {
+		Data []struct {
+			BillingMode  ListProducts200JSONResponseBodyDataBillingMode `json:"billing_mode"`
+			Id           string                                         `json:"id"`
+			MerchantId   string                                         `json:"merchant_id"`
+			Name         string                                         `json:"name"`
+			Status       ListProducts200JSONResponseBodyDataStatus      `json:"status"`
+			TermsVersion string                                         `json:"terms_version"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListProductsResponse) GetJSON200() *ProductList {
+func (r ListProductsResponse) GetJSON200() *struct {
+	Data []struct {
+		BillingMode  ListProducts200JSONResponseBodyDataBillingMode `json:"billing_mode"`
+		Id           string                                         `json:"id"`
+		MerchantId   string                                         `json:"merchant_id"`
+		Name         string                                         `json:"name"`
+		Status       ListProducts200JSONResponseBodyDataStatus      `json:"status"`
+		TermsVersion string                                         `json:"terms_version"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -3051,11 +3583,25 @@ type GetProductResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Product
+	JSON200 *struct {
+		BillingMode  GetProduct200JSONResponseBodyBillingMode `json:"billing_mode"`
+		Id           string                                   `json:"id"`
+		MerchantId   string                                   `json:"merchant_id"`
+		Name         string                                   `json:"name"`
+		Status       GetProduct200JSONResponseBodyStatus      `json:"status"`
+		TermsVersion string                                   `json:"terms_version"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetProductResponse) GetJSON200() *Product {
+func (r GetProductResponse) GetJSON200() *struct {
+	BillingMode  GetProduct200JSONResponseBodyBillingMode `json:"billing_mode"`
+	Id           string                                   `json:"id"`
+	MerchantId   string                                   `json:"merchant_id"`
+	Name         string                                   `json:"name"`
+	Status       GetProduct200JSONResponseBodyStatus      `json:"status"`
+	TermsVersion string                                   `json:"terms_version"`
+} {
 	return r.JSON200
 }
 
@@ -3092,11 +3638,25 @@ type UpdateProductResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Product
+	JSON200 *struct {
+		BillingMode  UpdateProduct200JSONResponseBodyBillingMode `json:"billing_mode"`
+		Id           string                                      `json:"id"`
+		MerchantId   string                                      `json:"merchant_id"`
+		Name         string                                      `json:"name"`
+		Status       UpdateProduct200JSONResponseBodyStatus      `json:"status"`
+		TermsVersion string                                      `json:"terms_version"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r UpdateProductResponse) GetJSON200() *Product {
+func (r UpdateProductResponse) GetJSON200() *struct {
+	BillingMode  UpdateProduct200JSONResponseBodyBillingMode `json:"billing_mode"`
+	Id           string                                      `json:"id"`
+	MerchantId   string                                      `json:"merchant_id"`
+	Name         string                                      `json:"name"`
+	Status       UpdateProduct200JSONResponseBodyStatus      `json:"status"`
+	TermsVersion string                                      `json:"terms_version"`
+} {
 	return r.JSON200
 }
 
@@ -3132,13 +3692,124 @@ func (r UpdateProductResponse) ContentType() string {
 type CreateProductSubscriptionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		AcceptedAt   *time.Time                                         `json:"accepted_at,omitempty"`
+		AccountId    string                                             `json:"account_id"`
+		CanceledAt   *time.Time                                         `json:"canceled_at,omitempty"`
+		CreatedAt    *time.Time                                         `json:"created_at,omitempty"`
+		Id           string                                             `json:"id"`
+		ProductId    string                                             `json:"product_id"`
+		Status       CreateProductSubscription200JSONResponseBodyStatus `json:"status"`
+		TermsVersion string                                             `json:"terms_version"`
+	}
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Subscription
+	JSON201 *struct {
+		AcceptedAt   *time.Time                                         `json:"accepted_at,omitempty"`
+		AccountId    string                                             `json:"account_id"`
+		CanceledAt   *time.Time                                         `json:"canceled_at,omitempty"`
+		CreatedAt    *time.Time                                         `json:"created_at,omitempty"`
+		Id           string                                             `json:"id"`
+		ProductId    string                                             `json:"product_id"`
+		Status       CreateProductSubscription201JSONResponseBodyStatus `json:"status"`
+		TermsVersion string                                             `json:"terms_version"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CreateProductSubscriptionResponse) GetJSON200() *struct {
+	AcceptedAt   *time.Time                                         `json:"accepted_at,omitempty"`
+	AccountId    string                                             `json:"account_id"`
+	CanceledAt   *time.Time                                         `json:"canceled_at,omitempty"`
+	CreatedAt    *time.Time                                         `json:"created_at,omitempty"`
+	Id           string                                             `json:"id"`
+	ProductId    string                                             `json:"product_id"`
+	Status       CreateProductSubscription200JSONResponseBodyStatus `json:"status"`
+	TermsVersion string                                             `json:"terms_version"`
+} {
+	return r.JSON200
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateProductSubscriptionResponse) GetJSON201() *Subscription {
+func (r CreateProductSubscriptionResponse) GetJSON201() *struct {
+	AcceptedAt   *time.Time                                         `json:"accepted_at,omitempty"`
+	AccountId    string                                             `json:"account_id"`
+	CanceledAt   *time.Time                                         `json:"canceled_at,omitempty"`
+	CreatedAt    *time.Time                                         `json:"created_at,omitempty"`
+	Id           string                                             `json:"id"`
+	ProductId    string                                             `json:"product_id"`
+	Status       CreateProductSubscription201JSONResponseBodyStatus `json:"status"`
+	TermsVersion string                                             `json:"terms_version"`
+} {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateProductSubscriptionResponse) GetJSON400() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r CreateProductSubscriptionResponse) GetJSON404() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r CreateProductSubscriptionResponse) GetJSON409() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON409
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r CreateProductSubscriptionResponse) GetJSON500() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON500
 }
 
 // GetBody returns the raw response body bytes
@@ -3174,11 +3845,31 @@ type ListServiceAccountsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ServiceAccountList
+	JSON200 *struct {
+		Data []struct {
+			CreatedAt  *time.Time                                       `json:"created_at,omitempty"`
+			Credential *map[string]interface{}                          `json:"credential,omitempty"`
+			Id         string                                           `json:"id"`
+			Name       *string                                          `json:"name,omitempty"`
+			RevokedAt  *time.Time                                       `json:"revoked_at,omitempty"`
+			Roles      *[]string                                        `json:"roles,omitempty"`
+			Status     ListServiceAccounts200JSONResponseBodyDataStatus `json:"status"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListServiceAccountsResponse) GetJSON200() *ServiceAccountList {
+func (r ListServiceAccountsResponse) GetJSON200() *struct {
+	Data []struct {
+		CreatedAt  *time.Time                                       `json:"created_at,omitempty"`
+		Credential *map[string]interface{}                          `json:"credential,omitempty"`
+		Id         string                                           `json:"id"`
+		Name       *string                                          `json:"name,omitempty"`
+		RevokedAt  *time.Time                                       `json:"revoked_at,omitempty"`
+		Roles      *[]string                                        `json:"roles,omitempty"`
+		Status     ListServiceAccounts200JSONResponseBodyDataStatus `json:"status"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -3215,11 +3906,27 @@ type CreateServiceAccountResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *ServiceAccountCreated
+	JSON201 *struct {
+		CreatedAt  *time.Time                                    `json:"created_at,omitempty"`
+		Credential *map[string]interface{}                       `json:"credential,omitempty"`
+		Id         string                                        `json:"id"`
+		Name       *string                                       `json:"name,omitempty"`
+		RevokedAt  *time.Time                                    `json:"revoked_at,omitempty"`
+		Roles      *[]string                                     `json:"roles,omitempty"`
+		Status     CreateServiceAccount201JSONResponseBodyStatus `json:"status"`
+	}
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateServiceAccountResponse) GetJSON201() *ServiceAccountCreated {
+func (r CreateServiceAccountResponse) GetJSON201() *struct {
+	CreatedAt  *time.Time                                    `json:"created_at,omitempty"`
+	Credential *map[string]interface{}                       `json:"credential,omitempty"`
+	Id         string                                        `json:"id"`
+	Name       *string                                       `json:"name,omitempty"`
+	RevokedAt  *time.Time                                    `json:"revoked_at,omitempty"`
+	Roles      *[]string                                     `json:"roles,omitempty"`
+	Status     CreateServiceAccount201JSONResponseBodyStatus `json:"status"`
+} {
 	return r.JSON201
 }
 
@@ -3290,11 +3997,33 @@ type ListSubscriptionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *SubscriptionList
+	JSON200 *struct {
+		Data []struct {
+			AcceptedAt   *time.Time                                     `json:"accepted_at,omitempty"`
+			AccountId    string                                         `json:"account_id"`
+			CanceledAt   *time.Time                                     `json:"canceled_at,omitempty"`
+			CreatedAt    *time.Time                                     `json:"created_at,omitempty"`
+			Id           string                                         `json:"id"`
+			ProductId    string                                         `json:"product_id"`
+			Status       ListSubscriptions200JSONResponseBodyDataStatus `json:"status"`
+			TermsVersion string                                         `json:"terms_version"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListSubscriptionsResponse) GetJSON200() *SubscriptionList {
+func (r ListSubscriptionsResponse) GetJSON200() *struct {
+	Data []struct {
+		AcceptedAt   *time.Time                                     `json:"accepted_at,omitempty"`
+		AccountId    string                                         `json:"account_id"`
+		CanceledAt   *time.Time                                     `json:"canceled_at,omitempty"`
+		CreatedAt    *time.Time                                     `json:"created_at,omitempty"`
+		Id           string                                         `json:"id"`
+		ProductId    string                                         `json:"product_id"`
+		Status       ListSubscriptions200JSONResponseBodyDataStatus `json:"status"`
+		TermsVersion string                                         `json:"terms_version"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -3331,11 +4060,29 @@ type GetSubscriptionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Subscription
+	JSON200 *struct {
+		AcceptedAt   *time.Time                               `json:"accepted_at,omitempty"`
+		AccountId    string                                   `json:"account_id"`
+		CanceledAt   *time.Time                               `json:"canceled_at,omitempty"`
+		CreatedAt    *time.Time                               `json:"created_at,omitempty"`
+		Id           string                                   `json:"id"`
+		ProductId    string                                   `json:"product_id"`
+		Status       GetSubscription200JSONResponseBodyStatus `json:"status"`
+		TermsVersion string                                   `json:"terms_version"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetSubscriptionResponse) GetJSON200() *Subscription {
+func (r GetSubscriptionResponse) GetJSON200() *struct {
+	AcceptedAt   *time.Time                               `json:"accepted_at,omitempty"`
+	AccountId    string                                   `json:"account_id"`
+	CanceledAt   *time.Time                               `json:"canceled_at,omitempty"`
+	CreatedAt    *time.Time                               `json:"created_at,omitempty"`
+	Id           string                                   `json:"id"`
+	ProductId    string                                   `json:"product_id"`
+	Status       GetSubscription200JSONResponseBodyStatus `json:"status"`
+	TermsVersion string                                   `json:"terms_version"`
+} {
 	return r.JSON200
 }
 
@@ -3372,11 +4119,29 @@ type UpdateSubscriptionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Subscription
+	JSON200 *struct {
+		AcceptedAt   *time.Time                                  `json:"accepted_at,omitempty"`
+		AccountId    string                                      `json:"account_id"`
+		CanceledAt   *time.Time                                  `json:"canceled_at,omitempty"`
+		CreatedAt    *time.Time                                  `json:"created_at,omitempty"`
+		Id           string                                      `json:"id"`
+		ProductId    string                                      `json:"product_id"`
+		Status       UpdateSubscription200JSONResponseBodyStatus `json:"status"`
+		TermsVersion string                                      `json:"terms_version"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r UpdateSubscriptionResponse) GetJSON200() *Subscription {
+func (r UpdateSubscriptionResponse) GetJSON200() *struct {
+	AcceptedAt   *time.Time                                  `json:"accepted_at,omitempty"`
+	AccountId    string                                      `json:"account_id"`
+	CanceledAt   *time.Time                                  `json:"canceled_at,omitempty"`
+	CreatedAt    *time.Time                                  `json:"created_at,omitempty"`
+	Id           string                                      `json:"id"`
+	ProductId    string                                      `json:"product_id"`
+	Status       UpdateSubscription200JSONResponseBodyStatus `json:"status"`
+	TermsVersion string                                      `json:"terms_version"`
+} {
 	return r.JSON200
 }
 
@@ -3413,11 +4178,33 @@ type ListSubscriptionKeysResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KeyList
+	JSON200 *struct {
+		Data []struct {
+			CreatedAt      *time.Time                                        `json:"created_at,omitempty"`
+			Id             string                                            `json:"id"`
+			Key            string                                            `json:"key"`
+			LastUsedAt     *time.Time                                        `json:"last_used_at,omitempty"`
+			Name           string                                            `json:"name"`
+			RevokedAt      *time.Time                                        `json:"revoked_at,omitempty"`
+			Status         ListSubscriptionKeys200JSONResponseBodyDataStatus `json:"status"`
+			SubscriptionId string                                            `json:"subscription_id"`
+		} `json:"data"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListSubscriptionKeysResponse) GetJSON200() *KeyList {
+func (r ListSubscriptionKeysResponse) GetJSON200() *struct {
+	Data []struct {
+		CreatedAt      *time.Time                                        `json:"created_at,omitempty"`
+		Id             string                                            `json:"id"`
+		Key            string                                            `json:"key"`
+		LastUsedAt     *time.Time                                        `json:"last_used_at,omitempty"`
+		Name           string                                            `json:"name"`
+		RevokedAt      *time.Time                                        `json:"revoked_at,omitempty"`
+		Status         ListSubscriptionKeys200JSONResponseBodyDataStatus `json:"status"`
+		SubscriptionId string                                            `json:"subscription_id"`
+	} `json:"data"`
+} {
 	return r.JSON200
 }
 
@@ -3453,13 +4240,124 @@ func (r ListSubscriptionKeysResponse) ContentType() string {
 type CreateSubscriptionKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+		Id             string                                         `json:"id"`
+		Key            string                                         `json:"key"`
+		LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+		Name           string                                         `json:"name"`
+		RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+		Status         CreateSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+		SubscriptionId string                                         `json:"subscription_id"`
+	}
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Key
+	JSON201 *struct {
+		CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+		Id             string                                         `json:"id"`
+		Key            string                                         `json:"key"`
+		LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+		Name           string                                         `json:"name"`
+		RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+		Status         CreateSubscriptionKey201JSONResponseBodyStatus `json:"status"`
+		SubscriptionId string                                         `json:"subscription_id"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CreateSubscriptionKeyResponse) GetJSON200() *struct {
+	CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+	Id             string                                         `json:"id"`
+	Key            string                                         `json:"key"`
+	LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+	Name           string                                         `json:"name"`
+	RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+	Status         CreateSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+	SubscriptionId string                                         `json:"subscription_id"`
+} {
+	return r.JSON200
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateSubscriptionKeyResponse) GetJSON201() *Key {
+func (r CreateSubscriptionKeyResponse) GetJSON201() *struct {
+	CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+	Id             string                                         `json:"id"`
+	Key            string                                         `json:"key"`
+	LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+	Name           string                                         `json:"name"`
+	RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+	Status         CreateSubscriptionKey201JSONResponseBodyStatus `json:"status"`
+	SubscriptionId string                                         `json:"subscription_id"`
+} {
 	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateSubscriptionKeyResponse) GetJSON400() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r CreateSubscriptionKeyResponse) GetJSON404() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r CreateSubscriptionKeyResponse) GetJSON409() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON409
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r CreateSubscriptionKeyResponse) GetJSON500() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON500
 }
 
 // GetBody returns the raw response body bytes
@@ -3495,11 +4393,29 @@ type GetSubscriptionKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Key
+	JSON200 *struct {
+		CreatedAt      *time.Time                                  `json:"created_at,omitempty"`
+		Id             string                                      `json:"id"`
+		Key            string                                      `json:"key"`
+		LastUsedAt     *time.Time                                  `json:"last_used_at,omitempty"`
+		Name           string                                      `json:"name"`
+		RevokedAt      *time.Time                                  `json:"revoked_at,omitempty"`
+		Status         GetSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+		SubscriptionId string                                      `json:"subscription_id"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetSubscriptionKeyResponse) GetJSON200() *Key {
+func (r GetSubscriptionKeyResponse) GetJSON200() *struct {
+	CreatedAt      *time.Time                                  `json:"created_at,omitempty"`
+	Id             string                                      `json:"id"`
+	Key            string                                      `json:"key"`
+	LastUsedAt     *time.Time                                  `json:"last_used_at,omitempty"`
+	Name           string                                      `json:"name"`
+	RevokedAt      *time.Time                                  `json:"revoked_at,omitempty"`
+	Status         GetSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+	SubscriptionId string                                      `json:"subscription_id"`
+} {
 	return r.JSON200
 }
 
@@ -3536,11 +4452,29 @@ type RevokeSubscriptionKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Key
+	JSON200 *struct {
+		CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+		Id             string                                         `json:"id"`
+		Key            string                                         `json:"key"`
+		LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+		Name           string                                         `json:"name"`
+		RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+		Status         RevokeSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+		SubscriptionId string                                         `json:"subscription_id"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r RevokeSubscriptionKeyResponse) GetJSON200() *Key {
+func (r RevokeSubscriptionKeyResponse) GetJSON200() *struct {
+	CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+	Id             string                                         `json:"id"`
+	Key            string                                         `json:"key"`
+	LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+	Name           string                                         `json:"name"`
+	RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+	Status         RevokeSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+	SubscriptionId string                                         `json:"subscription_id"`
+} {
 	return r.JSON200
 }
 
@@ -3587,7 +4521,7 @@ func (c *ClientWithResponses) ListAccountsWithResponse(ctx context.Context, reqE
 // GetAccountBalanceWithResponse performs a GET /accounts/{account_id}/balance (the `GetAccountBalance` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetAccountBalanceWithResponse(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*GetAccountBalanceResponse, error) {
+func (c *ClientWithResponses) GetAccountBalanceWithResponse(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*GetAccountBalanceResponse, error) {
 	rsp, err := c.GetAccountBalance(ctx, accountId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3598,7 +4532,7 @@ func (c *ClientWithResponses) GetAccountBalanceWithResponse(ctx context.Context,
 // ListAccountChargesWithResponse performs a GET /accounts/{account_id}/charges (the `ListAccountCharges` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) ListAccountChargesWithResponse(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*ListAccountChargesResponse, error) {
+func (c *ClientWithResponses) ListAccountChargesWithResponse(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*ListAccountChargesResponse, error) {
 	rsp, err := c.ListAccountCharges(ctx, accountId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3609,7 +4543,7 @@ func (c *ClientWithResponses) ListAccountChargesWithResponse(ctx context.Context
 // ListAccountTopupsWithResponse performs a GET /accounts/{account_id}/topups (the `ListAccountTopups` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) ListAccountTopupsWithResponse(ctx context.Context, accountId AccountId, reqEditors ...RequestEditorFn) (*ListAccountTopupsResponse, error) {
+func (c *ClientWithResponses) ListAccountTopupsWithResponse(ctx context.Context, accountId string, reqEditors ...RequestEditorFn) (*ListAccountTopupsResponse, error) {
 	rsp, err := c.ListAccountTopups(ctx, accountId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3621,7 +4555,7 @@ func (c *ClientWithResponses) ListAccountTopupsWithResponse(ctx context.Context,
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateAccountTopupWithBodyWithResponse(ctx context.Context, accountId AccountId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error) {
+func (c *ClientWithResponses) CreateAccountTopupWithBodyWithResponse(ctx context.Context, accountId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error) {
 	rsp, err := c.CreateAccountTopupWithBody(ctx, accountId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3631,7 +4565,7 @@ func (c *ClientWithResponses) CreateAccountTopupWithBodyWithResponse(ctx context
 
 // CreateAccountTopupWithResponse performs a POST /accounts/{account_id}/topups (the `CreateAccountTopup` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateAccountTopupWithResponse(ctx context.Context, accountId AccountId, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error) {
+func (c *ClientWithResponses) CreateAccountTopupWithResponse(ctx context.Context, accountId string, body CreateAccountTopupJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAccountTopupResponse, error) {
 	rsp, err := c.CreateAccountTopup(ctx, accountId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3642,23 +4576,12 @@ func (c *ClientWithResponses) CreateAccountTopupWithResponse(ctx context.Context
 // ListAccountTransactionsWithResponse performs a GET /accounts/{account_id}/transactions (the `ListAccountTransactions` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) ListAccountTransactionsWithResponse(ctx context.Context, accountId AccountId, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*ListAccountTransactionsResponse, error) {
+func (c *ClientWithResponses) ListAccountTransactionsWithResponse(ctx context.Context, accountId string, params *ListAccountTransactionsParams, reqEditors ...RequestEditorFn) (*ListAccountTransactionsResponse, error) {
 	rsp, err := c.ListAccountTransactions(ctx, accountId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseListAccountTransactionsResponse(rsp)
-}
-
-// InitializeUserWithResponse performs a POST /initialize (the `InitializeUser` operationId) request.
-//
-// Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) InitializeUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*InitializeUserResponse, error) {
-	rsp, err := c.InitializeUser(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseInitializeUserResponse(rsp)
 }
 
 // ListMerchantsWithResponse performs a GET /merchants (the `ListMerchants` operationId) request.
@@ -3697,7 +4620,7 @@ func (c *ClientWithResponses) CreateMerchantWithResponse(ctx context.Context, bo
 // GetMerchantWithResponse performs a GET /merchants/{merchant_id} (the `GetMerchant` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetMerchantWithResponse(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*GetMerchantResponse, error) {
+func (c *ClientWithResponses) GetMerchantWithResponse(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*GetMerchantResponse, error) {
 	rsp, err := c.GetMerchant(ctx, merchantId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3709,7 +4632,7 @@ func (c *ClientWithResponses) GetMerchantWithResponse(ctx context.Context, merch
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateMerchantWithBodyWithResponse(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error) {
+func (c *ClientWithResponses) UpdateMerchantWithBodyWithResponse(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error) {
 	rsp, err := c.UpdateMerchantWithBody(ctx, merchantId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3719,7 +4642,7 @@ func (c *ClientWithResponses) UpdateMerchantWithBodyWithResponse(ctx context.Con
 
 // UpdateMerchantWithResponse performs a PATCH /merchants/{merchant_id} (the `UpdateMerchant` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateMerchantWithResponse(ctx context.Context, merchantId MerchantId, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error) {
+func (c *ClientWithResponses) UpdateMerchantWithResponse(ctx context.Context, merchantId string, body UpdateMerchantJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMerchantResponse, error) {
 	rsp, err := c.UpdateMerchant(ctx, merchantId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3730,7 +4653,7 @@ func (c *ClientWithResponses) UpdateMerchantWithResponse(ctx context.Context, me
 // ListMerchantProductsWithResponse performs a GET /merchants/{merchant_id}/products (the `ListMerchantProducts` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) ListMerchantProductsWithResponse(ctx context.Context, merchantId MerchantId, reqEditors ...RequestEditorFn) (*ListMerchantProductsResponse, error) {
+func (c *ClientWithResponses) ListMerchantProductsWithResponse(ctx context.Context, merchantId string, reqEditors ...RequestEditorFn) (*ListMerchantProductsResponse, error) {
 	rsp, err := c.ListMerchantProducts(ctx, merchantId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3742,7 +4665,7 @@ func (c *ClientWithResponses) ListMerchantProductsWithResponse(ctx context.Conte
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateMerchantProductWithBodyWithResponse(ctx context.Context, merchantId MerchantId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error) {
+func (c *ClientWithResponses) CreateMerchantProductWithBodyWithResponse(ctx context.Context, merchantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error) {
 	rsp, err := c.CreateMerchantProductWithBody(ctx, merchantId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3752,7 +4675,7 @@ func (c *ClientWithResponses) CreateMerchantProductWithBodyWithResponse(ctx cont
 
 // CreateMerchantProductWithResponse performs a POST /merchants/{merchant_id}/products (the `CreateMerchantProduct` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateMerchantProductWithResponse(ctx context.Context, merchantId MerchantId, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error) {
+func (c *ClientWithResponses) CreateMerchantProductWithResponse(ctx context.Context, merchantId string, body CreateMerchantProductJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMerchantProductResponse, error) {
 	rsp, err := c.CreateMerchantProduct(ctx, merchantId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3774,7 +4697,7 @@ func (c *ClientWithResponses) ListProductsWithResponse(ctx context.Context, reqE
 // GetProductWithResponse performs a GET /products/{product_id} (the `GetProduct` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetProductWithResponse(ctx context.Context, productId ProductId, reqEditors ...RequestEditorFn) (*GetProductResponse, error) {
+func (c *ClientWithResponses) GetProductWithResponse(ctx context.Context, productId string, reqEditors ...RequestEditorFn) (*GetProductResponse, error) {
 	rsp, err := c.GetProduct(ctx, productId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3786,7 +4709,7 @@ func (c *ClientWithResponses) GetProductWithResponse(ctx context.Context, produc
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateProductWithBodyWithResponse(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error) {
+func (c *ClientWithResponses) UpdateProductWithBodyWithResponse(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error) {
 	rsp, err := c.UpdateProductWithBody(ctx, productId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3796,7 +4719,7 @@ func (c *ClientWithResponses) UpdateProductWithBodyWithResponse(ctx context.Cont
 
 // UpdateProductWithResponse performs a PATCH /products/{product_id} (the `UpdateProduct` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateProductWithResponse(ctx context.Context, productId ProductId, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error) {
+func (c *ClientWithResponses) UpdateProductWithResponse(ctx context.Context, productId string, body UpdateProductJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateProductResponse, error) {
 	rsp, err := c.UpdateProduct(ctx, productId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3808,7 +4731,7 @@ func (c *ClientWithResponses) UpdateProductWithResponse(ctx context.Context, pro
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateProductSubscriptionWithBodyWithResponse(ctx context.Context, productId ProductId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error) {
+func (c *ClientWithResponses) CreateProductSubscriptionWithBodyWithResponse(ctx context.Context, productId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error) {
 	rsp, err := c.CreateProductSubscriptionWithBody(ctx, productId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3818,7 +4741,7 @@ func (c *ClientWithResponses) CreateProductSubscriptionWithBodyWithResponse(ctx 
 
 // CreateProductSubscriptionWithResponse performs a POST /products/{product_id}/subscriptions (the `CreateProductSubscription` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateProductSubscriptionWithResponse(ctx context.Context, productId ProductId, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error) {
+func (c *ClientWithResponses) CreateProductSubscriptionWithResponse(ctx context.Context, productId string, body CreateProductSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProductSubscriptionResponse, error) {
 	rsp, err := c.CreateProductSubscription(ctx, productId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3862,7 +4785,7 @@ func (c *ClientWithResponses) CreateServiceAccountWithResponse(ctx context.Conte
 // RevokeServiceAccountWithResponse performs a DELETE /service-accounts/{service_account_id} (the `RevokeServiceAccount` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) RevokeServiceAccountWithResponse(ctx context.Context, serviceAccountId ServiceAccountId, reqEditors ...RequestEditorFn) (*RevokeServiceAccountResponse, error) {
+func (c *ClientWithResponses) RevokeServiceAccountWithResponse(ctx context.Context, serviceAccountId string, reqEditors ...RequestEditorFn) (*RevokeServiceAccountResponse, error) {
 	rsp, err := c.RevokeServiceAccount(ctx, serviceAccountId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3884,7 +4807,7 @@ func (c *ClientWithResponses) ListSubscriptionsWithResponse(ctx context.Context,
 // GetSubscriptionWithResponse performs a GET /subscriptions/{subscription_id} (the `GetSubscription` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetSubscriptionWithResponse(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*GetSubscriptionResponse, error) {
+func (c *ClientWithResponses) GetSubscriptionWithResponse(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*GetSubscriptionResponse, error) {
 	rsp, err := c.GetSubscription(ctx, subscriptionId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3896,7 +4819,7 @@ func (c *ClientWithResponses) GetSubscriptionWithResponse(ctx context.Context, s
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateSubscriptionWithBodyWithResponse(ctx context.Context, subscriptionId SubscriptionId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error) {
+func (c *ClientWithResponses) UpdateSubscriptionWithBodyWithResponse(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error) {
 	rsp, err := c.UpdateSubscriptionWithBody(ctx, subscriptionId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3906,7 +4829,7 @@ func (c *ClientWithResponses) UpdateSubscriptionWithBodyWithResponse(ctx context
 
 // UpdateSubscriptionWithResponse performs a PATCH /subscriptions/{subscription_id} (the `UpdateSubscription` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateSubscriptionWithResponse(ctx context.Context, subscriptionId SubscriptionId, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error) {
+func (c *ClientWithResponses) UpdateSubscriptionWithResponse(ctx context.Context, subscriptionId string, body UpdateSubscriptionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSubscriptionResponse, error) {
 	rsp, err := c.UpdateSubscription(ctx, subscriptionId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3917,7 +4840,7 @@ func (c *ClientWithResponses) UpdateSubscriptionWithResponse(ctx context.Context
 // ListSubscriptionKeysWithResponse performs a GET /subscriptions/{subscription_id}/keys (the `ListSubscriptionKeys` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) ListSubscriptionKeysWithResponse(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*ListSubscriptionKeysResponse, error) {
+func (c *ClientWithResponses) ListSubscriptionKeysWithResponse(ctx context.Context, subscriptionId string, reqEditors ...RequestEditorFn) (*ListSubscriptionKeysResponse, error) {
 	rsp, err := c.ListSubscriptionKeys(ctx, subscriptionId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3925,11 +4848,22 @@ func (c *ClientWithResponses) ListSubscriptionKeysWithResponse(ctx context.Conte
 	return ParseListSubscriptionKeysResponse(rsp)
 }
 
-// CreateSubscriptionKeyWithResponse performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request.
+// CreateSubscriptionKeyWithBodyWithResponse performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) CreateSubscriptionKeyWithResponse(ctx context.Context, subscriptionId SubscriptionId, reqEditors ...RequestEditorFn) (*CreateSubscriptionKeyResponse, error) {
-	rsp, err := c.CreateSubscriptionKey(ctx, subscriptionId, reqEditors...)
+func (c *ClientWithResponses) CreateSubscriptionKeyWithBodyWithResponse(ctx context.Context, subscriptionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSubscriptionKeyResponse, error) {
+	rsp, err := c.CreateSubscriptionKeyWithBody(ctx, subscriptionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSubscriptionKeyResponse(rsp)
+}
+
+// CreateSubscriptionKeyWithResponse performs a POST /subscriptions/{subscription_id}/keys (the `CreateSubscriptionKey` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CreateSubscriptionKeyWithResponse(ctx context.Context, subscriptionId string, body CreateSubscriptionKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSubscriptionKeyResponse, error) {
+	rsp, err := c.CreateSubscriptionKey(ctx, subscriptionId, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -3939,7 +4873,7 @@ func (c *ClientWithResponses) CreateSubscriptionKeyWithResponse(ctx context.Cont
 // GetSubscriptionKeyWithResponse performs a GET /subscriptions/{subscription_id}/keys/{subscription_key_id} (the `GetSubscriptionKey` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetSubscriptionKeyWithResponse(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*GetSubscriptionKeyResponse, error) {
+func (c *ClientWithResponses) GetSubscriptionKeyWithResponse(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*GetSubscriptionKeyResponse, error) {
 	rsp, err := c.GetSubscriptionKey(ctx, subscriptionId, subscriptionKeyId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3950,7 +4884,7 @@ func (c *ClientWithResponses) GetSubscriptionKeyWithResponse(ctx context.Context
 // RevokeSubscriptionKeyWithResponse performs a POST /subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke (the `RevokeSubscriptionKey` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) RevokeSubscriptionKeyWithResponse(ctx context.Context, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId, reqEditors ...RequestEditorFn) (*RevokeSubscriptionKeyResponse, error) {
+func (c *ClientWithResponses) RevokeSubscriptionKeyWithResponse(ctx context.Context, subscriptionId string, subscriptionKeyId string, reqEditors ...RequestEditorFn) (*RevokeSubscriptionKeyResponse, error) {
 	rsp, err := c.RevokeSubscriptionKey(ctx, subscriptionId, subscriptionKeyId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3973,7 +4907,16 @@ func ParseListAccountsResponse(rsp *http.Response) (*ListAccountsResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AccountList
+		var dest struct {
+			Data []struct {
+				Asset          ListAccounts200JSONResponseBodyDataAsset  `json:"asset"`
+				CreatedAt      time.Time                                 `json:"created_at"`
+				Id             string                                    `json:"id"`
+				Kind           ListAccounts200JSONResponseBodyDataKind   `json:"kind"`
+				LedgerAccounts *[]map[string]interface{}                 `json:"ledger_accounts,omitempty"`
+				Status         ListAccounts200JSONResponseBodyDataStatus `json:"status"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -3999,7 +4942,10 @@ func ParseGetAccountBalanceResponse(rsp *http.Response) (*GetAccountBalanceRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Balance
+		var dest struct {
+			AccountId           string `json:"account_id"`
+			BalanceMicrocredits int64  `json:"balance_microcredits"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4025,7 +4971,9 @@ func ParseListAccountChargesResponse(rsp *http.Response) (*ListAccountChargesRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ResourceList
+		var dest struct {
+			Data []map[string]interface{} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4051,7 +4999,9 @@ func ParseListAccountTopupsResponse(rsp *http.Response) (*ListAccountTopupsRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ResourceList
+		var dest struct {
+			Data []map[string]interface{} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4076,12 +5026,83 @@ func ParseCreateAccountTopupResponse(rsp *http.Response) (*CreateAccountTopupRes
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			AccountId          string                                       `json:"account_id"`
+			AmountMicrocredits int64                                        `json:"amount_microcredits"`
+			Channel            CreateAccountTopup200JSONResponseBodyChannel `json:"channel"`
+			CreditedAt         time.Time                                    `json:"credited_at"`
+			ExternalReference  string                                       `json:"external_reference"`
+			Id                 string                                       `json:"id"`
+			Status             CreateAccountTopup200JSONResponseBodyStatus  `json:"status"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Topup
+		var dest struct {
+			AccountId          string                                       `json:"account_id"`
+			AmountMicrocredits int64                                        `json:"amount_microcredits"`
+			Channel            CreateAccountTopup201JSONResponseBodyChannel `json:"channel"`
+			CreditedAt         time.Time                                    `json:"credited_at"`
+			ExternalReference  string                                       `json:"external_reference"`
+			Id                 string                                       `json:"id"`
+			Status             CreateAccountTopup201JSONResponseBodyStatus  `json:"status"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 
@@ -4103,33 +5124,9 @@ func ParseListAccountTransactionsResponse(rsp *http.Response) (*ListAccountTrans
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ResourceList
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
+		var dest struct {
+			Data []map[string]interface{} `json:"data"`
 		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseInitializeUserResponse parses an HTTP response from a InitializeUserWithResponse call
-func ParseInitializeUserResponse(rsp *http.Response) (*InitializeUserResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &InitializeUserResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Initialization
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4155,7 +5152,18 @@ func ParseListMerchantsResponse(rsp *http.Response) (*ListMerchantsResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest MerchantList
+		var dest struct {
+			Data []struct {
+				CreatedAt           *time.Time                                 `json:"created_at,omitempty"`
+				Id                  string                                     `json:"id"`
+				IsDefault           bool                                       `json:"is_default"`
+				LegalName           string                                     `json:"legal_name"`
+				PublicName          string                                     `json:"public_name"`
+				SettlementAccountId string                                     `json:"settlement_account_id"`
+				Status              ListMerchants200JSONResponseBodyDataStatus `json:"status"`
+				UpdatedAt           *time.Time                                 `json:"updated_at,omitempty"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4181,7 +5189,16 @@ func ParseCreateMerchantResponse(rsp *http.Response) (*CreateMerchantResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Merchant
+		var dest struct {
+			CreatedAt           *time.Time                              `json:"created_at,omitempty"`
+			Id                  string                                  `json:"id"`
+			IsDefault           bool                                    `json:"is_default"`
+			LegalName           string                                  `json:"legal_name"`
+			PublicName          string                                  `json:"public_name"`
+			SettlementAccountId string                                  `json:"settlement_account_id"`
+			Status              CreateMerchant201JSONResponseBodyStatus `json:"status"`
+			UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4207,7 +5224,16 @@ func ParseGetMerchantResponse(rsp *http.Response) (*GetMerchantResponse, error) 
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Merchant
+		var dest struct {
+			CreatedAt           *time.Time                           `json:"created_at,omitempty"`
+			Id                  string                               `json:"id"`
+			IsDefault           bool                                 `json:"is_default"`
+			LegalName           string                               `json:"legal_name"`
+			PublicName          string                               `json:"public_name"`
+			SettlementAccountId string                               `json:"settlement_account_id"`
+			Status              GetMerchant200JSONResponseBodyStatus `json:"status"`
+			UpdatedAt           *time.Time                           `json:"updated_at,omitempty"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4233,7 +5259,16 @@ func ParseUpdateMerchantResponse(rsp *http.Response) (*UpdateMerchantResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Merchant
+		var dest struct {
+			CreatedAt           *time.Time                              `json:"created_at,omitempty"`
+			Id                  string                                  `json:"id"`
+			IsDefault           bool                                    `json:"is_default"`
+			LegalName           string                                  `json:"legal_name"`
+			PublicName          string                                  `json:"public_name"`
+			SettlementAccountId string                                  `json:"settlement_account_id"`
+			Status              UpdateMerchant200JSONResponseBodyStatus `json:"status"`
+			UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4259,7 +5294,16 @@ func ParseListMerchantProductsResponse(rsp *http.Response) (*ListMerchantProduct
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ProductList
+		var dest struct {
+			Data []struct {
+				BillingMode  ListMerchantProducts200JSONResponseBodyDataBillingMode `json:"billing_mode"`
+				Id           string                                                 `json:"id"`
+				MerchantId   string                                                 `json:"merchant_id"`
+				Name         string                                                 `json:"name"`
+				Status       ListMerchantProducts200JSONResponseBodyDataStatus      `json:"status"`
+				TermsVersion string                                                 `json:"terms_version"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4285,7 +5329,14 @@ func ParseCreateMerchantProductResponse(rsp *http.Response) (*CreateMerchantProd
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Product
+		var dest struct {
+			BillingMode  CreateMerchantProduct201JSONResponseBodyBillingMode `json:"billing_mode"`
+			Id           string                                              `json:"id"`
+			MerchantId   string                                              `json:"merchant_id"`
+			Name         string                                              `json:"name"`
+			Status       CreateMerchantProduct201JSONResponseBodyStatus      `json:"status"`
+			TermsVersion string                                              `json:"terms_version"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4311,7 +5362,16 @@ func ParseListProductsResponse(rsp *http.Response) (*ListProductsResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ProductList
+		var dest struct {
+			Data []struct {
+				BillingMode  ListProducts200JSONResponseBodyDataBillingMode `json:"billing_mode"`
+				Id           string                                         `json:"id"`
+				MerchantId   string                                         `json:"merchant_id"`
+				Name         string                                         `json:"name"`
+				Status       ListProducts200JSONResponseBodyDataStatus      `json:"status"`
+				TermsVersion string                                         `json:"terms_version"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4337,7 +5397,14 @@ func ParseGetProductResponse(rsp *http.Response) (*GetProductResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Product
+		var dest struct {
+			BillingMode  GetProduct200JSONResponseBodyBillingMode `json:"billing_mode"`
+			Id           string                                   `json:"id"`
+			MerchantId   string                                   `json:"merchant_id"`
+			Name         string                                   `json:"name"`
+			Status       GetProduct200JSONResponseBodyStatus      `json:"status"`
+			TermsVersion string                                   `json:"terms_version"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4363,7 +5430,14 @@ func ParseUpdateProductResponse(rsp *http.Response) (*UpdateProductResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Product
+		var dest struct {
+			BillingMode  UpdateProduct200JSONResponseBodyBillingMode `json:"billing_mode"`
+			Id           string                                      `json:"id"`
+			MerchantId   string                                      `json:"merchant_id"`
+			Name         string                                      `json:"name"`
+			Status       UpdateProduct200JSONResponseBodyStatus      `json:"status"`
+			TermsVersion string                                      `json:"terms_version"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4388,12 +5462,85 @@ func ParseCreateProductSubscriptionResponse(rsp *http.Response) (*CreateProductS
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			AcceptedAt   *time.Time                                         `json:"accepted_at,omitempty"`
+			AccountId    string                                             `json:"account_id"`
+			CanceledAt   *time.Time                                         `json:"canceled_at,omitempty"`
+			CreatedAt    *time.Time                                         `json:"created_at,omitempty"`
+			Id           string                                             `json:"id"`
+			ProductId    string                                             `json:"product_id"`
+			Status       CreateProductSubscription200JSONResponseBodyStatus `json:"status"`
+			TermsVersion string                                             `json:"terms_version"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Subscription
+		var dest struct {
+			AcceptedAt   *time.Time                                         `json:"accepted_at,omitempty"`
+			AccountId    string                                             `json:"account_id"`
+			CanceledAt   *time.Time                                         `json:"canceled_at,omitempty"`
+			CreatedAt    *time.Time                                         `json:"created_at,omitempty"`
+			Id           string                                             `json:"id"`
+			ProductId    string                                             `json:"product_id"`
+			Status       CreateProductSubscription201JSONResponseBodyStatus `json:"status"`
+			TermsVersion string                                             `json:"terms_version"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 
@@ -4415,7 +5562,17 @@ func ParseListServiceAccountsResponse(rsp *http.Response) (*ListServiceAccountsR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ServiceAccountList
+		var dest struct {
+			Data []struct {
+				CreatedAt  *time.Time                                       `json:"created_at,omitempty"`
+				Credential *map[string]interface{}                          `json:"credential,omitempty"`
+				Id         string                                           `json:"id"`
+				Name       *string                                          `json:"name,omitempty"`
+				RevokedAt  *time.Time                                       `json:"revoked_at,omitempty"`
+				Roles      *[]string                                        `json:"roles,omitempty"`
+				Status     ListServiceAccounts200JSONResponseBodyDataStatus `json:"status"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4441,7 +5598,15 @@ func ParseCreateServiceAccountResponse(rsp *http.Response) (*CreateServiceAccoun
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest ServiceAccountCreated
+		var dest struct {
+			CreatedAt  *time.Time                                    `json:"created_at,omitempty"`
+			Credential *map[string]interface{}                       `json:"credential,omitempty"`
+			Id         string                                        `json:"id"`
+			Name       *string                                       `json:"name,omitempty"`
+			RevokedAt  *time.Time                                    `json:"revoked_at,omitempty"`
+			Roles      *[]string                                     `json:"roles,omitempty"`
+			Status     CreateServiceAccount201JSONResponseBodyStatus `json:"status"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4483,7 +5648,18 @@ func ParseListSubscriptionsResponse(rsp *http.Response) (*ListSubscriptionsRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest SubscriptionList
+		var dest struct {
+			Data []struct {
+				AcceptedAt   *time.Time                                     `json:"accepted_at,omitempty"`
+				AccountId    string                                         `json:"account_id"`
+				CanceledAt   *time.Time                                     `json:"canceled_at,omitempty"`
+				CreatedAt    *time.Time                                     `json:"created_at,omitempty"`
+				Id           string                                         `json:"id"`
+				ProductId    string                                         `json:"product_id"`
+				Status       ListSubscriptions200JSONResponseBodyDataStatus `json:"status"`
+				TermsVersion string                                         `json:"terms_version"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4509,7 +5685,16 @@ func ParseGetSubscriptionResponse(rsp *http.Response) (*GetSubscriptionResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Subscription
+		var dest struct {
+			AcceptedAt   *time.Time                               `json:"accepted_at,omitempty"`
+			AccountId    string                                   `json:"account_id"`
+			CanceledAt   *time.Time                               `json:"canceled_at,omitempty"`
+			CreatedAt    *time.Time                               `json:"created_at,omitempty"`
+			Id           string                                   `json:"id"`
+			ProductId    string                                   `json:"product_id"`
+			Status       GetSubscription200JSONResponseBodyStatus `json:"status"`
+			TermsVersion string                                   `json:"terms_version"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4535,7 +5720,16 @@ func ParseUpdateSubscriptionResponse(rsp *http.Response) (*UpdateSubscriptionRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Subscription
+		var dest struct {
+			AcceptedAt   *time.Time                                  `json:"accepted_at,omitempty"`
+			AccountId    string                                      `json:"account_id"`
+			CanceledAt   *time.Time                                  `json:"canceled_at,omitempty"`
+			CreatedAt    *time.Time                                  `json:"created_at,omitempty"`
+			Id           string                                      `json:"id"`
+			ProductId    string                                      `json:"product_id"`
+			Status       UpdateSubscription200JSONResponseBodyStatus `json:"status"`
+			TermsVersion string                                      `json:"terms_version"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4561,7 +5755,18 @@ func ParseListSubscriptionKeysResponse(rsp *http.Response) (*ListSubscriptionKey
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KeyList
+		var dest struct {
+			Data []struct {
+				CreatedAt      *time.Time                                        `json:"created_at,omitempty"`
+				Id             string                                            `json:"id"`
+				Key            string                                            `json:"key"`
+				LastUsedAt     *time.Time                                        `json:"last_used_at,omitempty"`
+				Name           string                                            `json:"name"`
+				RevokedAt      *time.Time                                        `json:"revoked_at,omitempty"`
+				Status         ListSubscriptionKeys200JSONResponseBodyDataStatus `json:"status"`
+				SubscriptionId string                                            `json:"subscription_id"`
+			} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4586,12 +5791,85 @@ func ParseCreateSubscriptionKeyResponse(rsp *http.Response) (*CreateSubscription
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+			Id             string                                         `json:"id"`
+			Key            string                                         `json:"key"`
+			LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+			Name           string                                         `json:"name"`
+			RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+			Status         CreateSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+			SubscriptionId string                                         `json:"subscription_id"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Key
+		var dest struct {
+			CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+			Id             string                                         `json:"id"`
+			Key            string                                         `json:"key"`
+			LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+			Name           string                                         `json:"name"`
+			RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+			Status         CreateSubscriptionKey201JSONResponseBodyStatus `json:"status"`
+			SubscriptionId string                                         `json:"subscription_id"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 
@@ -4613,7 +5891,16 @@ func ParseGetSubscriptionKeyResponse(rsp *http.Response) (*GetSubscriptionKeyRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Key
+		var dest struct {
+			CreatedAt      *time.Time                                  `json:"created_at,omitempty"`
+			Id             string                                      `json:"id"`
+			Key            string                                      `json:"key"`
+			LastUsedAt     *time.Time                                  `json:"last_used_at,omitempty"`
+			Name           string                                      `json:"name"`
+			RevokedAt      *time.Time                                  `json:"revoked_at,omitempty"`
+			Status         GetSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+			SubscriptionId string                                      `json:"subscription_id"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4639,7 +5926,16 @@ func ParseRevokeSubscriptionKeyResponse(rsp *http.Response) (*RevokeSubscription
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Key
+		var dest struct {
+			CreatedAt      *time.Time                                     `json:"created_at,omitempty"`
+			Id             string                                         `json:"id"`
+			Key            string                                         `json:"key"`
+			LastUsedAt     *time.Time                                     `json:"last_used_at,omitempty"`
+			Name           string                                         `json:"name"`
+			RevokedAt      *time.Time                                     `json:"revoked_at,omitempty"`
+			Status         RevokeSubscriptionKey200JSONResponseBodyStatus `json:"status"`
+			SubscriptionId string                                         `json:"subscription_id"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4657,22 +5953,19 @@ type ServerInterface interface {
 	ListAccounts(w http.ResponseWriter, r *http.Request)
 
 	// (GET /accounts/{account_id}/balance)
-	GetAccountBalance(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	GetAccountBalance(w http.ResponseWriter, r *http.Request, accountId string)
 
 	// (GET /accounts/{account_id}/charges)
-	ListAccountCharges(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	ListAccountCharges(w http.ResponseWriter, r *http.Request, accountId string)
 
 	// (GET /accounts/{account_id}/topups)
-	ListAccountTopups(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	ListAccountTopups(w http.ResponseWriter, r *http.Request, accountId string)
 
 	// (POST /accounts/{account_id}/topups)
-	CreateAccountTopup(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	CreateAccountTopup(w http.ResponseWriter, r *http.Request, accountId string)
 
 	// (GET /accounts/{account_id}/transactions)
-	ListAccountTransactions(w http.ResponseWriter, r *http.Request, accountId AccountId, params ListAccountTransactionsParams)
-
-	// (POST /initialize)
-	InitializeUser(w http.ResponseWriter, r *http.Request)
+	ListAccountTransactions(w http.ResponseWriter, r *http.Request, accountId string, params ListAccountTransactionsParams)
 
 	// (GET /merchants)
 	ListMerchants(w http.ResponseWriter, r *http.Request)
@@ -4681,28 +5974,28 @@ type ServerInterface interface {
 	CreateMerchant(w http.ResponseWriter, r *http.Request)
 
 	// (GET /merchants/{merchant_id})
-	GetMerchant(w http.ResponseWriter, r *http.Request, merchantId MerchantId)
+	GetMerchant(w http.ResponseWriter, r *http.Request, merchantId string)
 
 	// (PATCH /merchants/{merchant_id})
-	UpdateMerchant(w http.ResponseWriter, r *http.Request, merchantId MerchantId)
+	UpdateMerchant(w http.ResponseWriter, r *http.Request, merchantId string)
 
 	// (GET /merchants/{merchant_id}/products)
-	ListMerchantProducts(w http.ResponseWriter, r *http.Request, merchantId MerchantId)
+	ListMerchantProducts(w http.ResponseWriter, r *http.Request, merchantId string)
 
 	// (POST /merchants/{merchant_id}/products)
-	CreateMerchantProduct(w http.ResponseWriter, r *http.Request, merchantId MerchantId)
+	CreateMerchantProduct(w http.ResponseWriter, r *http.Request, merchantId string)
 
 	// (GET /products)
 	ListProducts(w http.ResponseWriter, r *http.Request)
 
 	// (GET /products/{product_id})
-	GetProduct(w http.ResponseWriter, r *http.Request, productId ProductId)
+	GetProduct(w http.ResponseWriter, r *http.Request, productId string)
 
 	// (PATCH /products/{product_id})
-	UpdateProduct(w http.ResponseWriter, r *http.Request, productId ProductId)
+	UpdateProduct(w http.ResponseWriter, r *http.Request, productId string)
 
 	// (POST /products/{product_id}/subscriptions)
-	CreateProductSubscription(w http.ResponseWriter, r *http.Request, productId ProductId)
+	CreateProductSubscription(w http.ResponseWriter, r *http.Request, productId string)
 
 	// (GET /service-accounts)
 	ListServiceAccounts(w http.ResponseWriter, r *http.Request)
@@ -4711,28 +6004,28 @@ type ServerInterface interface {
 	CreateServiceAccount(w http.ResponseWriter, r *http.Request)
 
 	// (DELETE /service-accounts/{service_account_id})
-	RevokeServiceAccount(w http.ResponseWriter, r *http.Request, serviceAccountId ServiceAccountId)
+	RevokeServiceAccount(w http.ResponseWriter, r *http.Request, serviceAccountId string)
 
 	// (GET /subscriptions)
 	ListSubscriptions(w http.ResponseWriter, r *http.Request)
 
 	// (GET /subscriptions/{subscription_id})
-	GetSubscription(w http.ResponseWriter, r *http.Request, subscriptionId SubscriptionId)
+	GetSubscription(w http.ResponseWriter, r *http.Request, subscriptionId string)
 
 	// (PATCH /subscriptions/{subscription_id})
-	UpdateSubscription(w http.ResponseWriter, r *http.Request, subscriptionId SubscriptionId)
+	UpdateSubscription(w http.ResponseWriter, r *http.Request, subscriptionId string)
 
 	// (GET /subscriptions/{subscription_id}/keys)
-	ListSubscriptionKeys(w http.ResponseWriter, r *http.Request, subscriptionId SubscriptionId)
+	ListSubscriptionKeys(w http.ResponseWriter, r *http.Request, subscriptionId string)
 
 	// (POST /subscriptions/{subscription_id}/keys)
-	CreateSubscriptionKey(w http.ResponseWriter, r *http.Request, subscriptionId SubscriptionId)
+	CreateSubscriptionKey(w http.ResponseWriter, r *http.Request, subscriptionId string)
 
 	// (GET /subscriptions/{subscription_id}/keys/{subscription_key_id})
-	GetSubscriptionKey(w http.ResponseWriter, r *http.Request, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId)
+	GetSubscriptionKey(w http.ResponseWriter, r *http.Request, subscriptionId string, subscriptionKeyId string)
 
 	// (POST /subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke)
-	RevokeSubscriptionKey(w http.ResponseWriter, r *http.Request, subscriptionId SubscriptionId, subscriptionKeyId SubscriptionKeyId)
+	RevokeSubscriptionKey(w http.ResponseWriter, r *http.Request, subscriptionId string, subscriptionKeyId string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -4765,7 +6058,7 @@ func (siw *ServerInterfaceWrapper) GetAccountBalance(w http.ResponseWriter, r *h
 	_ = err
 
 	// ------------- Path parameter "account_id" -------------
-	var accountId AccountId
+	var accountId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "account_id", r.PathValue("account_id"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -4791,7 +6084,7 @@ func (siw *ServerInterfaceWrapper) ListAccountCharges(w http.ResponseWriter, r *
 	_ = err
 
 	// ------------- Path parameter "account_id" -------------
-	var accountId AccountId
+	var accountId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "account_id", r.PathValue("account_id"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -4817,7 +6110,7 @@ func (siw *ServerInterfaceWrapper) ListAccountTopups(w http.ResponseWriter, r *h
 	_ = err
 
 	// ------------- Path parameter "account_id" -------------
-	var accountId AccountId
+	var accountId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "account_id", r.PathValue("account_id"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -4843,7 +6136,7 @@ func (siw *ServerInterfaceWrapper) CreateAccountTopup(w http.ResponseWriter, r *
 	_ = err
 
 	// ------------- Path parameter "account_id" -------------
-	var accountId AccountId
+	var accountId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "account_id", r.PathValue("account_id"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -4869,7 +6162,7 @@ func (siw *ServerInterfaceWrapper) ListAccountTransactions(w http.ResponseWriter
 	_ = err
 
 	// ------------- Path parameter "account_id" -------------
-	var accountId AccountId
+	var accountId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "account_id", r.PathValue("account_id"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -4895,20 +6188,6 @@ func (siw *ServerInterfaceWrapper) ListAccountTransactions(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAccountTransactions(w, r, accountId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// InitializeUser operation middleware
-func (siw *ServerInterfaceWrapper) InitializeUser(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.InitializeUser(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4953,7 +6232,7 @@ func (siw *ServerInterfaceWrapper) GetMerchant(w http.ResponseWriter, r *http.Re
 	_ = err
 
 	// ------------- Path parameter "merchant_id" -------------
-	var merchantId MerchantId
+	var merchantId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "merchant_id", r.PathValue("merchant_id"), &merchantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -4979,7 +6258,7 @@ func (siw *ServerInterfaceWrapper) UpdateMerchant(w http.ResponseWriter, r *http
 	_ = err
 
 	// ------------- Path parameter "merchant_id" -------------
-	var merchantId MerchantId
+	var merchantId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "merchant_id", r.PathValue("merchant_id"), &merchantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5005,7 +6284,7 @@ func (siw *ServerInterfaceWrapper) ListMerchantProducts(w http.ResponseWriter, r
 	_ = err
 
 	// ------------- Path parameter "merchant_id" -------------
-	var merchantId MerchantId
+	var merchantId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "merchant_id", r.PathValue("merchant_id"), &merchantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5031,7 +6310,7 @@ func (siw *ServerInterfaceWrapper) CreateMerchantProduct(w http.ResponseWriter, 
 	_ = err
 
 	// ------------- Path parameter "merchant_id" -------------
-	var merchantId MerchantId
+	var merchantId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "merchant_id", r.PathValue("merchant_id"), &merchantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5071,7 +6350,7 @@ func (siw *ServerInterfaceWrapper) GetProduct(w http.ResponseWriter, r *http.Req
 	_ = err
 
 	// ------------- Path parameter "product_id" -------------
-	var productId ProductId
+	var productId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "product_id", r.PathValue("product_id"), &productId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5097,7 +6376,7 @@ func (siw *ServerInterfaceWrapper) UpdateProduct(w http.ResponseWriter, r *http.
 	_ = err
 
 	// ------------- Path parameter "product_id" -------------
-	var productId ProductId
+	var productId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "product_id", r.PathValue("product_id"), &productId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5123,7 +6402,7 @@ func (siw *ServerInterfaceWrapper) CreateProductSubscription(w http.ResponseWrit
 	_ = err
 
 	// ------------- Path parameter "product_id" -------------
-	var productId ProductId
+	var productId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "product_id", r.PathValue("product_id"), &productId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5177,7 +6456,7 @@ func (siw *ServerInterfaceWrapper) RevokeServiceAccount(w http.ResponseWriter, r
 	_ = err
 
 	// ------------- Path parameter "service_account_id" -------------
-	var serviceAccountId ServiceAccountId
+	var serviceAccountId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "service_account_id", r.PathValue("service_account_id"), &serviceAccountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5217,7 +6496,7 @@ func (siw *ServerInterfaceWrapper) GetSubscription(w http.ResponseWriter, r *htt
 	_ = err
 
 	// ------------- Path parameter "subscription_id" -------------
-	var subscriptionId SubscriptionId
+	var subscriptionId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_id", r.PathValue("subscription_id"), &subscriptionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5243,7 +6522,7 @@ func (siw *ServerInterfaceWrapper) UpdateSubscription(w http.ResponseWriter, r *
 	_ = err
 
 	// ------------- Path parameter "subscription_id" -------------
-	var subscriptionId SubscriptionId
+	var subscriptionId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_id", r.PathValue("subscription_id"), &subscriptionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5269,7 +6548,7 @@ func (siw *ServerInterfaceWrapper) ListSubscriptionKeys(w http.ResponseWriter, r
 	_ = err
 
 	// ------------- Path parameter "subscription_id" -------------
-	var subscriptionId SubscriptionId
+	var subscriptionId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_id", r.PathValue("subscription_id"), &subscriptionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5295,7 +6574,7 @@ func (siw *ServerInterfaceWrapper) CreateSubscriptionKey(w http.ResponseWriter, 
 	_ = err
 
 	// ------------- Path parameter "subscription_id" -------------
-	var subscriptionId SubscriptionId
+	var subscriptionId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_id", r.PathValue("subscription_id"), &subscriptionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5321,7 +6600,7 @@ func (siw *ServerInterfaceWrapper) GetSubscriptionKey(w http.ResponseWriter, r *
 	_ = err
 
 	// ------------- Path parameter "subscription_id" -------------
-	var subscriptionId SubscriptionId
+	var subscriptionId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_id", r.PathValue("subscription_id"), &subscriptionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5330,7 +6609,7 @@ func (siw *ServerInterfaceWrapper) GetSubscriptionKey(w http.ResponseWriter, r *
 	}
 
 	// ------------- Path parameter "subscription_key_id" -------------
-	var subscriptionKeyId SubscriptionKeyId
+	var subscriptionKeyId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_key_id", r.PathValue("subscription_key_id"), &subscriptionKeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5356,7 +6635,7 @@ func (siw *ServerInterfaceWrapper) RevokeSubscriptionKey(w http.ResponseWriter, 
 	_ = err
 
 	// ------------- Path parameter "subscription_id" -------------
-	var subscriptionId SubscriptionId
+	var subscriptionId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_id", r.PathValue("subscription_id"), &subscriptionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5365,7 +6644,7 @@ func (siw *ServerInterfaceWrapper) RevokeSubscriptionKey(w http.ResponseWriter, 
 	}
 
 	// ------------- Path parameter "subscription_key_id" -------------
-	var subscriptionKeyId SubscriptionKeyId
+	var subscriptionKeyId string
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subscription_key_id", r.PathValue("subscription_key_id"), &subscriptionKeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
@@ -5504,16 +6783,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/initialize", wrapper.InitializeUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/accounts", wrapper.ListAccounts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/accounts/{account_id}/balance", wrapper.GetAccountBalance)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/accounts/{account_id}/transactions", wrapper.ListAccountTransactions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/accounts/{account_id}/charges", wrapper.ListAccountCharges)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/accounts/{account_id}/topups", wrapper.ListAccountTopups)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/accounts/{account_id}/topups", wrapper.CreateAccountTopup)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/service-accounts", wrapper.ListServiceAccounts)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/service-accounts", wrapper.CreateServiceAccount)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/service-accounts/{service_account_id}", wrapper.RevokeServiceAccount)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/accounts/{account_id}/transactions", wrapper.ListAccountTransactions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/merchants", wrapper.ListMerchants)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/merchants", wrapper.CreateMerchant)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/merchants/{merchant_id}", wrapper.GetMerchant)
@@ -5524,6 +6799,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products/{product_id}", wrapper.GetProduct)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/products/{product_id}", wrapper.UpdateProduct)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/products/{product_id}/subscriptions", wrapper.CreateProductSubscription)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/service-accounts", wrapper.ListServiceAccounts)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/service-accounts", wrapper.CreateServiceAccount)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/service-accounts/{service_account_id}", wrapper.RevokeServiceAccount)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/subscriptions", wrapper.ListSubscriptions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/subscriptions/{subscription_id}", wrapper.GetSubscription)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/subscriptions/{subscription_id}", wrapper.UpdateSubscription)
@@ -5540,40 +6818,39 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"zFtfb+O4Ef8qBttHJUruDn3w222uXaTd4oLdHAo0MAxaGtvcSKSWpLL1Gv7uBUn9oShKlmQlubdYGs2f",
-	"3wyHM0PmiCKWZowClQItjyjDHKcggetfOIpYTuWaxOoXoWiJMiz3KEAUp4CWNkGAOHzLCYcYLSXPIUAi",
-	"2kOK1ZfykClqITmhO3Q6BSgFHu1xH2ubYhzvjLM4j3pYWwTjOAvgLySC9VlcPIQjJeUbEXGSScJojxiH",
-	"6gIZz3AYKKegHCPrZIhByA8sJqBj644DlvDvwsvqScSoBPMnzrKERFjJC78KRtWzmn3GWQZcFowS2OFk",
-	"bTQ9opTQT0B3co+Wt4GrSICyfJOQaCi1ACkTSIFKx+VtMGswnjo+C2xNm5qsKtls8xUiWUNW43sKCsge",
-	"TPRegNiGJAmhu3XKYijYCKmdflhjsT6wfL1jyIPHQNgk8FSsX4ALYhTppXfAK+Bp6OiyHIXXF7MWfzWe",
-	"uAC2gdZzlhh6IiEVnmgJFId787JmgDnHBxSgnJJvORSvtSF+gIyYcUhYy/gCHHqXwoXeb6yXSU7/I4un",
-	"5pWU0AfL0tvAMXxk8pBY5vq7v3LYoiX6S1jvtaGRKsIvhkqZMty6y1PA+9swUzDWGgLNUxNCkrzoDItz",
-	"ASqOCC2erc6FX8FtUKjpJyJjVBhNigTziYhLHBNjiRvJow/4MqednCzimqWZ+o2KwfJCaYNQHD/gBNMI",
-	"RtnSp2zJzyO2ehWgf8FhNol2iCm+Hsk2yULTaBXe0oktLedypmub9uqkxNinfsXQo0H9rhb8ltDa8ufB",
-	"tOSosZyShvvULfl55FavKqlviaMlfR4YC4Yaxc8gWM4jGG1Qn8YNph4Fyvdag2aFaGqleL4s1Kw/fQvV",
-	"UCwKkkXEIQYqCU4WRCw4yJxTiBesSJFNhm+aqhxTZstUTQCMU6bWB0Nz7bmU6SrxXnvC62wIplwr5Fnl",
-	"i6fcFwKk3SZ+vP/v+u7z33+7f/T1iJFZPmusv9kynqq/lJJwJYluXVrfdHQSz4TGjf4UuGAUJz4WCcQ7",
-	"4GW/3ey/cBwTZTNO7PLeDC0c0FyoJ5TAtmt0G1NwKOwJCkAbSK08ilj116j+a2O+W6ck4kylEmLgqFxB",
-	"qPzbLzWGhErYAe9vxbxMfVqb7PnIsjzzaJ5qjmc1Swklqarmb9taBkhtwBQSOzK2+NkbWPA/CZziZM1h",
-	"CxwKOMc0pKUwL6/Aa5EPlntKVD4nP3CZz0b5NIYtzhO5dsamZ1ZBF1UugA8aZJWEAXLmWK4Uv4Y+IOz6",
-	"swnBjImDiHWhj/V6w1gCmBqY3n1kODaxBCjXbfMYfLzJaOxssoFm0N0hN8rhmeaNHcidWwWvMty4cLCl",
-	"QW6eafgnndVucW76VVfOo/c4t+S+oFKpdJhYpbjl7Dx5oa6gx2EToO+cSPidJodqXHUmyNrzX3hhz0P0",
-	"fSo/ChDNkwSthg2PuwuU1gSsUOX83MuuU7w+6pbRM1xrF/GtTQ+ysa49k1UjVaYkU+GfcQ9qnkL2JJ9J",
-	"c0tPNhrg4UbGb5yCjsg67rzqNTfyZ8PfSrQ//xTMvOQmrR/vCe2QNdY6sVUm9q69qpbGSfL7Fi2f+hOy",
-	"XYCfgpF1pilh5/FdjWu534s8igBiHdtjo7UKUFvFNlwrc0wf5ZzIwxcFibF7n6eYfgDMgeuKRP/1j9K8",
-	"f/5HtbIaQV0pGrqK+V7KzPTThG6ZNpbIRL35SH484EM1uPn14R4FqFqT6Ofrm+sbhQXLgOKM6Ee31zd6",
-	"kcu91iy0W9ad6bSVx3SjcB+jJVK7dDUZcQ4dfrq56dqhK7rQnhSdtB2V0PBYo3wKN3XL6dXkI5SKlM3p",
-	"FHUaBwH2hZOOyK5JQiskTqtuO6I95jsYhOhdQTrFkPaQ8VWskWotDzLm0VC+uy0BypjwqGpyk60ssm+G",
-	"zHfy00iC3kNIB6Hb2URbQp2ZNxMS4sUjy64MQY/HOaZC7UKMDvO7Td/ynL7Q8y0Hfqhv9BQtvCWoSLOd",
-	"d3hWf4oVQso5ipmLeaOsmrXAH0KncZ/es/jamer4Rq4SbxJYKEWCcpsIFp80+vVvTONF0WIvygHJ4v43",
-	"UUZJWp069QVDfTY1xVWN8znjqp41XI1xWuvXL8W6/BU6HDoW4zBtWwiFR6vJPvXtZA0TpqI1JajtKYDO",
-	"lVhG+7aKzkWWCUA7HE6XGtoDdJiVJ3pDIrQ6/puikX3+OQf6A6K8nGxNDnbrAHV8rFvHwsoDg5CeE2Fb",
-	"aHis28be1WVDNlH+FO9aTe3ZpXWBV5sMThca2QlwKBonds797PFo9IR6oU5jYDM53N3jy/Ex7x7UKoiK",
-	"S9VXgxqm5lRx2jrwHLSf3RidaeZ0CFtH7RNA9N5r6EAzPLYvresVHkMCEtr2ftbDEY+9DTV/MSzsmuiu",
-	"vt5QDFh0AZSwSD+JGI8Xgm3lVTl+mZAHPBfwTQHZWlHdEdSgnBQ/7u2BEnqbc3h0ZkK9abW1Pi/RaRKw",
-	"zgDrbJa9NKN4uJzmMHyAI8JnOAyPEX3Dbopm5X3DubzRl52c2e2UrFLcpByKn/PY/PfI4Bj3KnkzWMmL",
-	"8QzGfVL8b4wn1YxCJzSZb/yGP5v+XWFUJP35PGTPa7WFjUnt00qpopJ5CUDOk2IiK5ZhmOHD9Y78+I4P",
-	"1xFLy3FB+HKrXPD/AAAA//8=",
+	"7F3dbts2G74VgfjOPiVO2mxAfdZmXZGtQ4M2w4AFnsCQr202EqmSVFrX8L0PpCRbsmWbsmUnzXhkWSIp",
+	"8uHz/pK0p4iIJBUcuFaoP0UKSCaZnnwiY0jA3hpnCeZvAEuQ5uudvfpVyARr1Ee//XWDQqRscdQvnqIQ",
+	"6Ulqvo+1TtFsNgsR40Nh6mumY/PkHft+jSfBa0JExnXw+voKhegBpGKCoz66OD07PUOzEIkUOE4Z6qOX",
+	"p+enZyhEKdZj27MezivbLyPQ5kOkILFmgl9R1EfvmdKvy0IhkqBSwVU+rhdnZ+aDCK6B27o4TWNGbO3e",
+	"Z2W6Mc1Hhs1VKk3bmuW1Kdb2LtOQqNXHWKm8P0RwZXB6d/V3dPnx7S9XNwtwlJaMj8wgiQSsgUbY1hmW",
+	"4FKs4USzBJrqMGrhXL59zzitvjgFqQTHcVMTMdARyKgK43w8mFJmkMDxdWVkWmYwb0jcfQaiTUPFDSwl",
+	"npjvSmOd2WaAZwnq3yJMNHsw42C8uBysdGhmZuhLxiRQU4VRNG+pGFdYAFtDbLC1Q0sN27lbrWWKUVBE",
+	"slTnJJxTZ2YfzvnWmxZXEaOz3h2OMSewloTvoOTgm6Jkp0xcdKWRD0XvooQRKYgEyvKJnpOMcf3zxYId",
+	"jGsYgVwBrfKaNY26IFoiYB+lWOIENEiF+rdTxEwBI9woRBxbdVJ76aI3OQsXgCzzaLB+ssgYyxE4aYzL",
+	"ouhh9cYecrYrrT+CEpkkoB5vGrRIs9RpFm7ykn4Sdp2EEKVCNWB8aTVoFeWiXVD6jaCTVvg2AzjEsYJw",
+	"WV8ldhhb9VHCOEuM8Thf1U0hImPMOcRVSzfE942GEr5pkBzHkYQhSChUdcL4e+AjPa6+YNm6bizUZK7K",
+	"bjW+NWwcezNZ6hM825P+OI4/DC2x/ER1OFFhS1uct9SNn7dwsUpYVUYIAAWKnBCo6ZO5m1Xt4uqABw2K",
+	"7O03pjTjo4BR4JoRHAc3Ij3JUtPLF2fnnqieqE+CqNdCaaAVcl601aLulAQphWxZhwhqeZRibSYa9dE/",
+	"t/jk+9nJq2jw//81IZ6AUngEbXllX7So3WCA6uXzwbg4NVf8AceMBoUbkYN84UHuFOTScwy+YhVwoYOh",
+	"yDjNsX7lse4Ua1lgHTEaEcGHMSM6EDKgWY4rRA1aeRain7xq6Vy15DgHCuQDIxDkVTdmZrTEXGFiWnCL",
+	"Navlm2OyLxnIySIoKzJolRcVZmpTPOYj2d3TCQlI4xFtyfn+MS91zKRvh1lcpiIKQ5zFuvL4TogYMM8z",
+	"tyMcRzmeWz3PNLuLGXEtrUDrGBLgOtriJe6W5Q1RltKWODVmhhv7WYOmPvQaqvPeHy57vCBhLhcbsjBl",
+	"0T0yMHUqPgF+LMHWerp2y4uc7wGal99nIb/rJbH0FuZGpDctL42/sGkFpyahnRkUz7j/AONcXKIKDVtn",
+	"97Em41XO/mkh68CwJIxXXcnz5diiJVd2XRk+eI7cS6a3BQtb0EuloBlxjDOuy8LHDDfuWBwzPoqSIrif",
+	"7/jAkwiraCKyaCRa8LSqg5qeH1TCQ6RBJiqa7wDaIVVeV6IFT2ooVfLH9dcdLgqYU+MIlsAhwii601mg",
+	"sTMJHdm0FyuaKbBt5g8dZni5PaTcrpXAUuE7KXav0L1Cd1DoVT71psXVtlCyqoI7o5bnzqMpFRervqBG",
+	"p+Fd19b8mQVxXiiehKWtacaeyu7mdXIjeEjp2eASF739VOnPkXZAbg7FHTYKdcGFWqDdhU+85yZ2SNvm",
+	"W7ZtYsKcQOzS5m1ZK0Q8i2M06PZIRoW+LVMvKc6U3SbVTi+0nf2afO0h/zVR2mH3n+fE8+eE33TnN935",
+	"TXce65ab7sKg6jdGOJaA6SSCb0xpFQZCBjXVFCVMJTZy8pvxjr4Zr7h54nQ891Ne+FFO6e5iz4kEe84B",
+	"x+2224Xoq2QaPvB4Mnegt4SRKw8kPIj7XZ0XKWKoH/FddRrcj/EWXWl3ivdwSbmCRUH1xO7m6K/Ou2Nn",
+	"UBwmI2H8Kn94voRSiDLOvmRQPLZkal75yF/zY+yk8oLVpWBtFZFggXfAVCBBZ5IDDURxPLtJkfemxZ3K",
+	"Kr1NdVOIQcOqqH20g2kQtRrTLvImqp29XHSuACTAnAaxIPYOEZIGSgz1SQmXYx52tf/ttyCvJLDW27Za",
+	"yaP+/oSPnX+42LkzW1hjXSnK1Zu9ac2Z3rJetZIg9Vk/n+FZm+Fx1MN1/nW6KNZRQr9O1T2na3kz/Caz",
+	"7fPsXuLaSZyDgu/dw8TdWfndFP5Bj07dw2QpAHv5oum3r7DSkZn13WjrGuftE1jsFCWEK7rVjairGrmI",
+	"IQ2ex4jgK+8PLP+OZEo25QjqInGc1WGn5V8n+jVN8x5Hq57Idnov30eV7+2Suv9Kr2fH82aHX/P1a75+",
+	"zddj3XLN16/dPsLarUMYuXT7HiZtUoilI+19S+89OHgPhw8Cw+0t5hTfc6molTT18lly2x/9BEe/LrAu",
+	"VgS9PvD6YFd9MLMH2/P/KbASUfuHgtuBIZ+xbaXAZDIu/olA9Xu9FE9OR+z7Vzw5JSIpfzis93COZoPZ",
+	"vwEAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

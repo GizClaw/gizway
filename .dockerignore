@@ -1,0 +1,11 @@
+.git
+.coverage
+tmp
+web/apps/gizway/node_modules
+web/apps/gizway/.next
+web/apps/gizway/.vinext
+web/apps/gizway/.wrangler
+web/apps/gizway/dist
+web/apps/gizway/playwright-report
+web/apps/gizway/test-results
+tests/powersync/node_modules

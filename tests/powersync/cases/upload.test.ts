@@ -46,7 +46,10 @@ describe('uploadData API boundary', () => {
         complete
       }))
     } as unknown as CommonPowerSyncDatabase;
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 400 })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+		JSON.stringify({ error: { code: 'invalid_request', message: 'public_name is required' } }),
+		{ status: 400, headers: { 'Content-Type': 'application/json' } }
+	)));
     const connector = new GizPayConnector({ endpoint: 'https://sync.example', token: 'human-token', apiBaseURL: 'https://pay.example' });
     await connector.uploadData(database);
     expect(complete).toHaveBeenCalledOnce();

@@ -167,7 +167,8 @@ func CheckHurlCoverage(openAPIDirectory, hurlDirectory string) error {
 // These paths appear only in explicit 404 assertions proving that the
 // breaking refactor did not retain a second operational health contract.
 func removedMilestone01Path(path string) bool {
-	return path == "/livez" || path == "/readyz" || path == "/internal/v1/readyz"
+	return path == "/livez" || path == "/readyz" || path == "/internal/v1/readyz" ||
+		path == "/account/v1/initialize"
 }
 
 // Hurl must name the concrete deployment it contacts. Central contracts use

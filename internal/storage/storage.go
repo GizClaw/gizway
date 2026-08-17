@@ -65,8 +65,8 @@ func initializeGizPaySystem(ctx context.Context, database *sqlx.DB) error {
 	}
 	defer tx.Rollback()
 	statements := []string{
-		`INSERT INTO users(id,identity_issuer,identity_subject,status) VALUES
-		 ('usr_platform','urn:gizpay:system','platform','active') ON CONFLICT (id) DO NOTHING`,
+		`INSERT INTO users(id,identity_issuer,identity_subject,email,display_name,status) VALUES
+		 ('usr_platform','urn:gizpay:system','platform','','GizPay Platform','active') ON CONFLICT (id) DO NOTHING`,
 		`INSERT INTO accounts(id,owner_user_id,status) VALUES
 		 ('acct_platform','usr_platform','active') ON CONFLICT (id) DO NOTHING`,
 		`INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES

@@ -125,7 +125,7 @@ func bootstrapZITADEL(options options) error {
 		return err
 	}
 	projects := []projectFixture{
-		{ID: "386000000000000001", Name: "GizPay Account", Roles: nil},
+		{ID: "386000000000000001", Name: "GizPay Account", Roles: []string{"public_catalog", "public_catalog_cn", "public_catalog_global"}},
 		{ID: "386000000000000002", Name: "GizPay Service", Roles: []string{"credit_check", "charge"}},
 		{ID: "386000000000000003", Name: "GizWay CN Admin", Roles: []string{"administrator"}},
 		{ID: "386000000000000004", Name: "GizWay Global Admin", Roles: []string{"administrator"}},
@@ -146,11 +146,14 @@ func bootstrapZITADEL(options options) error {
 	identities := []identityFixture{
 		{ID: "human-primary", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "human-two", Human: true, Audiences: []string{projects[0].ID}},
+		{ID: "web-first-login", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "provider-merchant-human", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "provider-merchant-human-two", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "gizpay-service-account-manager", File: "gizpay-service-account-manager.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
 		{ID: "gizway-cn-service", File: "gizway-cn-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
 		{ID: "gizway-global-service", File: "gizway-global-service.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
+		{ID: "gizway-cn-catalog", File: "gizway-cn-catalog.json", Audiences: []string{projects[0].ID}, Roles: []string{"public_catalog", "public_catalog_cn"}},
+		{ID: "gizway-global-catalog", File: "gizway-global-catalog.json", Audiences: []string{projects[0].ID}, Roles: []string{"public_catalog", "public_catalog_global"}},
 		{ID: "service-charger", File: "service-charger.json", Audiences: []string{projects[1].ID}, Roles: []string{"charge"}},
 		{ID: "service-reader", File: "service-reader.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check"}},
 		{ID: "service-rotated", File: "service-rotated.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
@@ -170,6 +173,8 @@ func bootstrapZITADEL(options options) error {
 				return err
 			}
 			variables[identity.ID+"@subject"] = userID
+			variables[identity.ID+"@username"] = identity.ID
+			variables[identity.ID+"@password"] = password
 			for _, audience := range identity.Audiences {
 				projectIndex := 0
 				for index := range projects {
@@ -200,8 +205,128 @@ func bootstrapZITADEL(options options) error {
 			variables[identity.ID+"@"+audience] = accessToken
 		}
 	}
+	for _, identityID := range []string{"gizway-cn-catalog", "gizway-global-catalog"} {
+		clientID, clientSecret, err := client.generateMachineSecret(identityID)
+		if err != nil {
+			return fmt.Errorf("generate %s client secret: %w", identityID, err)
+		}
+		variables[identityID+"@client_id"] = clientID
+		variables[identityID+"@client_secret"] = clientSecret
+	}
+	if err := os.WriteFile(filepath.Join(options.outputDirectory, "zitadel-action-signing-key"), []byte("pending-action-target"), 0600); err != nil {
+		return err
+	}
+	if err := writeGizWayE2EConfigs(options.outputDirectory, variables, applications[0]); err != nil {
+		return err
+	}
 	mapIdentityVariables(variables, projects, identityKeys)
 	return writeVariables(filepath.Join(options.outputDirectory, "identity.vars"), variables)
+}
+
+func (c *zitadelClient) generateMachineSecret(userID string) (string, string, error) {
+	var response struct {
+		ClientID     string `json:"clientId"`
+		ClientSecret string `json:"clientSecret"`
+	}
+	if err := c.call(http.MethodPut, "/management/v1/users/"+userID+"/secret", map[string]any{}, &response, false); err != nil {
+		return "", "", err
+	}
+	if response.ClientID == "" || response.ClientSecret == "" {
+		return "", "", errors.New("ZITADEL returned an empty machine client secret")
+	}
+	return response.ClientID, response.ClientSecret, nil
+}
+
+func (c *zitadelClient) configureUserInitializationAction(outputDirectory string) error {
+	var target struct {
+		ID         string `json:"id"`
+		SigningKey string `json:"signingKey"`
+	}
+	payload := map[string]any{
+		"name":        "GizPay Human initialization",
+		"restWebhook": map[string]any{"interruptOnError": true},
+		"endpoint":    "http://gizpay:8081/webhooks/v1/zitadel/user-authenticated",
+		"timeout":     "10s", "payloadType": "PAYLOAD_TYPE_JSON",
+	}
+	if err := c.call(http.MethodPost, "/v2/actions/targets", payload, &target, false); err != nil {
+		return fmt.Errorf("create ZITADEL Action V2 Target: %w", err)
+	}
+	if target.ID == "" || target.SigningKey == "" {
+		return errors.New("ZITADEL Action V2 Target returned no ID or signing key")
+	}
+	execution := map[string]any{"condition": map[string]any{"function": map[string]any{"name": "preaccesstoken"}}, "targets": []string{target.ID}}
+	if err := c.call(http.MethodPut, "/v2/actions/executions", execution, nil, false); err != nil {
+		return fmt.Errorf("set ZITADEL preaccesstoken execution: %w", err)
+	}
+	return os.WriteFile(filepath.Join(outputDirectory, "zitadel-action-signing-key"), []byte(target.SigningKey), 0600)
+}
+
+func writeGizWayE2EConfigs(outputDirectory string, values map[string]string, webClientID string) error {
+	for _, region := range []string{"cn", "global"} {
+		clientID, clientSecret := values["gizway-"+region+"-catalog@client_id"], values["gizway-"+region+"-catalog@client_secret"]
+		if clientID == "" || clientSecret == "" {
+			return fmt.Errorf("%s Public Catalog credentials are missing", region)
+		}
+		contents := fmt.Sprintf(`version: 1
+server:
+  name: %s.e2e.gizway.test
+  listen_address: 0.0.0.0:8080
+site:
+  hostname: %s.localhost
+identity:
+  issuer: http://identity.e2e.gizway.test:18080
+  client_id: %s
+  redirect_uri: http://%s.localhost:3000/auth/callback
+  post_logout_redirect_uri: http://%s.localhost:3000/
+  public_catalog_service_account:
+    client_id: %s
+    client_secret: %s
+    access_token_type: JWT
+    scope: "openid urn:zitadel:iam:org:projects:roles urn:zitadel:iam:org:project:id:386000000000000001:aud"
+    token_ttl: 12h
+    refresh_before: 1h
+services:
+  public_catalog_token_url: http://%s.localhost:3000/auth/catalog-token
+  gizpay_powersync_url: http://%s.localhost:3000/_sync/gizpay
+  gizpay_api_url: http://%s.localhost:3000/_api/gizpay
+  gizway_powersync_url: http://%s.localhost:3000/_sync/gizway
+  gizway_api_url: http://%s.localhost:3000/_api/gizway
+database:
+  dsn: postgres://postgres:postgres@postgres-%s:5432/gizway?sslmode=disable
+  schema: gizway
+authentication:
+  zitadel:
+    issuer: http://identity.e2e.gizway.test:18080
+    jwks_url: http://oauth-spy:19500/oauth/v2/keys
+    human_audience: "386000000000000001"
+  service_account:
+    token_url: http://oauth-spy:19500/oauth/v2/token
+    private_key_file: /fixtures/gizway-%s-service.json
+    audience: "386000000000000002"
+    requested_scopes: [openid]
+    required_roles: [credit_check, charge]
+subscription_keys:
+  hmac:
+    secret_file: /secrets/subscription-key-hmac
+gizpay:
+  service_dsn: http://toxiproxy:8666
+credit_cache:
+  cleanup_interval: 1m
+bifrost:
+  config_store:
+    type: postgresql
+    dsn: postgres://postgres:postgres@postgres-%s:5432/gizway?sslmode=disable
+    schema: bifrost_config
+  log_store:
+    type: postgresql
+    dsn: postgres://postgres:postgres@postgres-%s:5432/gizway?sslmode=disable
+    schema: bifrost_logs
+`, region, region, webClientID, region, region, clientID, clientSecret, region, region, region, region, region, region, region, region, region)
+		if err := os.WriteFile(filepath.Join(outputDirectory, "gizway-"+region+".yaml"), []byte(contents), 0600); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type projectFixture struct {
@@ -219,7 +344,19 @@ type identityFixture struct {
 
 func (c *zitadelClient) createOIDCApplication(projectID, name string) (string, error) {
 	payload := map[string]any{
-		"name": name, "redirectUris": []string{"http://127.0.0.1:18999/callback"},
+		"name": name, "redirectUris": []string{
+			"http://127.0.0.1:18999/callback",
+			"http://global.e2e.gizway.test:3000/auth/callback",
+			"http://cn.e2e.gizway.test:3000/auth/callback",
+			"http://global.localhost:3000/auth/callback",
+			"http://cn.localhost:3000/auth/callback",
+		},
+		"postLogoutRedirectUris": []string{
+			"http://global.e2e.gizway.test:3000/",
+			"http://cn.e2e.gizway.test:3000/",
+			"http://global.localhost:3000/",
+			"http://cn.localhost:3000/",
+		},
 		"responseTypes": []string{"OIDC_RESPONSE_TYPE_CODE"}, "grantTypes": []string{"OIDC_GRANT_TYPE_AUTHORIZATION_CODE"},
 		"appType": "OIDC_APP_TYPE_NATIVE", "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
 		"accessTokenType": "OIDC_TOKEN_TYPE_JWT", "accessTokenRoleAssertion": true, "devMode": true,
@@ -299,8 +436,19 @@ func (c *zitadelClient) issueHumanToken(userID, password, clientID, audience str
 		SessionToken string `json:"sessionToken"`
 	}
 	checks := map[string]any{"checks": map[string]any{"user": map[string]any{"userId": userID}, "password": map[string]any{"password": password}}}
-	if err := c.loginCall(http.MethodPost, "/v2/sessions", checks, &session); err != nil {
-		return "", fmt.Errorf("create Human session: %w", err)
+	var sessionErr error
+	for range 30 {
+		sessionErr = c.loginCall(http.MethodPost, "/v2/sessions", checks, &session)
+		if sessionErr == nil {
+			break
+		}
+		if !strings.Contains(sessionErr.Error(), "status 404") {
+			return "", fmt.Errorf("create Human session: %w", sessionErr)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if sessionErr != nil {
+		return "", fmt.Errorf("create Human session after waiting for ZITADEL projection: %w", sessionErr)
 	}
 	var callback struct {
 		CallbackURL string `json:"callbackUrl"`
@@ -484,7 +632,10 @@ func exchangeJWTBearer(ctx context.Context, baseURL string, key machineKey, scop
 	}
 	form := url.Values{"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"}, "assertion": {signed}, "scope": {strings.Join(scopes, " ")}}
 	var lastError error
-	for range 40 {
+	// A newly-created Machine Key is committed before ZITADEL's authentication
+	// projection can necessarily validate it. Keep retrying the transient
+	// invalid_grant window long enough for a cold Compose startup.
+	for range 120 {
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/oauth/v2/token", strings.NewReader(form.Encode()))
 		if err != nil {
 			return "", err
@@ -510,7 +661,7 @@ func exchangeJWTBearer(ctx context.Context, baseURL string, key machineKey, scop
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(250 * time.Millisecond):
 		}
 	}
 	return "", lastError
@@ -551,7 +702,12 @@ func projectAudienceScope(projectID string) string {
 func mapIdentityVariables(values map[string]string, projects []projectFixture, keys map[string]machineKey) {
 	lookup := func(identity string, project int) string { return values[identity+"@"+projects[project].ID] }
 	values["human_subject"] = values["human-primary@subject"]
+	values["human_username"] = values["human-primary@username"]
+	values["human_password"] = values["human-primary@password"]
 	values["human_two_subject"] = values["human-two@subject"]
+	values["web_first_login_subject"] = values["web-first-login@subject"]
+	values["web_first_login_username"] = values["web-first-login@username"]
+	values["web_first_login_password"] = values["web-first-login@password"]
 	values["provider_merchant_human_subject"] = values["provider-merchant-human@subject"]
 	values["provider_merchant_human_two_subject"] = values["provider-merchant-human-two@subject"]
 	values["cn_admin_subject"] = values["cn-administrator@subject"]
@@ -579,10 +735,12 @@ func mapIdentityVariables(values map[string]string, projects []projectFixture, k
 	values["wrong_audience_admin_token"] = lookup("cn-administrator", 3)
 	values["revoked_admin_token"] = lookup("revoked-administrator", 2)
 	values["wrong_audience_service_token"] = values["global_admin_token"]
+	values["cn_catalog_token"] = lookup("gizway-cn-catalog", 0)
+	values["global_catalog_token"] = lookup("gizway-global-catalog", 0)
 	values["wrong_issuer_service_token"] = signedFixtureToken(keys["gizway-cn-service"], "https://wrong-issuer.invalid", projects[1].ID, false)
 	values["wrong_issuer_admin_token"] = signedInvalidToken("https://wrong-issuer.invalid", projects[2].ID, false)
-	values["wrong_signature_service_token"] = signedInvalidToken("http://zitadel:8080", projects[1].ID, false)
-	values["expired_service_token"] = signedFixtureToken(keys["gizway-cn-service"], "http://zitadel:8080", projects[1].ID, true)
+	values["wrong_signature_service_token"] = signedInvalidToken("http://identity.e2e.gizway.test:18080", projects[1].ID, false)
+	values["expired_service_token"] = signedFixtureToken(keys["gizway-cn-service"], "http://identity.e2e.gizway.test:18080", projects[1].ID, true)
 }
 
 func signedFixtureToken(key machineKey, issuer, audience string, expired bool) string {

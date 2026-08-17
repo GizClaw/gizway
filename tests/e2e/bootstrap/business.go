@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +24,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const fixtureIssuer = "http://zitadel:8080"
+const fixtureIssuer = "http://identity.e2e.gizway.test:18080"
 
 type initializedAccount struct {
 	UserID            string `json:"user_id"`
@@ -47,11 +50,24 @@ func bootstrapMilestone03(options options) error {
 	variables["zero_price_model"] = "story-text-zero"
 
 	client := &http.Client{Timeout: 20 * time.Second}
-	var owner, other initializedAccount
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/initialize", variables["human_token"], nil, &owner); err != nil {
+	bootstrapKey, err := readMachineKey("/fixtures/zitadel-bootstrap-machine.json")
+	if err != nil {
+		return err
+	}
+	adminToken, err := exchangeJWTBearer(context.Background(), options.zitadelURL, bootstrapKey, []string{"openid", zitadelAPIScope})
+	if err != nil {
+		return fmt.Errorf("authenticate ZITADEL Action bootstrap: %w", err)
+	}
+	actionClient := &zitadelClient{baseURL: strings.TrimRight(options.zitadelURL, "/"), token: adminToken, http: client}
+	if err := actionClient.configureUserInitializationAction("/fixtures"); err != nil {
+		return err
+	}
+	owner, err := initializeFixtureHuman(client, options.gizpayURL, options.gizpayDSN, variables["human_token"], variables["human_subject"], "human-primary")
+	if err != nil {
 		return fmt.Errorf("initialize primary Human: %w", err)
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/initialize", variables["human_token_two"], nil, &other); err != nil {
+	other, err := initializeFixtureHuman(client, options.gizpayURL, options.gizpayDSN, variables["human_token_two"], variables["human_two_subject"], "human-two")
+	if err != nil {
 		return fmt.Errorf("initialize second Human: %w", err)
 	}
 	var product struct {
@@ -69,14 +85,17 @@ func bootstrapMilestone03(options options) error {
 	if err := setProductPublished(options.gizpayDSN, hiddenProduct.ID, false); err != nil {
 		return err
 	}
+	if err := seedProductListings(options.gizpayDSN, product.ID); err != nil {
+		return err
+	}
 	var subscription struct {
 		ID string `json:"id"`
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+product.ID+"/subscriptions", variables["human_token"], map[string]any{"account_id": owner.AccountID, "terms_version": "m03-v1"}, &subscription); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+product.ID+"/subscriptions", variables["human_token"], map[string]any{"id": "sub_m03_bootstrap", "account_id": owner.AccountID, "terms_version": "m03-v1"}, &subscription); err != nil {
 		return err
 	}
 	var subscriptionKey struct{ ID, Key string }
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+subscription.ID+"/keys", variables["human_token"], map[string]any{}, &subscriptionKey); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+subscription.ID+"/keys", variables["human_token"], map[string]any{"id": "skey_m03_bootstrap", "name": "Bootstrap"}, &subscriptionKey); err != nil {
 		return err
 	}
 	var revokedKey struct {
@@ -84,7 +103,7 @@ func bootstrapMilestone03(options options) error {
 		Key       string
 		RevokedAt time.Time `json:"revoked_at"`
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+subscription.ID+"/keys", variables["human_token"], map[string]any{}, &revokedKey); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+subscription.ID+"/keys", variables["human_token"], map[string]any{"id": "skey_m03_revoked", "name": "Revoked"}, &revokedKey); err != nil {
 		return err
 	}
 	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+subscription.ID+"/keys/"+revokedKey.ID+"/revoke", variables["human_token"], nil, &revokedKey); err != nil {
@@ -93,17 +112,17 @@ func bootstrapMilestone03(options options) error {
 	var negativeSubscription struct {
 		ID string `json:"id"`
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+product.ID+"/subscriptions", variables["human_token_two"], map[string]any{"account_id": other.AccountID, "terms_version": "m03-v1"}, &negativeSubscription); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+product.ID+"/subscriptions", variables["human_token_two"], map[string]any{"id": "sub_m03_negative", "account_id": other.AccountID, "terms_version": "m03-v1"}, &negativeSubscription); err != nil {
 		return err
 	}
 	var negativeKey struct{ ID, Key string }
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+negativeSubscription.ID+"/keys", variables["human_token_two"], map[string]any{}, &negativeKey); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/subscriptions/"+negativeSubscription.ID+"/keys", variables["human_token_two"], map[string]any{"id": "skey_m03_negative", "name": "Negative"}, &negativeKey); err != nil {
 		return err
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/accounts/"+other.AccountID+"/topups", variables["human_token_two"], map[string]any{"amount_microcredits": 5, "channel": "fake", "external_reference": "m03-negative-bootstrap"}, nil); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/accounts/"+other.AccountID+"/topups", variables["human_token_two"], map[string]any{"id": "topup_m03_negative", "amount_microcredits": 5, "channel": "fake", "external_reference": "m03-negative-bootstrap"}, nil); err != nil {
 		return err
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/accounts/"+owner.AccountID+"/topups", variables["human_token"], map[string]any{"amount_microcredits": 1_000_000_000, "channel": "fake", "external_reference": "m03-bootstrap"}, nil); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/accounts/"+owner.AccountID+"/topups", variables["human_token"], map[string]any{"id": "topup_m03_bootstrap", "amount_microcredits": 1_000_000_000, "channel": "fake", "external_reference": "m03-bootstrap"}, nil); err != nil {
 		return err
 	}
 
@@ -167,6 +186,23 @@ func seedServicePrincipals(dsn, ownerUserID string, variables map[string]string)
 	return nil
 }
 
+func seedProductListings(dsn, productID string) error {
+	db, err := waitDatabase(dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	for index, site := range []string{"global.localhost", "cn.localhost"} {
+		id := "listing_m04_payg_" + strings.TrimSuffix(site, ".localhost")
+		if _, err = db.Exec(`INSERT INTO product_listings(id,product_id,site,title,description,billing_mode,price_text,display_order,status)
+			VALUES($1,$2,$3,'GizWay PAYG','Pay only for normalized model usage.','pay_as_you_go','Usage based',$4,'active')
+			ON CONFLICT(product_id,site) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,price_text=EXCLUDED.price_text,display_order=EXCLUDED.display_order,status='active',updated_at=now()`, id, productID, site, index); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func seedMilestone03Region(dsn, region, providerURL, credential, apiURL, humanToken, merchantID string, variables map[string]string) error {
 	storeDSN, err := withoutSearchPath(dsn)
 	if err != nil {
@@ -210,10 +246,15 @@ func seedMilestone03Region(dsn, region, providerURL, credential, apiURL, humanTo
 	if _, err = tx.Exec(`INSERT INTO model_customer_prices(model_id,metric,unit_size,price_microcredits) VALUES($1,'input_tokens',1000000,0),($1,'output_tokens',1000000,0)`, zeroModelID); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(`INSERT INTO model_listings(id,model_id,title,description,family,context,latency,accent,featured,display_order,availability)
+		VALUES($1,$2,'Story Text','Metered text generation for browser acceptance.','Text','128K','Fast','emerald',true,0,'available'),
+		      ($3,$4,'Story Text Zero','Zero-price local execution for browser acceptance.','Text','128K','Fast','blue',false,1,'available')`, "listing_story_text_"+region, modelID, "listing_story_text_zero_"+region, zeroModelID); err != nil {
+		return err
+	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	body := map[string]any{"name": "Bootstrap Provider Key", "key": credential, "status": "active", "prices": []any{
+	body := map[string]any{"id": "pkey_m03_bootstrap_" + region, "name": "Bootstrap Provider Key", "key": credential, "status": "active", "prices": []any{
 		map[string]any{"model_id": modelID, "metric": "input_tokens", "unit_size": 1000000, "microcredits_per_unit": 500},
 		map[string]any{"model_id": modelID, "metric": "output_tokens", "unit_size": 1000000, "microcredits_per_unit": 700},
 		map[string]any{"model_id": zeroModelID, "metric": "input_tokens", "unit_size": 1000000, "microcredits_per_unit": 0},
@@ -231,6 +272,71 @@ func seedMilestone03Region(dsn, region, providerURL, credential, apiURL, humanTo
 	}
 	variables[region+"_provider_key_id"] = key.ProviderKeyID
 	return nil
+}
+
+func initializeFixtureHuman(client *http.Client, gizpayURL, gizpayDSN, token, subject, displayName string) (initializedAccount, error) {
+	var initialized initializedAccount
+	secret, err := os.ReadFile("/fixtures/zitadel-action-signing-key")
+	if err != nil {
+		return initialized, err
+	}
+	body, _ := json.Marshal(map[string]any{"user": map[string]any{"id": subject, "human": map[string]any{}}, "userinfo": map[string]any{"email": displayName + "@example.test", "name": displayName}})
+	timestamp := fmt.Sprint(time.Now().UTC().Unix())
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(timestamp + "."))
+	_, _ = mac.Write(body)
+	request, err := http.NewRequest(http.MethodPost, strings.TrimRight(gizpayURL, "/")+"/webhooks/v1/zitadel/user-authenticated", bytes.NewReader(body))
+	if err != nil {
+		return initialized, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-ZITADEL-Signature", "t="+timestamp+",v1="+hex.EncodeToString(mac.Sum(nil)))
+	response, err := client.Do(request)
+	if err != nil {
+		return initialized, err
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		return initialized, fmt.Errorf("webhook returned %d", response.StatusCode)
+	}
+	var accounts struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := bootstrapAPIJSON(client, http.MethodGet, strings.TrimRight(gizpayURL, "/")+"/account/v1/accounts", token, nil, &accounts); err != nil || len(accounts.Data) != 1 {
+		return initialized, fmt.Errorf("query initialized Account: %w", err)
+	}
+	var merchants struct {
+		Data []struct {
+			ID        string `json:"id"`
+			IsDefault bool   `json:"is_default"`
+		} `json:"data"`
+	}
+	if err := bootstrapAPIJSON(client, http.MethodGet, strings.TrimRight(gizpayURL, "/")+"/account/v1/merchants", token, nil, &merchants); err != nil {
+		return initialized, err
+	}
+	for _, merchant := range merchants.Data {
+		if merchant.IsDefault {
+			if initialized.DefaultMerchantID != "" {
+				return initialized, errors.New("multiple default Merchants")
+			}
+			initialized.DefaultMerchantID = merchant.ID
+		}
+	}
+	if initialized.DefaultMerchantID == "" {
+		return initialized, errors.New("default Merchant is missing")
+	}
+	db, err := waitDatabase(gizpayDSN)
+	if err != nil {
+		return initialized, err
+	}
+	defer db.Close()
+	if err = db.Get(&initialized.UserID, `SELECT id FROM users WHERE identity_issuer=$1 AND identity_subject=$2`, fixtureIssuer, subject); err != nil {
+		return initialized, fmt.Errorf("query initialized User: %w", err)
+	}
+	initialized.AccountID = accounts.Data[0].ID
+	return initialized, nil
 }
 
 func setProductPublished(dsn, productID string, published bool) error {

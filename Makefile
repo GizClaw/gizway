@@ -11,7 +11,7 @@ ACTIONLINT ?= actionlint
 	lint lint-go lint-actions \
 	verify-modules build \
 	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql \
-	test-unit-sdk test-unit-powersync test-e2e test-e2e-sdk test-e2e-powersync
+	test-unit-sdk test-unit-powersync test-unit-web test-e2e test-e2e-sdk test-e2e-powersync test-e2e-web
 
 help:
 	@printf '%s\n' \
@@ -40,9 +40,11 @@ help:
 		'  test-unit-postgresql run production-dialect tests on local PostgreSQL' \
 		'  test-unit-sdk       compile the pinned official SDK test module' \
 		'  test-unit-powersync typecheck and run offline PowerSync client contracts' \
+		'  test-unit-web       run Web unit, build, lint, and fake Playwright tests' \
 		'  test-e2e            run Milestone 03 Compose acceptance scenarios' \
 		'  test-e2e-sdk        run the official SDK compatibility matrix' \
-		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix'
+		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
+		'  test-e2e-web        run real Global/CN browser acceptance'
 
 fmt: fmt-go fmt-hurl fmt-module
 
@@ -98,6 +100,9 @@ test-unit-sdk:
 test-unit-powersync:
 	@cd tests/powersync && npm run typecheck && npm test
 
+test-unit-web:
+	@./scripts/test-unit/test-unit-web.sh
+
 test-e2e:
 	@./tests/e2e/run.sh
 
@@ -106,3 +111,6 @@ test-e2e-sdk:
 
 test-e2e-powersync:
 	@./tests/e2e/run-powersync.sh
+
+test-e2e-web:
+	@./tests/e2e/run-web.sh

@@ -1,0 +1,19 @@
+FROM node:22.22.1-bookworm-slim AS build
+WORKDIR /app
+COPY web/apps/gizway/package.json web/apps/gizway/package-lock.json ./
+RUN npm ci
+COPY web/apps/gizway/ ./
+ENV GIZWAY_WEB_MODE=real \
+    GIZPAY_API_URL=http://gizpay:8081 \
+    GIZPAY_POWERSYNC_URL=http://powersync-gizpay:8080 \
+    GIZWAY_CN_API_URL=http://gizway-cn:8080 \
+    GIZWAY_CN_POWERSYNC_URL=http://powersync-cn:8080 \
+    GIZWAY_GLOBAL_API_URL=http://gizway-global:8080 \
+    GIZWAY_GLOBAL_POWERSYNC_URL=http://powersync-global:8080
+RUN npm run build
+
+FROM node:22.22.1-bookworm-slim
+WORKDIR /app
+COPY --from=build /app /app
+ENV GIZWAY_WEB_MODE=real
+CMD ["npx", "wrangler", "dev", "--config", "dist/server/wrangler.json", "--ip", "0.0.0.0", "--port", "3000"]

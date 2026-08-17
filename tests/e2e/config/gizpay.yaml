@@ -7,13 +7,14 @@ database:
   schema: public
 authentication:
   zitadel:
-    issuer: http://zitadel:8080
+    issuer: http://identity.e2e.gizway.test:18080
     jwks_url: http://oauth-spy:19500/oauth/v2/keys
     human_audience: "386000000000000001"
     service_audience: "386000000000000002"
     management_client:
       token_url: http://oauth-spy:19500/oauth/v2/token
       private_key_file: /fixtures/zitadel-bootstrap-machine.json
+    action_signing_key_file: /fixtures/zitadel-action-signing-key
 subscription_keys:
   hmac:
     secret_file: /secrets/subscription-key-hmac

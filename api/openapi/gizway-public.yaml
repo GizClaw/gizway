@@ -1,8 +1,26 @@
 openapi: 3.1.0
-info: {title: GizWay Public AI API, version: 3.0.0}
+info: {title: GizWay Public AI API, version: 4.0.0}
 servers: [{url: https://api.gizway.com}]
 security: [{subscriptionKey: []}, {anthropicSubscriptionKey: []}, {geminiSubscriptionKey: []}]
 paths:
+  /auth/runtime-config:
+    get:
+      operationId: getPublicRuntimeConfig
+      security: []
+      responses:
+        '200': {description: Browser-safe site runtime configuration, content: {application/json: {schema: {$ref: '#/components/schemas/PublicRuntimeConfig'}}}}
+        '503':
+          description: runtime_config_unavailable
+          content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}
+  /auth/catalog-token:
+    get:
+      operationId: getPublicCatalogToken
+      security: []
+      responses:
+        '200': {description: Current cached Public Catalog JWT, content: {application/json: {schema: {$ref: '#/components/schemas/CatalogToken'}}}}
+        '503':
+          description: public_catalog_token_unavailable
+          content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}
   /v1/models:
     get:
       operationId: listModels
@@ -42,6 +60,45 @@ components:
     geminiSubscriptionKey: {type: apiKey, in: header, name: x-goog-api-key}
     realtimeSecret: {type: http, scheme: bearer}
   schemas:
+    ErrorResponse: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}
+    CatalogToken:
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_at]
+      properties:
+        access_token: {type: string, minLength: 1}
+        token_type: {type: string, const: Bearer}
+        expires_at: {type: string, format: date-time}
+    PublicRuntimeConfig:
+      type: object
+      additionalProperties: false
+      required: [site, identity, services]
+      properties:
+        site:
+          type: object
+          additionalProperties: false
+          required: [hostname]
+          properties: {hostname: {type: string, minLength: 1}}
+        identity:
+          type: object
+          additionalProperties: false
+          required: [issuer, client_id, redirect_uri, post_logout_redirect_uri, audience]
+          properties:
+            issuer: {type: string, format: uri}
+            client_id: {type: string, minLength: 1}
+            redirect_uri: {type: string, format: uri}
+            post_logout_redirect_uri: {type: string, format: uri}
+            audience: {type: string, minLength: 1}
+        services:
+          type: object
+          additionalProperties: false
+          required: [public_catalog_token_url, gizpay_powersync_url, gizpay_api_url, gizway_powersync_url, gizway_api_url]
+          properties:
+            public_catalog_token_url: {type: string, format: uri}
+            gizpay_powersync_url: {type: string, format: uri}
+            gizpay_api_url: {type: string, format: uri}
+            gizway_powersync_url: {type: string, format: uri}
+            gizway_api_url: {type: string, format: uri}
     Model:
       type: object
       required: [id, object]

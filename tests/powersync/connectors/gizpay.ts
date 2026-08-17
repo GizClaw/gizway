@@ -12,7 +12,7 @@ export class GizPayConnector extends APIConnector {
     if (table === 'my_subscriptions' && operation === 'PUT') {
       return {
         method: 'POST', path: `/account/v1/products/${segment(data.product_id)}/subscriptions`,
-        body: select(data, ['account_id', 'terms_version'])
+        body: { id, ...select(data, ['account_id', 'terms_version']) }
       };
     }
     if (table === 'my_subscriptions' && operation === 'PATCH') {
@@ -23,7 +23,8 @@ export class GizPayConnector extends APIConnector {
     }
     if (table === 'my_subscription_keys' && operation === 'PUT') {
       return {
-        method: 'POST', path: `/account/v1/subscriptions/${segment(data.subscription_id)}/keys`, body: {}
+        method: 'POST', path: `/account/v1/subscriptions/${segment(data.subscription_id)}/keys`,
+		body: { id, ...select(data, ['name']) }
       };
     }
     if (table === 'my_subscription_keys' && operation === 'PATCH' && data.status === 'revoked') {
@@ -42,7 +43,7 @@ export class GizPayConnector extends APIConnector {
     if (table === 'my_topups' && operation === 'PUT') {
       return {
         method: 'POST', path: `/account/v1/accounts/${segment(data.account_id)}/topups`,
-        body: select(data, ['channel', 'external_reference', 'amount_microcredits'])
+        body: { id, ...select(data, ['channel', 'external_reference', 'amount_microcredits']) }
       };
     }
     throw new Error(`unsupported GizPay local mutation ${operation} ${table}`);

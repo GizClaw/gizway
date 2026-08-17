@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"gorm.io/gorm"
 
 	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
+	"github.com/idy/gizway/internal/catalogtoken"
 	"github.com/idy/gizway/internal/identity"
 )
 
@@ -43,12 +44,14 @@ type Config struct {
 	Logger                     *slog.Logger
 	ProviderCallbackBaseURL    string
 	ProviderCallbackSecret     []byte
+	PublicCatalogToken         func(context.Context) (catalogtoken.Token, error)
+	PublicRuntimeConfig        json.RawMessage
 }
 
 type creditAdmission struct {
-	accountID, subscriptionID, productID, billing string
-	ownerIssuer, ownerSubject                     string
-	allowed                                       bool
+	accountID, subscriptionID, subscriptionKeyID, productID, billing string
+	ownerIssuer, ownerSubject                                        string
+	allowed                                                          bool
 }
 
 type creditState struct {
@@ -73,6 +76,12 @@ type Handler struct {
 }
 
 var schemaNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+var (
+	errGizPayUnavailable                 = errors.New("GizPay unavailable")
+	errDefaultMerchantInvariantViolation = errors.New("default Merchant invariant violation")
+	errUnavailableProviderModel          = errors.New("price references an unavailable provider model")
+)
 
 const defaultCreditCacheCleanupInterval = time.Minute
 
@@ -212,6 +221,14 @@ func (h *Handler) Close() error {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Path == "/auth/catalog-token" {
+		h.publicCatalogToken(w, r)
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/auth/runtime-config" {
+		h.publicRuntimeConfig(w)
+		return
+	}
 	if !strings.HasPrefix(r.URL.Path, "/user/") {
 		h.protocol(w, r)
 		return
@@ -240,6 +257,34 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) publicRuntimeConfig(w http.ResponseWriter) {
+	if len(h.config.PublicRuntimeConfig) == 0 || !json.Valid(h.config.PublicRuntimeConfig) {
+		errJSON(w, http.StatusServiceUnavailable, "runtime_config_unavailable", "Public runtime configuration is unavailable")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(h.config.PublicRuntimeConfig)
+}
+
+func (h *Handler) publicCatalogToken(w http.ResponseWriter, r *http.Request) {
+	if h.config.PublicCatalogToken == nil {
+		errJSON(w, http.StatusServiceUnavailable, "public_catalog_token_unavailable", "Public Catalog token is unavailable")
+		return
+	}
+	token, err := h.config.PublicCatalogToken(r.Context())
+	now := time.Now
+	if h.config.Now != nil {
+		now = h.config.Now
+	}
+	if err != nil || token.AccessToken == "" || token.TokenType != "Bearer" || !now().UTC().Before(token.ExpiresAt) {
+		errJSON(w, http.StatusServiceUnavailable, "public_catalog_token_unavailable", "Public Catalog token is unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, token)
+}
+
 func (h *Handler) ownerMerchant(ctx context.Context, authorization string, principal identity.Principal) (string, error) {
 	var merchantID string
 	err := h.config.DB.GetContext(ctx, &merchantID, `SELECT merchant_id FROM gizway_user_merchants WHERE owner_identity_issuer=$1 AND owner_identity_subject=$2`, principal.Issuer, principal.Subject)
@@ -249,27 +294,42 @@ func (h *Handler) ownerMerchant(ctx context.Context, authorization string, princ
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(h.config.GizPayURL, "/")+"/account/v1/initialize", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(h.config.GizPayURL, "/")+"/account/v1/merchants", nil)
 	if err != nil {
 		return "", err
 	}
 	request.Header.Set("Authorization", authorization)
 	response, err := h.config.HTTPClient.Do(request)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %v", errGizPayUnavailable, err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return "", errGizPayUnavailable
+	}
 	if response.StatusCode != http.StatusOK {
-		return "", errors.New("GizPay initialize failed")
+		return "", errDefaultMerchantInvariantViolation
 	}
 	var body struct {
-		DefaultMerchantID string `json:"default_merchant_id"`
+		Data []struct {
+			ID        string `json:"id"`
+			IsDefault bool   `json:"is_default"`
+		} `json:"data"`
 	}
-	if json.NewDecoder(response.Body).Decode(&body) != nil || body.DefaultMerchantID == "" {
-		return "", errors.New("GizPay initialize response is invalid")
+	if json.NewDecoder(response.Body).Decode(&body) != nil {
+		return "", errDefaultMerchantInvariantViolation
 	}
-	_, err = h.config.DB.ExecContext(ctx, `INSERT INTO gizway_user_merchants(owner_identity_issuer,owner_identity_subject,merchant_id) VALUES($1,$2,$3) ON CONFLICT(owner_identity_issuer,owner_identity_subject) DO UPDATE SET merchant_id=EXCLUDED.merchant_id,updated_at=now()`, principal.Issuer, principal.Subject, body.DefaultMerchantID)
-	return body.DefaultMerchantID, err
+	defaults := make([]string, 0, 1)
+	for _, merchant := range body.Data {
+		if merchant.IsDefault && strings.TrimSpace(merchant.ID) != "" {
+			defaults = append(defaults, merchant.ID)
+		}
+	}
+	if len(defaults) != 1 {
+		return "", errDefaultMerchantInvariantViolation
+	}
+	_, err = h.config.DB.ExecContext(ctx, `INSERT INTO gizway_user_merchants(owner_identity_issuer,owner_identity_subject,merchant_id) VALUES($1,$2,$3) ON CONFLICT(owner_identity_issuer,owner_identity_subject) DO UPDATE SET merchant_id=EXCLUDED.merchant_id,updated_at=now()`, principal.Issuer, principal.Subject, defaults[0])
+	return defaults[0], err
 }
 
 type keyPrice struct {
@@ -298,30 +358,62 @@ func validatePrices(prices []keyPrice) bool {
 
 func (h *Handler) createProviderKey(w http.ResponseWriter, r *http.Request, providerID string, principal identity.Principal) {
 	var body struct {
+		ID     string     `json:"id"`
 		Name   string     `json:"name"`
 		Key    string     `json:"key"`
 		Status string     `json:"status"`
 		Prices []keyPrice `json:"prices"`
 	}
-	if decode(r, &body) != nil || !nonBlank(providerID) || !nonBlank(body.Key) || body.Status != "active" || !validatePrices(body.Prices) {
+	if decode(r, &body) != nil || !nonBlank(body.ID) || !nonBlank(body.Name) || !nonBlank(providerID) || !nonBlank(body.Key) || body.Status != "active" || !validatePrices(body.Prices) {
 		invalid(w)
 		return
 	}
 	provider, err := h.stores.Provider(r.Context(), providerID)
-	if err != nil || provider.Status != "active" {
+	if errors.Is(err, gorm.ErrRecordNotFound) || err == nil && provider.Status != "active" {
 		notFound(w)
+		return
+	}
+	if err != nil {
+		internal(w)
+		return
+	}
+	var existing struct {
+		ProviderID   string `db:"provider_id"`
+		Key          string `db:"key"`
+		Name         string `db:"name"`
+		Status       string `db:"status"`
+		OwnerIssuer  string `db:"owner_identity_issuer"`
+		OwnerSubject string `db:"owner_identity_subject"`
+		MerchantID   string `db:"merchant_id"`
+		PricesJSON   []byte `db:"prices_json"`
+	}
+	err = h.config.DB.GetContext(r.Context(), &existing, `SELECT provider_id,key,name,status,owner_identity_issuer,owner_identity_subject,merchant_id,prices_json FROM client_sync.provider_keys WHERE id=$1`, body.ID)
+	if err == nil {
+		var prices []keyPrice
+		if json.Unmarshal(existing.PricesJSON, &prices) != nil || existing.ProviderID != providerID || existing.Key != body.Key || existing.Name != body.Name || existing.Status != body.Status || existing.OwnerIssuer != principal.Issuer || existing.OwnerSubject != principal.Subject || !samePrices(prices, body.Prices) {
+			errJSON(w, http.StatusConflict, "resource_id_conflict", "Provider Key ID already exists with different content")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"provider_key_id": body.ID, "provider_id": providerID, "name": body.Name, "key": body.Key, "merchant_id": existing.MerchantID, "status": body.Status, "prices": body.Prices})
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		internal(w)
 		return
 	}
 	merchantID, err := h.ownerMerchant(r.Context(), r.Header.Get("Authorization"), principal)
 	if err != nil {
-		errJSON(w, 503, "account_initialize_unavailable", "account initialization unavailable")
+		if errors.Is(err, errGizPayUnavailable) {
+			errJSON(w, http.StatusServiceUnavailable, "gizpay_unavailable", "GizPay is unavailable")
+		} else if errors.Is(err, errDefaultMerchantInvariantViolation) {
+			errJSON(w, http.StatusInternalServerError, "default_merchant_invariant_violation", "default Merchant invariant violated")
+		} else {
+			internal(w)
+		}
 		return
 	}
-	id, now := "pkey_"+uuid.NewString(), h.config.Now().UTC()
+	id, now := body.ID, h.config.Now().UTC()
 	name := body.Name
-	if !nonBlank(name) {
-		name = "Provider Key"
-	}
 	err = h.stores.ExecuteConfigTransaction(r.Context(), func(tx *gorm.DB) error {
 		validatedModels := map[string]bool{}
 		for _, price := range body.Prices {
@@ -329,8 +421,11 @@ func (h *Handler) createProviderKey(w http.ResponseWriter, r *http.Request, prov
 				continue
 			}
 			var count int64
-			if err := tx.Raw(`SELECT count(*) FROM client_sync.models WHERE id=? AND provider_id=? AND status='active'`, price.ModelID, providerID).Scan(&count).Error; err != nil || count != 1 {
-				return errors.New("price references an unavailable provider model")
+			if err := tx.Raw(`SELECT count(*) FROM client_sync.models WHERE id=? AND provider_id=? AND status='active'`, price.ModelID, providerID).Scan(&count).Error; err != nil {
+				return err
+			}
+			if count != 1 {
+				return errUnavailableProviderModel
 			}
 			validatedModels[price.ModelID] = true
 		}
@@ -338,7 +433,7 @@ func (h *Handler) createProviderKey(w http.ResponseWriter, r *http.Request, prov
 			return err
 		}
 		q := func(table string) string { return `"` + h.config.DatabaseSchema + `".` + table }
-		if err := tx.Exec(`INSERT INTO `+q("provider_key_billing")+`(provider_key_id,owner_identity_issuer,owner_identity_subject,merchant_id,status,created_at,updated_at) VALUES(?,?,?,?,? ,?,?)`, id, principal.Issuer, principal.Subject, merchantID, "active", now, now).Error; err != nil {
+		if err := tx.Exec(`INSERT INTO `+q("provider_key_billing")+`(provider_key_id,owner_identity_issuer,owner_identity_subject,merchant_id,name,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, id, principal.Issuer, principal.Subject, merchantID, name, "active", now, now).Error; err != nil {
 			return err
 		}
 		for _, p := range body.Prices {
@@ -347,13 +442,47 @@ func (h *Handler) createProviderKey(w http.ResponseWriter, r *http.Request, prov
 			}
 		}
 		pricesJSON, _ := json.Marshal(body.Prices)
-		return tx.Exec(`INSERT INTO client_sync.provider_keys(id,provider_id,key,merchant_id,owner_identity_issuer,owner_identity_subject,status,prices_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, providerID, body.Key, merchantID, principal.Issuer, principal.Subject, "active", string(pricesJSON), now, now).Error
+		return tx.Exec(`INSERT INTO client_sync.provider_keys(id,provider_id,key,merchant_id,owner_identity_issuer,owner_identity_subject,name,status,prices_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, id, providerID, body.Key, merchantID, principal.Issuer, principal.Subject, name, "active", string(pricesJSON), now, now).Error
 	})
 	if err != nil {
+		if lookupErr := h.config.DB.GetContext(r.Context(), &existing, `SELECT provider_id,key,name,status,owner_identity_issuer,owner_identity_subject,merchant_id,prices_json FROM client_sync.provider_keys WHERE id=$1`, body.ID); lookupErr == nil {
+			var prices []keyPrice
+			if json.Unmarshal(existing.PricesJSON, &prices) != nil || existing.ProviderID != providerID || existing.Key != body.Key || existing.Name != body.Name || existing.Status != body.Status || existing.OwnerIssuer != principal.Issuer || existing.OwnerSubject != principal.Subject || !samePrices(prices, body.Prices) {
+				errJSON(w, http.StatusConflict, "resource_id_conflict", "Provider Key ID already exists with different content")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"provider_key_id": body.ID, "provider_id": providerID, "name": body.Name, "key": body.Key, "merchant_id": existing.MerchantID, "status": body.Status, "prices": body.Prices})
+			return
+		}
+		writeProviderKeyCreationError(w, err)
+		return
+	}
+	writeJSON(w, 201, map[string]any{"provider_key_id": id, "provider_id": providerID, "name": name, "key": body.Key, "merchant_id": merchantID, "status": "active", "prices": body.Prices})
+}
+
+func writeProviderKeyCreationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errUnavailableProviderModel) {
 		invalid(w)
 		return
 	}
-	writeJSON(w, 201, map[string]any{"provider_key_id": id, "provider_id": providerID, "key": body.Key, "merchant_id": merchantID, "status": "active", "prices": body.Prices})
+	internal(w)
+}
+
+func samePrices(left, right []keyPrice) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	values := make(map[string]keyPrice, len(left))
+	for _, price := range left {
+		values[price.ModelID+"\x00"+price.Metric] = price
+	}
+	for _, price := range right {
+		other, ok := values[price.ModelID+"\x00"+price.Metric]
+		if !ok || other.UnitSize != price.UnitSize || other.Microcredits != price.Microcredits {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) putProviderKeyPrices(w http.ResponseWriter, r *http.Request, id string, principal identity.Principal) {
@@ -371,8 +500,8 @@ func (h *Handler) putProviderKeyPrices(w http.ResponseWriter, r *http.Request, i
 	}
 	defer tx.Rollback()
 	var providerID string
-	if tx.Get(&providerID, `SELECT k.provider_id FROM provider_key_billing b JOIN client_sync.provider_keys k ON k.id=b.provider_key_id WHERE b.provider_key_id=$1 AND b.owner_identity_issuer=$2 AND b.owner_identity_subject=$3`, id, principal.Issuer, principal.Subject) != nil {
-		notFound(w)
+	if err = tx.Get(&providerID, `SELECT k.provider_id FROM provider_key_billing b JOIN client_sync.provider_keys k ON k.id=b.provider_key_id WHERE b.provider_key_id=$1 AND b.owner_identity_issuer=$2 AND b.owner_identity_subject=$3`, id, principal.Issuer, principal.Subject); err != nil {
+		writeProviderKeyLookupError(w, err)
 		return
 	}
 	validatedModels := map[string]bool{}
@@ -381,7 +510,11 @@ func (h *Handler) putProviderKeyPrices(w http.ResponseWriter, r *http.Request, i
 			continue
 		}
 		var count int
-		if tx.Get(&count, `SELECT count(*) FROM client_sync.models WHERE id=$1 AND provider_id=$2 AND status='active'`, price.ModelID, providerID) != nil || count != 1 {
+		if err = tx.Get(&count, `SELECT count(*) FROM client_sync.models WHERE id=$1 AND provider_id=$2 AND status='active'`, price.ModelID, providerID); err != nil {
+			internal(w)
+			return
+		}
+		if count != 1 {
 			invalid(w)
 			return
 		}
@@ -393,7 +526,7 @@ func (h *Handler) putProviderKeyPrices(w http.ResponseWriter, r *http.Request, i
 	}
 	for _, p := range body.Prices {
 		if _, err = tx.Exec(`INSERT INTO provider_key_prices(provider_key_id,model_id,metric,unit_size,microcredits_per_unit) VALUES($1,$2,$3,$4,$5)`, id, p.ModelID, p.Metric, p.UnitSize, p.Microcredits); err != nil {
-			invalid(w)
+			internal(w)
 			return
 		}
 	}
@@ -413,12 +546,12 @@ func (h *Handler) disableProviderKey(w http.ResponseWriter, r *http.Request, id 
 	var providerID, keyValue, merchantID string
 	err := h.config.DB.QueryRowxContext(r.Context(), `SELECT b.merchant_id,k.provider_id,k.key FROM provider_key_billing b JOIN client_sync.provider_keys k ON k.id=b.provider_key_id WHERE b.provider_key_id=$1 AND b.owner_identity_issuer=$2 AND b.owner_identity_subject=$3`, id, principal.Issuer, principal.Subject).Scan(&merchantID, &providerID, &keyValue)
 	if err != nil {
-		notFound(w)
+		writeProviderKeyLookupError(w, err)
 		return
 	}
 	key, err := h.stores.Key(r.Context(), providerID, id)
 	if err != nil {
-		notFound(w)
+		writeProviderKeyLookupError(w, err)
 		return
 	}
 	key.Enabled = false
@@ -437,6 +570,14 @@ func (h *Handler) disableProviderKey(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	writeJSON(w, 200, map[string]any{"provider_key_id": id, "provider_id": providerID, "key": keyValue, "merchant_id": merchantID, "status": "disabled"})
+}
+
+func writeProviderKeyLookupError(w http.ResponseWriter, err error) {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, gorm.ErrRecordNotFound) {
+		notFound(w)
+		return
+	}
+	internal(w)
 }
 
 type row map[string]any

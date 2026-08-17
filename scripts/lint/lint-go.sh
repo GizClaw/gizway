@@ -6,7 +6,10 @@ repository_root="$(CDPATH= cd -- "${script_dir}/../.." && pwd)"
 cd "${repository_root}"
 
 go_command="${GO:-go}"
-"${go_command}" vet ./...
-GO="${go_command}" "${script_dir}/lint-go-modernize.sh"
-"${go_command}" tool staticcheck ./...
-"${go_command}" tool govulncheck ./...
+packages="$(${go_command} list ./... | grep -v '/web/apps/gizway/node_modules/')"
+# npm dependencies may contain Go fixtures. They are third-party inputs, not
+# packages in this module's handwritten source gate.
+"${go_command}" vet ${packages}
+GO="${go_command}" "${script_dir}/lint-go-modernize.sh" ${packages}
+"${go_command}" tool staticcheck ${packages}
+"${go_command}" tool govulncheck ${packages}

@@ -6,6 +6,22 @@ import { GizWaySchema } from '../schemas/gizway.js';
 import { loadEnvironment, temporaryDatabase, waitForFirstSync } from './helpers.js';
 
 describe('PowerSync JWT isolation', () => {
+	test('rejects a Global Public Catalog token from the CN regional Catalog', async (context) => {
+		const env = loadEnvironment();
+		if (env == null || env.cnCatalogToken === '' || env.globalCatalogToken === '') return context.skip();
+		const wrong = await temporaryDatabase(GizWaySchema, 'catalog-global-on-cn');
+		const correct = await temporaryDatabase(GizWaySchema, 'catalog-cn-on-cn');
+		try {
+			await wrong.database.connect(new GizWayConnector({ endpoint: env.gizwayCNEndpoint, token: env.globalCatalogToken, apiBaseURL: env.wayURL }));
+			await correct.database.connect(new GizWayConnector({ endpoint: env.gizwayCNEndpoint, token: env.cnCatalogToken, apiBaseURL: env.wayURL }));
+			await Promise.all([waitForFirstSync(wrong.database), waitForFirstSync(correct.database)]);
+			expect(await wrong.database.getAll('SELECT id FROM model_listings')).toHaveLength(0);
+			expect(await correct.database.getAll('SELECT id FROM model_listings')).not.toHaveLength(0);
+		} finally {
+			await Promise.all([wrong.cleanup(), correct.cleanup()]);
+		}
+	});
+
   test('two users receive disjoint Accounts and Subscription Keys', async (context) => {
     const env = loadEnvironment();
     if (env == null || env.tokenTwo === '') return context.skip();

@@ -1,13 +1,21 @@
 package gizpay
 
 import (
+	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +39,10 @@ type Config struct {
 	MaxCommissions        int
 	ServiceAccounts       identity.ServiceAccountManager
 	Now                   func() time.Time
+	ZITADELIssuer         string
+	ActionSigningKey      []byte
+	ActionSigningKeyFile  string
+	ActionSignatureMaxAge time.Duration
 }
 
 type Handler struct {
@@ -53,10 +65,17 @@ func New(config Config) (*Handler, error) {
 	if config.MaxCommissions <= 0 {
 		config.MaxCommissions = 32
 	}
+	if config.ActionSignatureMaxAge <= 0 {
+		config.ActionSignatureMaxAge = 5 * time.Minute
+	}
 	return &Handler{config: config}, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && r.URL.Path == "/webhooks/v1/zitadel/user-authenticated" {
+		h.zitadelUserAuthenticated(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/account/") {
 		h.serveAccount(w, r)
 		return
@@ -79,26 +98,9 @@ func (h *Handler) serveAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := r.URL.Path
-	if r.Method == http.MethodPost && path == "/account/v1/initialize" {
-		contents, readErr := io.ReadAll(io.LimitReader(r.Body, 2))
-		if readErr != nil || len(contents) != 0 {
-			errorJSON(w, http.StatusBadRequest, "invalid_request", "initialize does not accept a request body")
-			return
-		}
-		userID, accountID, ledgerID, merchantID, err := h.initializeHuman(r, principal)
-		if err != nil {
-			internal(w)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"user_id": userID, "account_id": accountID,
-			"ledger_account_id": ledgerID, "default_merchant_id": merchantID,
-		})
-		return
-	}
 	userID, accountID, err := h.lookupHuman(r, principal)
 	if err != nil {
-		notFound(w)
+		writeHumanLookupError(w, err)
 		return
 	}
 	switch {
@@ -127,6 +129,14 @@ func (h *Handler) serveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func writeHumanLookupError(w http.ResponseWriter, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		notFound(w)
+		return
+	}
+	internal(w)
+}
+
 func (h *Handler) lookupHuman(r *http.Request, principal identity.Principal) (string, string, error) {
 	var userID, accountID string
 	err := h.config.DB.QueryRowxContext(r.Context(), `
@@ -135,50 +145,148 @@ func (h *Handler) lookupHuman(r *http.Request, principal identity.Principal) (st
 	return userID, accountID, err
 }
 
-func (h *Handler) initializeHuman(r *http.Request, principal identity.Principal) (string, string, string, string, error) {
-	tx, err := h.config.DB.BeginTxx(r.Context(), nil)
+func (h *Handler) zitadelUserAuthenticated(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024+1))
+	if err != nil || len(body) == 0 || len(body) > 64*1024 {
+		errorJSON(w, http.StatusBadRequest, "invalid_request", "invalid ZITADEL Action payload")
+		return
+	}
+	signingKey := h.config.ActionSigningKey
+	if h.config.ActionSigningKeyFile != "" {
+		if current, err := os.ReadFile(h.config.ActionSigningKeyFile); err == nil && len(current) != 0 {
+			signingKey = current
+		}
+	}
+	maximumAge := h.config.ActionSignatureMaxAge
+	if maximumAge <= 0 {
+		maximumAge = 5 * time.Minute
+	}
+	signature := r.Header.Get("ZITADEL-Signature")
+	if signature == "" {
+		// Keep accepting the historical OpenAPI spelling while Actions V2 uses
+		// the canonical header exposed by ZITADEL's official validation helper.
+		signature = r.Header.Get("X-ZITADEL-Signature")
+	}
+	if !validateActionSignature(body, signature, signingKey, h.config.Now().UTC(), maximumAge) {
+		errorJSON(w, http.StatusUnauthorized, "invalid_webhook_signature", "invalid ZITADEL Action signature")
+		return
+	}
+	var payload struct {
+		User struct {
+			ID    string          `json:"id"`
+			Human json.RawMessage `json:"human"`
+		} `json:"user"`
+		UserInfo struct {
+			Email             string `json:"email"`
+			Name              string `json:"name"`
+			PreferredUsername string `json:"preferred_username"`
+		} `json:"userinfo"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil || strings.TrimSpace(payload.User.ID) == "" {
+		errorJSON(w, http.StatusBadRequest, "invalid_request", "invalid ZITADEL Action payload")
+		return
+	}
+	if payload.User.Human == nil || string(payload.User.Human) == "null" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	displayName := strings.TrimSpace(payload.UserInfo.Name)
+	if displayName == "" {
+		displayName = strings.TrimSpace(payload.UserInfo.PreferredUsername)
+	}
+	if displayName == "" {
+		displayName = payload.User.ID
+	}
+	if _, _, _, _, err := h.initializeIdentity(r.Context(), h.config.ZITADELIssuer, payload.User.ID, strings.TrimSpace(payload.UserInfo.Email), displayName); err != nil {
+		internal(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func validateActionSignature(body []byte, header string, secret []byte, now time.Time, maximumAge time.Duration) bool {
+	if len(secret) == 0 || maximumAge <= 0 {
+		return false
+	}
+	var timestampValue, signatureValue string
+	for part := range strings.SplitSeq(header, ",") {
+		name, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		switch name {
+		case "t":
+			timestampValue = value
+		case "v1":
+			signatureValue = value
+		}
+	}
+	seconds, err := strconv.ParseInt(timestampValue, 10, 64)
+	if err != nil {
+		return false
+	}
+	timestamp := time.Unix(seconds, 0)
+	age := now.Sub(timestamp)
+	if age < -maximumAge || age > maximumAge {
+		return false
+	}
+	provided, err := hex.DecodeString(signatureValue)
+	if err != nil {
+		return false
+	}
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(timestampValue + "."))
+	_, _ = mac.Write(body)
+	return hmac.Equal(provided, mac.Sum(nil))
+}
+
+func (h *Handler) initializeIdentity(ctx context.Context, issuer, subject, email, displayName string) (string, string, string, string, error) {
+	if strings.TrimSpace(issuer) == "" || strings.TrimSpace(subject) == "" || strings.TrimSpace(displayName) == "" {
+		return "", "", "", "", errors.New("invalid Human identity")
+	}
+	tx, err := h.config.DB.BeginTxx(ctx, nil)
 	if err != nil {
 		return "", "", "", "", err
 	}
 	defer tx.Rollback()
 	userID := "usr_" + uuid.NewString()
 	now := h.config.Now().UTC()
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO users(id,identity_issuer,identity_subject,status,created_at) VALUES($1,$2,$3,'active',$4) ON CONFLICT(identity_issuer,identity_subject) DO NOTHING`, userID, principal.Issuer, principal.Subject, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,identity_issuer,identity_subject,email,display_name,status,created_at) VALUES($1,$2,$3,$4,$5,'active',$6) ON CONFLICT(identity_issuer,identity_subject) DO UPDATE SET email=EXCLUDED.email,display_name=EXCLUDED.display_name`, userID, issuer, subject, email, displayName, now)
 	if err != nil {
 		return "", "", "", "", err
 	}
-	if err = tx.GetContext(r.Context(), &userID, `SELECT id FROM users WHERE identity_issuer=$1 AND identity_subject=$2`, principal.Issuer, principal.Subject); err != nil {
+	if err = tx.GetContext(ctx, &userID, `SELECT id FROM users WHERE identity_issuer=$1 AND identity_subject=$2`, issuer, subject); err != nil {
 		return "", "", "", "", err
 	}
 	accountID := "acct_" + uuid.NewString()
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO accounts(id,owner_user_id,status,created_at) VALUES($1,$2,'active',$3) ON CONFLICT(owner_user_id) DO NOTHING`, accountID, userID, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO accounts(id,owner_user_id,status,created_at) VALUES($1,$2,'active',$3) ON CONFLICT(owner_user_id) DO NOTHING`, accountID, userID, now)
 	if err != nil {
 		return "", "", "", "", err
 	}
-	if err = tx.GetContext(r.Context(), &accountID, `SELECT id FROM accounts WHERE owner_user_id=$1`, userID); err != nil {
+	if err = tx.GetContext(ctx, &accountID, `SELECT id FROM accounts WHERE owner_user_id=$1`, userID); err != nil {
 		return "", "", "", "", err
 	}
 	ledgerID := "ledger_" + uuid.NewString()
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES($1,$2,'credit','active') ON CONFLICT(owner_account_id,asset_code) DO NOTHING`, ledgerID, accountID)
+	_, err = tx.ExecContext(ctx, `INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES($1,$2,'credit','active') ON CONFLICT(owner_account_id,asset_code) DO NOTHING`, ledgerID, accountID)
 	if err != nil {
 		return "", "", "", "", err
 	}
-	if err = tx.GetContext(r.Context(), &ledgerID, `SELECT id FROM ledger_accounts WHERE owner_account_id=$1 AND asset_code='credit'`, accountID); err != nil {
+	if err = tx.GetContext(ctx, &ledgerID, `SELECT id FROM ledger_accounts WHERE owner_account_id=$1 AND asset_code='credit'`, accountID); err != nil {
 		return "", "", "", "", err
 	}
 	merchantID := "merchant_" + uuid.NewString()
-	defaultName := principal.DisplayName()
-	if defaultName == "" {
-		defaultName = "User " + userID
-	}
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at) VALUES($1,$2,$3,$3,true,'active',$4,$4) ON CONFLICT DO NOTHING`, merchantID, accountID, defaultName, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at) VALUES($1,$2,$3,$3,true,'active',$4,$4) ON CONFLICT DO NOTHING`, merchantID, accountID, displayName, now)
 	if err != nil {
 		return "", "", "", "", err
 	}
-	if err = tx.GetContext(r.Context(), &merchantID, `SELECT id FROM merchants WHERE settlement_account_id=$1 AND is_default=true`, accountID); err != nil {
+	if err = tx.GetContext(ctx, &merchantID, `SELECT id FROM merchants WHERE settlement_account_id=$1 AND is_default=true`, accountID); err != nil {
 		return "", "", "", "", err
 	}
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO client_sync.account_balances(id,account_id,owner_identity_issuer,owner_identity_subject,balance_microcredits) VALUES($1,$1,$2,$3,0) ON CONFLICT(account_id) DO NOTHING`, accountID, principal.Issuer, principal.Subject)
+	_, err = tx.ExecContext(ctx, `INSERT INTO client_sync.user_profiles(id,owner_identity_issuer,owner_identity_subject,email,display_name,merchant_id,status,created_at) VALUES($1,$2,$3,$4,$5,$6,'active',$7) ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email,display_name=EXCLUDED.display_name,merchant_id=EXCLUDED.merchant_id,status=EXCLUDED.status`, userID, issuer, subject, email, displayName, merchantID, now)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO client_sync.account_balances(id,account_id,owner_identity_issuer,owner_identity_subject,balance_microcredits) VALUES($1,$1,$2,$3,0) ON CONFLICT(account_id) DO NOTHING`, accountID, issuer, subject)
 	if err != nil {
 		return "", "", "", "", err
 	}
@@ -255,20 +363,60 @@ func (h *Handler) accountTopups(w http.ResponseWriter, r *http.Request, accountI
 		return
 	}
 	var body struct {
+		ID                string `json:"id"`
 		Channel           string `json:"channel"`
 		ExternalReference string `json:"external_reference"`
 		Amount            int64  `json:"amount_microcredits"`
 	}
-	if decode(r, &body) != nil || body.Channel != "fake" || strings.TrimSpace(body.ExternalReference) == "" || body.Amount <= 0 {
+	if decode(r, &body) != nil || strings.TrimSpace(body.ID) == "" || body.Channel != "fake" || strings.TrimSpace(body.ExternalReference) == "" || body.Amount <= 0 {
 		invalid(w)
+		return
+	}
+	var existing struct {
+		ID, AccountID, Channel, ExternalReference, Status, LedgerTransactionID string
+		Amount                                                                 int64
+		CreatedAt, CreditedAt                                                  time.Time
+	}
+	err := h.config.DB.QueryRowxContext(r.Context(), `SELECT id,account_id,channel,external_reference,amount_microcredits,status,ledger_transaction_id,created_at,credited_at FROM topups WHERE id=$1`, body.ID).Scan(&existing.ID, &existing.AccountID, &existing.Channel, &existing.ExternalReference, &existing.Amount, &existing.Status, &existing.LedgerTransactionID, &existing.CreatedAt, &existing.CreditedAt)
+	if err == nil {
+		if existing.AccountID != accountID || existing.Channel != body.Channel || existing.ExternalReference != body.ExternalReference || existing.Amount != body.Amount {
+			errorJSON(w, http.StatusConflict, "resource_id_conflict", "Top-up ID already exists with different content")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": existing.ID, "account_id": existing.AccountID, "channel": existing.Channel, "external_reference": existing.ExternalReference, "amount_microcredits": existing.Amount, "status": existing.Status, "ledger_transaction_id": existing.LedgerTransactionID, "created_at": existing.CreatedAt, "credited_at": existing.CreditedAt})
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		internal(w)
 		return
 	}
 	tx, err := h.config.DB.BeginTxx(r.Context(), nil)
 	if err != nil {
-		internal(w)
+		internalError(w, err, "begin Charge transaction")
 		return
 	}
 	defer tx.Rollback()
+	if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "topup-id:"+body.ID); err != nil {
+		internal(w)
+		return
+	}
+	if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "topup-ref:"+body.Channel+":"+body.ExternalReference); err != nil {
+		internal(w)
+		return
+	}
+	err = tx.QueryRowxContext(r.Context(), `SELECT id,account_id,channel,external_reference,amount_microcredits,status,ledger_transaction_id,created_at,credited_at FROM topups WHERE id=$1`, body.ID).Scan(&existing.ID, &existing.AccountID, &existing.Channel, &existing.ExternalReference, &existing.Amount, &existing.Status, &existing.LedgerTransactionID, &existing.CreatedAt, &existing.CreditedAt)
+	if err == nil {
+		if existing.AccountID != accountID || existing.Channel != body.Channel || existing.ExternalReference != body.ExternalReference || existing.Amount != body.Amount {
+			errorJSON(w, http.StatusConflict, "resource_id_conflict", "Top-up ID already exists with different content")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": existing.ID, "account_id": existing.AccountID, "channel": existing.Channel, "external_reference": existing.ExternalReference, "amount_microcredits": existing.Amount, "status": existing.Status, "ledger_transaction_id": existing.LedgerTransactionID, "created_at": existing.CreatedAt, "credited_at": existing.CreditedAt})
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		internal(w)
+		return
+	}
 	var exists bool
 	if err = tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM topups WHERE channel=$1 AND external_reference=$2)`, body.Channel, body.ExternalReference); err != nil {
 		internal(w)
@@ -284,7 +432,7 @@ func (h *Handler) accountTopups(w http.ResponseWriter, r *http.Request, accountI
 		return
 	}
 	transactionID := "txn_" + uuid.NewString()
-	topupID := "topup_" + uuid.NewString()
+	topupID := body.ID
 	now := h.config.Now().UTC()
 	if _, err = tx.Exec(`INSERT INTO ledger_transactions(id,transaction_type,status,created_at) VALUES($1,'topup','pending',$2)`, transactionID, now); err != nil {
 		internal(w)
@@ -630,15 +778,36 @@ func (h *Handler) createSubscription(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 	var body struct {
+		ID           string `json:"id"`
 		AccountID    string `json:"account_id"`
 		TermsVersion string `json:"terms_version"`
 	}
-	if decode(r, &body) != nil {
+	if decode(r, &body) != nil || strings.TrimSpace(body.ID) == "" {
 		invalid(w)
 		return
 	}
 	if body.AccountID != accountID {
 		notFound(w)
+		return
+	}
+	var existing struct {
+		ID           string `db:"id"`
+		AccountID    string `db:"account_id"`
+		ProductID    string `db:"product_id"`
+		Status       string `db:"status"`
+		TermsVersion string `db:"terms_version"`
+	}
+	err := h.config.DB.GetContext(r.Context(), &existing, `SELECT id,account_id,product_id,status,terms_version FROM subscriptions WHERE id=$1`, body.ID)
+	if err == nil {
+		if existing.AccountID != body.AccountID || existing.ProductID != productID || existing.TermsVersion != body.TermsVersion {
+			errorJSON(w, http.StatusConflict, "resource_id_conflict", "Subscription ID already exists with different content")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": existing.ID, "account_id": existing.AccountID, "product_id": existing.ProductID, "status": existing.Status, "terms_version": existing.TermsVersion})
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		internal(w)
 		return
 	}
 	var terms string
@@ -654,11 +823,45 @@ func (h *Handler) createSubscription(w http.ResponseWriter, r *http.Request, pro
 		errorJSON(w, http.StatusConflict, "terms_version_mismatch", "Product terms must be accepted at their current version")
 		return
 	}
-	id := "sub_" + uuid.NewString()
+	var otherID string
+	err = h.config.DB.GetContext(r.Context(), &otherID, `SELECT id FROM subscriptions WHERE account_id=$1 AND product_id=$2`, accountID, productID)
+	if err == nil {
+		if otherID == body.ID {
+			if err = h.config.DB.GetContext(r.Context(), &existing, `SELECT id,account_id,product_id,status,terms_version FROM subscriptions WHERE id=$1`, body.ID); err != nil {
+				internal(w)
+				return
+			}
+			if existing.AccountID != body.AccountID || existing.ProductID != productID || existing.TermsVersion != body.TermsVersion {
+				errorJSON(w, http.StatusConflict, "resource_id_conflict", "Subscription ID already exists with different content")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"id": existing.ID, "account_id": existing.AccountID, "product_id": existing.ProductID, "status": existing.Status, "terms_version": existing.TermsVersion})
+			return
+		}
+		errorJSON(w, http.StatusConflict, "subscription_already_exists", "The account already has this subscription")
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		internal(w)
+		return
+	}
+	id := body.ID
 	now := h.config.Now().UTC()
-	_, err := h.config.DB.Exec(`INSERT INTO subscriptions(id,account_id,product_id,status,terms_version,accepted_at,created_at) VALUES($1,$2,$3,'active',$4,$5,$5)`, id, accountID, productID, body.TermsVersion, now)
+	result, err := h.config.DB.Exec(`INSERT INTO subscriptions(id,account_id,product_id,status,terms_version,accepted_at,created_at) VALUES($1,$2,$3,'active',$4,$5,$5) ON CONFLICT DO NOTHING`, id, accountID, productID, body.TermsVersion, now)
 	if err != nil {
 		internal(w)
+		return
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		if err = h.config.DB.GetContext(r.Context(), &existing, `SELECT id,account_id,product_id,status,terms_version FROM subscriptions WHERE id=$1`, body.ID); err == nil {
+			if existing.AccountID != body.AccountID || existing.ProductID != productID || existing.TermsVersion != body.TermsVersion {
+				errorJSON(w, http.StatusConflict, "resource_id_conflict", "Subscription ID already exists with different content")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"id": existing.ID, "account_id": existing.AccountID, "product_id": existing.ProductID, "status": existing.Status, "terms_version": existing.TermsVersion})
+			return
+		}
+		errorJSON(w, http.StatusConflict, "subscription_already_exists", "The account already has this subscription")
 		return
 	}
 	writeJSON(w, 201, map[string]any{"id": id, "account_id": accountID, "product_id": productID, "status": "active", "terms_version": body.TermsVersion})
@@ -731,9 +934,12 @@ func (h *Handler) subscriptionKeys(w http.ResponseWriter, r *http.Request, subsc
 			n, _ := result.RowsAffected()
 			if n == 0 {
 				var exists bool
-				_ = h.config.DB.Get(&exists, `SELECT EXISTS(SELECT 1 FROM subscription_keys WHERE id=$1 AND subscription_id=$2 AND status='revoked')`, keyID, subscriptionID)
+				if err = h.config.DB.Get(&exists, `SELECT EXISTS(SELECT 1 FROM subscription_keys WHERE id=$1 AND subscription_id=$2 AND status='revoked')`, keyID, subscriptionID); err != nil {
+					internal(w)
+					return
+				}
 				if exists {
-					errorJSON(w, 409, "subscription_key_already_revoked", "Subscription Key already revoked")
+					h.writeKey(w, keyID, subscriptionID)
 				} else {
 					notFound(w)
 				}
@@ -769,19 +975,57 @@ func (h *Handler) subscriptionKeys(w http.ResponseWriter, r *http.Request, subsc
 		notFound(w)
 		return
 	}
+	var body struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if decode(r, &body) != nil || strings.TrimSpace(body.ID) == "" || strings.TrimSpace(body.Name) == "" {
+		invalid(w)
+		return
+	}
+	var existing struct {
+		ID             string `db:"id"`
+		SubscriptionID string `db:"subscription_id"`
+		Name           string `db:"name"`
+	}
+	err := h.config.DB.GetContext(r.Context(), &existing, `SELECT id,subscription_id,name FROM subscription_keys WHERE id=$1`, body.ID)
+	if err == nil {
+		if existing.SubscriptionID != subscriptionID || existing.Name != body.Name {
+			errorJSON(w, http.StatusConflict, "resource_id_conflict", "Subscription Key ID already exists with different content")
+			return
+		}
+		h.writeKey(w, body.ID, subscriptionID)
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		internal(w)
+		return
+	}
 	random, err := randomToken(rand.Reader, 24)
 	if err != nil {
 		internal(w)
 		return
 	}
 	raw := "giz_sk_" + random
-	id := "key_" + uuid.NewString()
-	_, err = h.config.DB.Exec(`INSERT INTO subscription_keys(id,subscription_id,key,subscription_key_hmac,status,created_at) VALUES($1,$2,$3,$4,'active',$5)`, id, subscriptionID, raw, subscriptionkey.HMAC(h.config.HMACSecret, raw), h.config.Now().UTC())
+	id := body.ID
+	result, err := h.config.DB.Exec(`INSERT INTO subscription_keys(id,subscription_id,name,key,subscription_key_hmac,status,created_at) VALUES($1,$2,$3,$4,$5,'active',$6) ON CONFLICT DO NOTHING`, id, subscriptionID, body.Name, raw, subscriptionkey.HMAC(h.config.HMACSecret, raw), h.config.Now().UTC())
 	if err != nil {
 		internal(w)
 		return
 	}
-	writeJSON(w, 201, map[string]any{"id": id, "subscription_id": subscriptionID, "key": raw, "status": "active"})
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		if err = h.config.DB.GetContext(r.Context(), &existing, `SELECT id,subscription_id,name FROM subscription_keys WHERE id=$1`, body.ID); err != nil {
+			internal(w)
+			return
+		}
+		if existing.SubscriptionID != subscriptionID || existing.Name != body.Name {
+			errorJSON(w, http.StatusConflict, "resource_id_conflict", "Subscription Key ID already exists with different content")
+			return
+		}
+		h.writeKey(w, body.ID, subscriptionID)
+		return
+	}
+	writeJSON(w, 201, map[string]any{"id": id, "subscription_id": subscriptionID, "name": body.Name, "key": raw, "status": "active"})
 }
 
 func (h *Handler) writeKey(w http.ResponseWriter, id, subscriptionID string) {
@@ -796,16 +1040,18 @@ func (h *Handler) keyMap(id, subscriptionID string) (map[string]any, error) {
 	var row struct {
 		ID             string     `db:"id"`
 		SubscriptionID string     `db:"subscription_id"`
+		Name           string     `db:"name"`
 		Key            string     `db:"key"`
 		Status         string     `db:"status"`
 		CreatedAt      time.Time  `db:"created_at"`
+		LastUsedAt     *time.Time `db:"last_used_at"`
 		RevokedAt      *time.Time `db:"revoked_at"`
 	}
-	err := h.config.DB.Get(&row, `SELECT id,subscription_id,key,status,created_at,revoked_at FROM subscription_keys WHERE id=$1 AND subscription_id=$2`, id, subscriptionID)
+	err := h.config.DB.Get(&row, `SELECT id,subscription_id,name,key,status,created_at,last_used_at,revoked_at FROM subscription_keys WHERE id=$1 AND subscription_id=$2`, id, subscriptionID)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": row.ID, "subscription_id": row.SubscriptionID, "key": row.Key, "status": row.Status, "created_at": row.CreatedAt, "revoked_at": row.RevokedAt}, nil
+	return map[string]any{"id": row.ID, "subscription_id": row.SubscriptionID, "name": row.Name, "key": row.Key, "status": row.Status, "created_at": row.CreatedAt, "last_used_at": row.LastUsedAt, "revoked_at": row.RevokedAt}, nil
 }
 
 func (h *Handler) serveService(w http.ResponseWriter, r *http.Request) {
@@ -861,6 +1107,7 @@ func (h *Handler) creditCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var row struct {
+		SubscriptionKeyID  string `db:"subscription_key_id"`
 		AccountID          string `db:"account_id"`
 		SubscriptionID     string `db:"subscription_id"`
 		ProductID          string `db:"product_id"`
@@ -872,7 +1119,7 @@ func (h *Handler) creditCheck(w http.ResponseWriter, r *http.Request) {
 		ProductStatus      string `db:"product_status"`
 		Balance            int64  `db:"balance"`
 	}
-	err := h.config.DB.Get(&row, `SELECT s.account_id,s.id subscription_id,p.id product_id,p.billing_mode,u.identity_issuer owner_identity_issuer,u.identity_subject owner_identity_subject,k.status key_status,s.status subscription_status,p.status product_status,b.balance_microcredits balance FROM subscription_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN accounts a ON a.id=s.account_id JOIN users u ON u.id=a.owner_user_id JOIN account_balances b ON b.account_id=s.account_id WHERE k.subscription_key_hmac=$1`, body.SubscriptionKeyHMAC)
+	err := h.config.DB.Get(&row, `SELECT k.id subscription_key_id,s.account_id,s.id subscription_id,p.id product_id,p.billing_mode,u.identity_issuer owner_identity_issuer,u.identity_subject owner_identity_subject,k.status key_status,s.status subscription_status,p.status product_status,b.balance_microcredits balance FROM subscription_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN accounts a ON a.id=s.account_id JOIN users u ON u.id=a.owner_user_id JOIN account_balances b ON b.account_id=s.account_id WHERE k.subscription_key_hmac=$1`, body.SubscriptionKeyHMAC)
 	if err != nil || row.KeyStatus != "active" {
 		errorJSON(w, http.StatusUnauthorized, "invalid_subscription_key", "Subscription Key is unknown or revoked")
 		return
@@ -885,7 +1132,8 @@ func (h *Handler) creditCheck(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{
 		"status": "denied", "available_microcredits": available,
 		"account_id": row.AccountID, "subscription_id": row.SubscriptionID,
-		"product_id": row.ProductID, "billing_mode": row.BillingMode,
+		"subscription_key_id": row.SubscriptionKeyID,
+		"product_id":          row.ProductID, "billing_mode": row.BillingMode,
 		"owner_identity_issuer": row.OwnerIssuer, "owner_identity_subject": row.OwnerSubject,
 		"checked_at": h.config.Now().UTC(), "recheck_after_seconds": int64(h.config.RecheckInterval / time.Second),
 	}
@@ -969,8 +1217,8 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 		return
 	}
 	defer tx.Rollback()
-	var subscriptionID, payerAccountID, mainMerchantID, mainAccountID, mainMerchantStatus string
-	err = tx.QueryRowx(`SELECT s.id,s.account_id,m.id,m.settlement_account_id,m.status FROM subscription_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN merchants m ON m.id=p.merchant_id WHERE k.subscription_key_hmac=$1 AND (k.status='active' OR (k.status='revoked' AND $2 <= k.revoked_at)) FOR SHARE OF m`, body.SubscriptionKeyHMAC, body.Started).Scan(&subscriptionID, &payerAccountID, &mainMerchantID, &mainAccountID, &mainMerchantStatus)
+	var subscriptionKeyID, subscriptionID, payerAccountID, mainMerchantID, mainAccountID, mainMerchantStatus string
+	err = tx.QueryRowx(`SELECT k.id,s.id,s.account_id,m.id,m.settlement_account_id,m.status FROM subscription_keys k JOIN subscriptions s ON s.id=k.subscription_id JOIN products p ON p.id=s.product_id JOIN merchants m ON m.id=p.merchant_id WHERE k.subscription_key_hmac=$1 AND (k.status='active' OR (k.status='revoked' AND $2 <= k.revoked_at)) FOR SHARE OF m`, body.SubscriptionKeyHMAC, body.Started).Scan(&subscriptionKeyID, &subscriptionID, &payerAccountID, &mainMerchantID, &mainAccountID, &mainMerchantStatus)
 	if err != nil {
 		errorJSON(w, 404, "subscription_key_not_found", "Subscription Key not found")
 		return
@@ -980,7 +1228,7 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 		return
 	}
 	if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtext($1))`, payerAccountID); err != nil {
-		internal(w)
+		internalError(w, err, "lock Charge payer account")
 		return
 	}
 	resolved := make([]resolvedCommission, 0, len(body.Commissions))
@@ -1005,7 +1253,7 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 	snapshot, _ := json.Marshal(map[string]any{"order": json.RawMessage(body.Order), "service_started_at": body.Started, "service_completed_at": body.Completed, "main_merchant_id": mainMerchantID})
 	_, err = tx.Exec(`INSERT INTO ledger_transactions(id,transaction_type,status,created_at) VALUES($1,'payg_charge','pending',$2)`, transactionID, now)
 	if err != nil {
-		internal(w)
+		internalError(w, err, "insert Charge ledger transaction")
 		return
 	}
 	_, err = tx.Exec(`INSERT INTO payg_charges(id,external_order_id,subscription_id,service_principal_id,gross_microcredits,platform_fee_microcredits,main_merchant_net_microcredits,order_snapshot,ledger_transaction_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, chargeID, body.ExternalOrderID, subscriptionID, principalID, body.Gross, fee, mainNet, snapshot, transactionID, now)
@@ -1014,14 +1262,14 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 		if errors.As(err, &pqError) && pqError.Code == "23505" && pqError.Constraint == "payg_charges_external_order_id_key" {
 			errorJSON(w, 409, "duplicate_external_order_id", "external order ID already exists")
 		} else {
-			internal(w)
+			internalError(w, err, "insert Charge")
 		}
 		return
 	}
 	for _, c := range resolved {
 		_, err = tx.Exec(`INSERT INTO charge_commissions(charge_id,merchant_id,settlement_account_id,amount_microcredits) VALUES($1,$2,$3,$4)`, chargeID, c.MerchantID, c.Settlement, c.Amount)
 		if err != nil {
-			internal(w)
+			internalError(w, err, "insert Charge commission")
 			return
 		}
 	}
@@ -1030,51 +1278,55 @@ func (h *Handler) createCharge(w http.ResponseWriter, r *http.Request, principal
 		return
 	}
 	if err = h.postLedger(tx, transactionID, payerAccountID, mainAccountID, body.Gross, mainNet, fee, resolved); err != nil {
-		internal(w)
+		internalError(w, err, "post Charge ledger")
 		return
 	}
 	if _, err = tx.Exec(`UPDATE ledger_transactions SET status='posted' WHERE id=$1`, transactionID); err != nil {
-		internal(w)
+		internalError(w, err, "post Charge transaction")
+		return
+	}
+	if _, err = tx.Exec(`UPDATE subscription_keys SET last_used_at=CASE WHEN last_used_at IS NULL OR last_used_at < $1 THEN $1 ELSE last_used_at END WHERE id=$2`, body.Completed, subscriptionKeyID); err != nil {
+		internalError(w, err, "update Subscription Key last use")
 		return
 	}
 	var payerIssuer, payerSubject string
 	if err = tx.QueryRowx(`SELECT u.identity_issuer,u.identity_subject FROM accounts a JOIN users u ON u.id=a.owner_user_id WHERE a.id=$1`, payerAccountID).Scan(&payerIssuer, &payerSubject); err != nil {
-		internal(w)
+		internalError(w, err, "resolve Charge payer identity")
 		return
 	}
 	if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits-$1 WHERE account_id=$2`, body.Gross, payerAccountID); err != nil {
-		internal(w)
+		internalError(w, err, "update Charge payer balance projection")
 		return
 	}
 	if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits+$1 WHERE account_id=$2`, mainNet, mainAccountID); err != nil {
-		internal(w)
+		internalError(w, err, "update Charge merchant balance projection")
 		return
 	}
 	if _, err = tx.Exec(`INSERT INTO client_sync.transactions(id,account_id,owner_identity_issuer,owner_identity_subject,transaction_type,amount_microcredits,created_at) VALUES($1,$2,$3,$4,'payg_charge',$5,$6)`, transactionID, payerAccountID, payerIssuer, payerSubject, -body.Gross, now); err != nil {
-		internal(w)
+		internalError(w, err, "insert Charge transaction projection")
 		return
 	}
 	if _, err = tx.Exec(`INSERT INTO client_sync.charges(id,account_id,subscription_id,owner_identity_issuer,owner_identity_subject,external_order_id,gross_microcredits,order_snapshot,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, chargeID, payerAccountID, subscriptionID, payerIssuer, payerSubject, body.ExternalOrderID, body.Gross, snapshot, now); err != nil {
-		internal(w)
+		internalError(w, err, "insert Charge projection")
 		return
 	}
 	for _, commission := range resolved {
 		if _, err = tx.Exec(`UPDATE client_sync.account_balances SET balance_microcredits=balance_microcredits+$1 WHERE account_id=$2`, commission.Amount, commission.Settlement); err != nil {
-			internal(w)
+			internalError(w, err, "update commission balance projection")
 			return
 		}
 		var issuer, subject string
 		if err = tx.QueryRowx(`SELECT u.identity_issuer,u.identity_subject FROM accounts a JOIN users u ON u.id=a.owner_user_id WHERE a.id=$1`, commission.Settlement).Scan(&issuer, &subject); err != nil {
-			internal(w)
+			internalError(w, err, "resolve commission owner identity")
 			return
 		}
 		if _, err = tx.Exec(`INSERT INTO client_sync.commissions(id,merchant_id,charge_id,owner_identity_issuer,owner_identity_subject,amount_microcredits,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, chargeID+":"+commission.MerchantID, commission.MerchantID, chargeID, issuer, subject, commission.Amount, now); err != nil {
-			internal(w)
+			internalError(w, err, "insert commission projection")
 			return
 		}
 	}
 	if err = tx.Commit(); err != nil {
-		internal(w)
+		internalError(w, err, "commit Charge transaction")
 		return
 	}
 	response := map[string]any{"charge_id": chargeID, "external_order_id": body.ExternalOrderID, "gross_microcredits": body.Gross, "platform_fee_microcredits": fee, "main_merchant_net_microcredits": mainNet, "ledger_transaction_id": transactionID, "commissions": body.Commissions}
@@ -1305,5 +1557,10 @@ func errorJSON(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
 func internal(w http.ResponseWriter) { errorJSON(w, 500, "internal_error", "internal server error") }
+
+func internalError(w http.ResponseWriter, err error, operation string) {
+	slog.Error("GizPay internal operation failed", "operation", operation, "error", err)
+	internal(w)
+}
 func invalid(w http.ResponseWriter)  { errorJSON(w, 400, "invalid_request", "invalid request") }
 func notFound(w http.ResponseWriter) { errorJSON(w, 404, "not_found", "resource not found") }
