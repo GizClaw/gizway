@@ -40,6 +40,25 @@ The implemented Milestone 03 contract is represented by the OpenAPI documents,
 the current PostgreSQL schemas, and the API, SDK, PowerSync, and E2E acceptance
 tests listed above.
 
+## Database migration ownership
+
+Each Go image exposes a one-shot migration command which must complete before
+its matching long-running service starts:
+
+```sh
+gizpay --config=/config/gizpay.yaml --migrate-only
+gizway --config=/config/gizway-cn.yaml --migrate-only
+gizway --config=/config/gizway-global.yaml --migrate-only
+```
+
+GizPay migrates only its service schema and atomically ensures the fixed
+platform ledger principals. GizWay migrates only the selected regional service
+schema; the CN and Global invocations use independent configs and databases.
+The command never applies business Seed data. ZITADEL, PowerSync, and embedded
+Bifrost Config/Log Store schemas retain their own lifecycle; in particular,
+Bifrost schemas are still initialized when the long-running GizWay process
+opens those stores.
+
 ## Release ownership
 
 This repository owns three first-party `linux/amd64` production images:

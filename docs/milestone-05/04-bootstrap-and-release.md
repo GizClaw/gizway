@@ -31,3 +31,22 @@ Only then does the workflow create a GitHub Release with the deterministic
 accepts an existing Release only when its prerelease flag and manifest bytes
 match. `GizClaw/deploy` consumes this manifest, verifies signatures, and deploys
 by digest under separate authorization.
+
+For each empty service database, Deploy first runs the image's one-shot
+`--migrate-only` job and waits for exit code 0, then starts the same digest as a
+long-running service without `--initialize`. GizPay, CN GizWay, and Global
+GizWay each have their own job and database target. Jobs for the same
+database/schema serialize, and replay is a no-op. A failed transaction records
+no pending migration version and can be retried after correcting the cause;
+the service must remain stopped until that retry succeeds.
+
+GizPay's fixed platform ledger principals are committed in the migration
+transaction. Product, Product Listing, Service Principal, Provider, Model,
+price, Model Listing, Provider Key, Account, Subscription, Subscription Key,
+and Top-up resources are initialized later through the Admin/public APIs, not
+by SQL migration. Bifrost, ZITADEL, and PowerSync schema setup is outside this
+job.
+
+The application handoff version for this contract is `v0.2.0`. Creating its
+tag, publishing the signed Release, Terraform changes, and any Deploy Apply are
+separate post-merge authorizations.
