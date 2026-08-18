@@ -10,6 +10,7 @@ ACTIONLINT ?= actionlint
 	fmt fmt-go fmt-hurl fmt-module \
 	lint lint-go lint-actions \
 	verify-modules build \
+	build-images test-release-images \
 	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql \
 	test-unit-sdk test-unit-powersync test-unit-web test-e2e test-e2e-sdk test-e2e-powersync test-e2e-web
 
@@ -44,7 +45,9 @@ help:
 		'  test-e2e            run Milestone 03 Compose acceptance scenarios' \
 		'  test-e2e-sdk        run the official SDK compatibility matrix' \
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
-		'  test-e2e-web        run real Global/CN browser acceptance'
+		'  test-e2e-web        run real Global/CN browser acceptance' \
+		'  build-images        build three linux/amd64 production OCI layouts' \
+		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
 fmt: fmt-go fmt-hurl fmt-module
 
@@ -114,3 +117,12 @@ test-e2e-powersync:
 
 test-e2e-web:
 	@./tests/e2e/run-web.sh
+
+build-images:
+	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"
+
+test-release-images:
+	@./tests/release/tag-validation.sh
+	@./tests/release/publish-images.sh
+	@./scripts/release/verify-images.sh
+	@./tests/release/smoke.sh

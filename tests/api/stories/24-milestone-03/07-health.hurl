@@ -7,6 +7,8 @@ HTTP 200
 jsonpath "$.status" == "healthy"
 jsonpath "$.service" == "gizpay"
 jsonpath "$.version" exists
+jsonpath "$.revision" exists
+jsonpath "$.build_time" exists
 jsonpath "$.server_time" isIsoDate
 body not contains "degraded"
 body not contains "dependencies"
@@ -19,6 +21,8 @@ HTTP 200
 jsonpath "$.status" == "healthy"
 jsonpath "$.service" == "gizway"
 jsonpath "$.version" exists
+jsonpath "$.revision" exists
+jsonpath "$.build_time" exists
 jsonpath "$.server_time" isIsoDate
 body not contains "degraded"
 body not contains "dependencies"
