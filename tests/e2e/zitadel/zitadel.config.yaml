@@ -8,9 +8,10 @@ ExternalSecure: false
 TLS:
   Enabled: false
 
-# The isolated E2E network uses Docker Desktop's 192.168/16 bridge. Keep the
-# production SSRF deny-list shape, but permit that one test-only network so an
-# Actions V2 target can call the in-stack GizPay webhook.
+# The isolated E2E network uses a private Docker bridge: Docker Desktop commonly
+# allocates 192.168/16 while Linux runners commonly allocate 172.16/12. Keep the
+# production SSRF deny-list shape, but permit those test-only bridge ranges so
+# an Actions V2 target can call the in-stack GizPay webhook.
 HTTPClient:
   DenyList:
     - localhost
@@ -19,7 +20,6 @@ HTTPClient:
     - "100.64.0.0/10"
     - "127.0.0.0/8"
     - "169.254.0.0/16"
-    - "172.16.0.0/12"
     - "198.18.0.0/15"
     - "::/128"
     - "::1/128"
