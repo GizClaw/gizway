@@ -122,7 +122,7 @@ jobs:
           printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
             (cd "$RUNNER_TEMP" && sha256sum --check --strict)
           sudo apt-get update
-          sudo apt-get install --yes "$RUNNER_TEMP/$hurl_asset"
+          sudo apt-get install --yes ripgrep "$RUNNER_TEMP/$hurl_asset"
           hurl --version
 
       - name: Set up Node 22.22.1
