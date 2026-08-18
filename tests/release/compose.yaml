@@ -28,20 +28,34 @@ services:
       POSTGRES_DB: gizway
     volumes: [postgres-gizway:/var/lib/postgresql/data]
 
-  gizpay:
+  gizpay-migrate:
     image: ${GIZPAY_IMAGE:?set GIZPAY_IMAGE}
     depends_on:
       postgres-gizpay: {condition: service_healthy}
     volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
-    command: [--config=/release-fixtures/gizpay.yaml, --initialize]
+    command: ["--config=${GIZPAY_MIGRATION_CONFIG:-/release-fixtures/gizpay-migrate.yaml}", --migrate-only]
+
+  gizway-migrate:
+    image: ${GIZWAY_IMAGE:?set GIZWAY_IMAGE}
+    depends_on:
+      postgres-gizway: {condition: service_healthy}
+    volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
+    command: [--config=/release-fixtures/gizway-migrate.yaml, --migrate-only]
+
+  gizpay:
+    image: ${GIZPAY_IMAGE:?set GIZPAY_IMAGE}
+    depends_on:
+      gizpay-migrate: {condition: service_completed_successfully}
+    volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
+    command: [--config=/release-fixtures/gizpay.yaml]
     ports: [127.0.0.1::8081]
 
   gizway:
     image: ${GIZWAY_IMAGE:?set GIZWAY_IMAGE}
     depends_on:
-      postgres-gizway: {condition: service_healthy}
+      gizway-migrate: {condition: service_completed_successfully}
     volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
-    command: [--config=/release-fixtures/gizway.yaml, --initialize]
+    command: [--config=/release-fixtures/gizway.yaml]
     ports: [127.0.0.1::8080]
 
   web:

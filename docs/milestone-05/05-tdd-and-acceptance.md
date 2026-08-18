@@ -3,7 +3,7 @@
 Local release validation uses:
 
 ```sh
-RELEASE_VERSION=v0.1.0 make build-images
+RELEASE_VERSION=v0.2.0 make build-images
 make test-release-images
 ```
 
@@ -16,7 +16,16 @@ all three health contracts, verifies runtime users and absent development tools,
 tests a failing configuration, sends SIGTERM, and removes containers, networks,
 volumes and credentials on every exit path.
 
-The first real tag additionally requires evidence that:
+The API and release Compose projects additionally require successful GizPay,
+CN GizWay, and Global GizWay migration jobs before their long-running services
+start. The harness reruns every job and compares migration timestamps and
+GizPay fixed rows to prove exact replay/no-op behavior. Runtime container
+commands are inspected to ensure `--initialize` is absent. Focused PostgreSQL
+tests cover concurrent serialization, rollback/retry, schema ownership,
+gapped/newer history, conflicting fixed rows, Bifrost exclusion, and connection
+cleanup.
+
+The `v0.2.0` tag additionally requires evidence that:
 
 1. all three GHCR packages are Public and anonymously pullable by digest with an
    empty Docker credential configuration;

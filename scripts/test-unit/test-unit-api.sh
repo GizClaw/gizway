@@ -44,8 +44,49 @@ else
     bootstrap_id=""
 fi
 
+migrations_ready=true
+for migration in gizpay-migrate gizway-cn-migrate gizway-global-migrate; do
+    migration_id="$(docker compose --project-name "${project}" -f "${compose}" ps --all --quiet "${migration}")"
+    if [ -z "${migration_id}" ] || ! docker wait "${migration_id}" >/dev/null \
+       || [ "$(docker inspect --format '{{.State.ExitCode}}' "${migration_id}")" -ne 0 ]; then
+        migrations_ready=false
+        printf '%s\tFAIL\n' "${migration}" >>"${results}"
+    else
+        printf '%s\tPASS\n' "${migration}" >>"${results}"
+    fi
+done
+
+migration_replay=false
+if [ "${migrations_ready}" = true ]; then
+    gizpay_before="$(docker compose --project-name "${project}" -f "${compose}" exec -T postgres-gizpay \
+        psql -At -U postgres -d gizpay -c "SELECT service,version,applied_at FROM schema_migrations ORDER BY service,version; SELECT id,identity_issuer,identity_subject,email,display_name,status FROM users WHERE id='usr_platform'; SELECT id,owner_user_id,status FROM accounts WHERE id='acct_platform'; SELECT id,coalesce(owner_account_id,''),asset_code,status FROM ledger_accounts WHERE id IN ('led_acct_platform','led_clearing') ORDER BY id")"
+    cn_before="$(docker compose --project-name "${project}" -f "${compose}" exec -T postgres-cn \
+        psql -At -U postgres -d gizway -c 'SELECT service,version,applied_at FROM gizway.schema_migrations ORDER BY service,version')"
+    global_before="$(docker compose --project-name "${project}" -f "${compose}" exec -T postgres-global \
+        psql -At -U postgres -d gizway -c 'SELECT service,version,applied_at FROM gizway.schema_migrations ORDER BY service,version')"
+
+    if docker compose --project-name "${project}" -f "${compose}" run --rm --no-deps gizpay-migrate \
+       && docker compose --project-name "${project}" -f "${compose}" run --rm --no-deps gizway-cn-migrate \
+       && docker compose --project-name "${project}" -f "${compose}" run --rm --no-deps gizway-global-migrate; then
+        gizpay_after="$(docker compose --project-name "${project}" -f "${compose}" exec -T postgres-gizpay \
+            psql -At -U postgres -d gizpay -c "SELECT service,version,applied_at FROM schema_migrations ORDER BY service,version; SELECT id,identity_issuer,identity_subject,email,display_name,status FROM users WHERE id='usr_platform'; SELECT id,owner_user_id,status FROM accounts WHERE id='acct_platform'; SELECT id,coalesce(owner_account_id,''),asset_code,status FROM ledger_accounts WHERE id IN ('led_acct_platform','led_clearing') ORDER BY id")"
+        cn_after="$(docker compose --project-name "${project}" -f "${compose}" exec -T postgres-cn \
+            psql -At -U postgres -d gizway -c 'SELECT service,version,applied_at FROM gizway.schema_migrations ORDER BY service,version')"
+        global_after="$(docker compose --project-name "${project}" -f "${compose}" exec -T postgres-global \
+            psql -At -U postgres -d gizway -c 'SELECT service,version,applied_at FROM gizway.schema_migrations ORDER BY service,version')"
+        if [ "${gizpay_before}" = "${gizpay_after}" ] && [ "${cn_before}" = "${cn_after}" ] && [ "${global_before}" = "${global_after}" ]; then
+            migration_replay=true
+        fi
+    fi
+fi
+if [ "${migration_replay}" = true ]; then
+    printf 'migration-replay\tPASS\n' >>"${results}"
+else
+    printf 'migration-replay\tFAIL\n' >>"${results}"
+fi
+
 stack_ready=false
-if [ -n "${bootstrap_id}" ] && docker wait "${bootstrap_id}" >/dev/null \
+if [ "${migrations_ready}" = true ] && [ -n "${bootstrap_id}" ] && docker wait "${bootstrap_id}" >/dev/null \
    && [ "$(docker inspect --format '{{.State.ExitCode}}' "${bootstrap_id}")" -eq 0 ]; then
     stack_ready=true
 fi
@@ -91,7 +132,7 @@ if [ "${stack_ready}" != true ]; then
 fi
 cat "${results}"
 if grep -Eq 'PARSE_FAIL|[[:space:]]FAIL$' "${results}"; then
-	docker compose --project-name "${project}" -f "${compose}" logs --tail 200 --no-log-prefix gizpay gizway-cn gizway-global credit-spy oauth-spy bootstrap-milestone-03 || true
+	docker compose --project-name "${project}" -f "${compose}" logs --tail 200 --no-log-prefix gizpay-migrate gizway-cn-migrate gizway-global-migrate gizpay gizway-cn gizway-global credit-spy oauth-spy bootstrap-milestone-03 || true
     docker compose --project-name "${project}" -f "${compose}" exec -T oauth-spy curl --fail --silent http://localhost:19500/test/stats || true
     exit 1
 fi

@@ -15,10 +15,12 @@ export WEB_IMAGE="ghcr.io/idy/gizway-web:$version"
 RELEASE_FIXTURES_DIR="$(mktemp -d)"
 export RELEASE_FIXTURES_DIR
 project="gizway-release-$RANDOM-$$"
+failure_project="${project}-failure"
 registry_container="${project}-registry"
 
 cleanup() {
   docker compose --project-name "$project" --file "$compose" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker compose --project-name "$failure_project" --file "$compose" down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker rm --force "$registry_container" >/dev/null 2>&1 || true
   rm -rf "$RELEASE_FIXTURES_DIR"
 }
@@ -48,10 +50,29 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$RELEASE_FIXT
 chmod 600 "$RELEASE_FIXTURES_DIR/machine.pem"
 printf '%s\n' 'release-smoke-hmac-secret' >"$RELEASE_FIXTURES_DIR/hmac"
 printf '%s\n' 'release-smoke-action-signing-key' >"$RELEASE_FIXTURES_DIR/action-key"
+printf '%s\n' 'release-smoke-admin-key' >"$RELEASE_FIXTURES_DIR/admin-key"
+
+printf '%s\n' \
+  'version: 1' \
+  'admin:' '  initial_key_file: /missing/admin-key' \
+  'database:' '  dsn: postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable' '  schema: public' \
+  'subscription_keys:' '  hmac:' '    secret_file: /missing/hmac' >"$RELEASE_FIXTURES_DIR/gizpay-migrate.yaml"
+
+printf '%s\n' \
+  'version: 1' \
+  'database:' '  dsn: postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable' '  schema: Invalid-Schema' \
+  >"$RELEASE_FIXTURES_DIR/gizpay-migrate-failure.yaml"
+
+printf '%s\n' \
+  'version: 1' \
+  'admin:' '  initial_key_file: /missing/admin-key' \
+  'database:' '  dsn: postgres://postgres:postgres@postgres-gizway:5432/gizway?sslmode=disable' '  schema: gizway' \
+  'authentication:' '  service_account:' '    private_key_file: /missing/machine.pem' >"$RELEASE_FIXTURES_DIR/gizway-migrate.yaml"
 
 printf '%s\n' \
   'version: 1' \
   'server:' '  name: gizpay.release.test' '  listen_address: 0.0.0.0:8081' '  shutdown_timeout: 5s' \
+  'admin:' '  initial_key_file: /release-fixtures/admin-key' \
   'database:' '  dsn: postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable' '  schema: public' \
   'authentication:' '  zitadel:' '    issuer: https://identity.release.test' '    jwks_url: https://identity.release.test/oauth/v2/keys' \
   '    human_audience: human' '    service_audience: service' '    management_client:' '      token_url: https://identity.release.test/oauth/v2/token' \
@@ -62,6 +83,7 @@ printf '%s\n' \
 printf '%s\n' \
   'version: 1' \
   'server:' '  name: gizway.release.test' '  listen_address: 0.0.0.0:8080' '  shutdown_timeout: 5s' \
+  'admin:' '  initial_key_file: /release-fixtures/admin-key' \
   'database:' '  dsn: postgres://postgres:postgres@postgres-gizway:5432/gizway?sslmode=disable' '  schema: gizway' \
   'authentication:' '  zitadel:' '    issuer: https://identity.release.test' '    jwks_url: https://identity.release.test/oauth/v2/keys' '    human_audience: human' \
   '  service_account:' '    token_url: https://identity.release.test/oauth/v2/token' '    subject: smoke' '    key_id: smoke' \
@@ -74,7 +96,60 @@ printf '%s\n' \
 chmod 755 "$RELEASE_FIXTURES_DIR"
 chmod 644 "$RELEASE_FIXTURES_DIR"/*
 
+if GIZPAY_MIGRATION_CONFIG=/release-fixtures/gizpay-migrate-failure.yaml \
+   docker compose --project-name "$failure_project" --file "$compose" up --detach gizpay; then
+  printf 'gizpay unexpectedly started after a failed migration\n' >&2
+  exit 1
+fi
+if [[ -n "$(docker compose --project-name "$failure_project" --file "$compose" ps --status running --quiet gizpay)" ]]; then
+  printf 'gizpay is running after its migration failed\n' >&2
+  exit 1
+fi
+docker compose --project-name "$failure_project" --file "$compose" up --detach gizpay
+retry_migration_container="$(docker compose --project-name "$failure_project" --file "$compose" ps --all --quiet gizpay-migrate)"
+docker wait "$retry_migration_container" >/dev/null
+[[ "$(docker inspect --format '{{.State.ExitCode}}' "$retry_migration_container")" == 0 ]]
+retry_gizpay_container="$(docker compose --project-name "$failure_project" --file "$compose" ps --quiet gizpay)"
+[[ -n "$retry_gizpay_container" ]]
+[[ "$(docker inspect --format '{{.State.Running}}' "$retry_gizpay_container")" == true ]]
+docker compose --project-name "$failure_project" --file "$compose" down --volumes --remove-orphans >/dev/null
+
 docker compose --project-name "$project" --file "$compose" up --detach
+
+for migration in gizpay-migrate gizway-migrate; do
+  migration_container="$(docker compose --project-name "$project" --file "$compose" ps --all --quiet "$migration")"
+  [[ -n "$migration_container" ]]
+  docker wait "$migration_container" >/dev/null
+  [[ "$(docker inspect --format '{{.State.ExitCode}}' "$migration_container")" == 0 ]]
+done
+
+gizpay_migration_before="$(docker compose --project-name "$project" --file "$compose" exec -T postgres-gizpay \
+  psql -At -U postgres -d gizpay -c "SELECT service,version,applied_at FROM schema_migrations ORDER BY service,version; SELECT id,identity_issuer,identity_subject,email,display_name,status FROM users WHERE id='usr_platform'; SELECT id,owner_user_id,status FROM accounts WHERE id='acct_platform'; SELECT id,coalesce(owner_account_id,''),asset_code,status FROM ledger_accounts WHERE id IN ('led_acct_platform','led_clearing') ORDER BY id")"
+gizway_migration_before="$(docker compose --project-name "$project" --file "$compose" exec -T postgres-gizway \
+  psql -At -U postgres -d gizway -c 'SELECT service,version,applied_at FROM gizway.schema_migrations ORDER BY service,version')"
+
+docker compose --project-name "$project" --file "$compose" run --rm --no-deps gizpay-migrate
+docker compose --project-name "$project" --file "$compose" run --rm --no-deps gizway-migrate
+
+gizpay_migration_after="$(docker compose --project-name "$project" --file "$compose" exec -T postgres-gizpay \
+  psql -At -U postgres -d gizpay -c "SELECT service,version,applied_at FROM schema_migrations ORDER BY service,version; SELECT id,identity_issuer,identity_subject,email,display_name,status FROM users WHERE id='usr_platform'; SELECT id,owner_user_id,status FROM accounts WHERE id='acct_platform'; SELECT id,coalesce(owner_account_id,''),asset_code,status FROM ledger_accounts WHERE id IN ('led_acct_platform','led_clearing') ORDER BY id")"
+gizway_migration_after="$(docker compose --project-name "$project" --file "$compose" exec -T postgres-gizway \
+  psql -At -U postgres -d gizway -c 'SELECT service,version,applied_at FROM gizway.schema_migrations ORDER BY service,version')"
+[[ "$gizpay_migration_before" == "$gizpay_migration_after" ]]
+[[ "$gizway_migration_before" == "$gizway_migration_after" ]]
+
+gizpay_help="$(docker run --rm "$GIZPAY_IMAGE" --help 2>&1 || true)"
+gizway_help="$(docker run --rm "$GIZWAY_IMAGE" --help 2>&1 || true)"
+grep -q -- 'migrate-only' <<<"$gizpay_help"
+grep -q -- 'migrate-only' <<<"$gizway_help"
+
+for service in gizpay gizway; do
+  service_container="$(docker compose --project-name "$project" --file "$compose" ps --quiet "$service")"
+  if docker inspect --format '{{json .Config.Cmd}}' "$service_container" | grep -q -- '--initialize'; then
+    printf '%s runtime command unexpectedly contains --initialize\n' "$service" >&2
+    exit 1
+  fi
+done
 
 assert_health() {
   local service="$1" port="$2" expected="$3" host_port body
