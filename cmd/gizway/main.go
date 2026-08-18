@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -22,6 +23,7 @@ func run(args []string) error {
 	serverName := flags.String("server-name", "", "override server.name")
 	check := flags.Bool("check-config", false, "validate configuration and exit")
 	initialize := flags.Bool("initialize", false, "initialize an empty database")
+	migrateOnly := flags.Bool("migrate-only", false, "apply service schema migrations and exit")
 	printEffective := flags.String("print-effective-config", "", "print redacted effective configuration")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -32,6 +34,16 @@ func run(args []string) error {
 			initializeSet = true
 		}
 	})
+	if *migrateOnly && (initializeSet || *check || *printEffective != "") {
+		return errors.New("--migrate-only cannot be combined with --initialize, --check-config, or --print-effective-config")
+	}
+	if *migrateOnly {
+		config, err := app.LoadMigrationConfig(*configPath)
+		if err != nil {
+			return err
+		}
+		return app.RunMigrations(config, app.ProcessGizWay)
+	}
 	config, err := app.LoadProcessConfig(*configPath, app.ProcessGizWay)
 	if err != nil {
 		return err

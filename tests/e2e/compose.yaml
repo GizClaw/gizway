@@ -227,17 +227,41 @@ services:
       timeout: 3s
       retries: 60
 
-  gizpay:
+  gizpay-migrate:
     <<: *app
     depends_on:
       postgres-gizpay: {condition: service_healthy}
+    volumes:
+      - ./config/gizpay.yaml:/config/gizpay.yaml:ro
+    command: [gizpay, --config=/config/gizpay.yaml, --migrate-only]
+
+  gizway-cn-migrate:
+    <<: *app
+    depends_on:
+      postgres-cn: {condition: service_healthy}
+    volumes:
+      - ./config/gizway-cn.yaml:/config/gizway-cn.yaml:ro
+    command: [gizway, --config=/config/gizway-cn.yaml, --migrate-only]
+
+  gizway-global-migrate:
+    <<: *app
+    depends_on:
+      postgres-global: {condition: service_healthy}
+    volumes:
+      - ./config/gizway-global.yaml:/config/gizway-global.yaml:ro
+    command: [gizway, --config=/config/gizway-global.yaml, --migrate-only]
+
+  gizpay:
+    <<: *app
+    depends_on:
+      gizpay-migrate: {condition: service_completed_successfully}
       zitadel-bootstrap: {condition: service_completed_successfully}
       oauth-spy: {condition: service_started}
     volumes:
       - ./config/gizpay.yaml:/config/gizpay.yaml:ro
       - ./secrets:/secrets:ro
       - fixtures:/fixtures:ro
-    command: [gizpay, --config=/config/gizpay.yaml, --initialize]
+    command: [gizpay, --config=/config/gizpay.yaml]
     ports: ["127.0.0.1::8081"]
     healthcheck:
       test: [CMD-SHELL, curl --fail --silent http://localhost:8081/healthz]
@@ -276,7 +300,7 @@ services:
   gizway-cn:
     <<: *app
     depends_on:
-      postgres-cn: {condition: service_healthy}
+      gizway-cn-migrate: {condition: service_completed_successfully}
       fake-provider-cn: {condition: service_healthy}
       toxiproxy-init: {condition: service_completed_successfully}
       oauth-spy: {condition: service_started}
@@ -285,7 +309,7 @@ services:
       - fixtures:/config:ro
       - ./secrets:/secrets:ro
       - fixtures:/fixtures:ro
-    command: [gizway, --config=/config/gizway-cn.yaml, --initialize]
+    command: [gizway, --config=/config/gizway-cn.yaml]
     ports: ["127.0.0.1::8080"]
     healthcheck:
       test: [CMD-SHELL, curl --fail --silent http://localhost:8080/healthz]
@@ -296,7 +320,7 @@ services:
   gizway-global:
     <<: *app
     depends_on:
-      postgres-global: {condition: service_healthy}
+      gizway-global-migrate: {condition: service_completed_successfully}
       fake-provider-global: {condition: service_healthy}
       toxiproxy-init: {condition: service_completed_successfully}
       oauth-spy: {condition: service_started}
@@ -305,7 +329,7 @@ services:
       - fixtures:/config:ro
       - ./secrets:/secrets:ro
       - fixtures:/fixtures:ro
-    command: [gizway, --config=/config/gizway-global.yaml, --initialize]
+    command: [gizway, --config=/config/gizway-global.yaml]
     ports: ["127.0.0.1::8080"]
     healthcheck:
       test: [CMD-SHELL, curl --fail --silent http://localhost:8080/healthz]
