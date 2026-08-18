@@ -118,7 +118,14 @@ services:
     image: busybox:1.37.0
     user: "0:0"
     volumes: [fixtures:/fixtures]
-    command: [sh, -ec, "chown 1000:1000 /fixtures && chmod 700 /fixtures"]
+    command:
+      - sh
+      - -ec
+      - >-
+        umask 077;
+        head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' > /fixtures/admin-key;
+        chown -R 1000:1000 /fixtures;
+        chmod 700 /fixtures
 
   zitadel:
     image: ghcr.io/zitadel/zitadel:v4.16.2

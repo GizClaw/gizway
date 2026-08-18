@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +40,43 @@ func TestAdminProductPostgreSQLIdempotencyDependencyAndSoftDelete(t *testing.T) 
 		if recorder.Code != want {
 			t.Fatalf("create pass %d status=%d body=%s", index+1, recorder.Code, recorder.Body.String())
 		}
+	}
+	concurrentCreate := strings.Replace(create, "admin-product", "admin-product-concurrent", 1)
+	codes := make([]int, 2)
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for index := range codes {
+		group.Go(func() {
+			<-start
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request(http.MethodPost, "/admin/v1/products", concurrentCreate))
+			codes[index] = recorder.Code
+		})
+	}
+	close(start)
+	group.Wait()
+	sort.Ints(codes)
+	if codes[0] != http.StatusOK || codes[1] != http.StatusCreated {
+		t.Fatalf("concurrent equivalent create statuses=%v", codes)
+	}
+	conflictingCreates := []string{
+		strings.Replace(create, `"admin-product"`, `"admin-product-conflict"`, 1),
+		strings.Replace(strings.Replace(create, `"admin-product"`, `"admin-product-conflict"`, 1), `"Product"`, `"Different Product"`, 1),
+	}
+	start = make(chan struct{})
+	for index := range codes {
+		group.Go(func() {
+			<-start
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request(http.MethodPost, "/admin/v1/products", conflictingCreates[index]))
+			codes[index] = recorder.Code
+		})
+	}
+	close(start)
+	group.Wait()
+	sort.Ints(codes)
+	if codes[0] != http.StatusCreated || codes[1] != http.StatusConflict {
+		t.Fatalf("concurrent conflicting create statuses=%v", codes)
 	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request(http.MethodPost, "/admin/v1/products", strings.Replace(create, "admin-merchant", "missing-merchant", 1)))

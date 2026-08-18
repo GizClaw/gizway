@@ -85,14 +85,6 @@ func bootstrapZITADEL(options options) error {
 	if options.zitadelURL == "" || options.outputDirectory == "" {
 		return errors.New("zitadel-url and output-directory are required")
 	}
-	adminKey := make([]byte, 32)
-	if _, err := rand.Read(adminKey); err != nil {
-		return fmt.Errorf("generate Admin Key: %w", err)
-	}
-	encodedAdminKey := base64.RawURLEncoding.EncodeToString(adminKey)
-	if err := os.WriteFile(filepath.Join(options.outputDirectory, "admin-key"), []byte(encodedAdminKey), 0600); err != nil {
-		return fmt.Errorf("write Admin Key: %w", err)
-	}
 	bootstrapKeyPath := filepath.Join(options.outputDirectory, "zitadel-bootstrap-machine.json")
 	var bootstrapKey machineKey
 	var err error

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -161,6 +162,10 @@ func (h *Handler) adminProviders(w http.ResponseWriter, r *http.Request) {
 		return tx.Exec(`INSERT INTO client_sync.providers(id,name,kind,status) VALUES(?,?,?,?)`, body.ID, body.Name, body.Kind, body.Status).Error
 	})
 	if err != nil {
+		if existing, getErr := h.stores.Provider(r.Context(), body.ID); getErr == nil && existing.Name == body.Name && existing.Kind == body.Kind && existing.BaseURL == body.BaseURL && existing.Status == body.Status {
+			writeJSON(w, http.StatusOK, providerResponse(existing))
+			return
+		}
 		adminConflict(w)
 		return
 	}
@@ -265,6 +270,10 @@ func (h *Handler) adminModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err = h.config.DB.ExecContext(r.Context(), `INSERT INTO client_sync.models(id,provider_id,name,provider_model,status) VALUES($1,$2,$3,$4,$5)`, body.ID, body.ProviderID, body.Name, body.ProviderModel, body.Status); err != nil {
+		if existing, getErr := h.adminModel(r, body.ID); getErr == nil && existing == body {
+			writeJSON(w, http.StatusOK, existing)
+			return
+		}
 		adminConflict(w)
 		return
 	}
@@ -355,6 +364,18 @@ func (h *Handler) adminModelCustomerPrices(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer tx.Rollback()
+	if _, err = tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "admin-model-prices:"+modelID); err != nil {
+		internal(w)
+		return
+	}
+	var lockedModelID string
+	if err = tx.GetContext(r.Context(), &lockedModelID, `SELECT id FROM client_sync.models WHERE id=$1`, modelID); errors.Is(err, sql.ErrNoRows) {
+		notFound(w)
+		return
+	} else if err != nil {
+		internal(w)
+		return
+	}
 	if _, err = tx.ExecContext(r.Context(), `DELETE FROM model_customer_prices WHERE model_id=$1`, modelID); err != nil {
 		internal(w)
 		return
@@ -369,11 +390,8 @@ func (h *Handler) adminModelCustomerPrices(w http.ResponseWriter, r *http.Reques
 		internal(w)
 		return
 	}
-	prices, err := h.adminCustomerPrices(r, modelID)
-	if err != nil {
-		internal(w)
-		return
-	}
+	prices := slices.Clone(body.Prices)
+	sort.Slice(prices, func(left, right int) bool { return prices[left].Metric < prices[right].Metric })
 	writeJSON(w, http.StatusOK, map[string]any{"prices": prices})
 }
 
@@ -434,6 +452,10 @@ func (h *Handler) adminModelListings(w http.ResponseWriter, r *http.Request) {
 	}
 	now := h.config.Now().UTC()
 	if _, err = h.config.DB.ExecContext(r.Context(), `INSERT INTO model_listings(id,model_id,title,description,family,context,latency,accent,featured,display_order,availability,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`, body.ID, body.ModelID, body.Title, body.Description, body.Family, body.Context, body.Latency, body.Accent, body.Featured, body.DisplayOrder, body.Availability, now); err != nil {
+		if existing, getErr := h.adminModelListing(r, body.ID); getErr == nil && sameAdminModelListing(existing, body) {
+			writeJSON(w, http.StatusOK, existing)
+			return
+		}
 		adminConflict(w)
 		return
 	}
@@ -563,7 +585,7 @@ func (h *Handler) adminProviderKeys(w http.ResponseWriter, r *http.Request) {
 	existingKey, err := h.adminProviderKeyWithSecret(r, body.ID)
 	if err == nil {
 		prices, priceErr := h.adminProviderKeyPriceList(r, body.ID)
-		if priceErr != nil || existingKey.ProviderID != body.ProviderID || existingKey.OwnerIdentityIssuer != body.OwnerIdentityIssuer || existingKey.OwnerIdentitySubject != body.OwnerIdentitySubject || existingKey.MerchantID != body.MerchantID || existingKey.Name != body.Name || existingKey.Status != body.Status || existingKey.Key != body.Key || !samePrices(prices, body.Prices) {
+		if priceErr != nil || !sameAdminProviderKey(existingKey, body.ProviderID, body.OwnerIdentityIssuer, body.OwnerIdentitySubject, body.MerchantID, body.Name, body.Key, body.Status, prices, body.Prices) {
 			adminConflict(w)
 			return
 		}
@@ -609,10 +631,21 @@ func (h *Handler) adminProviderKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if existing, getErr := h.adminProviderKeyWithSecret(r, body.ID); getErr == nil {
+			prices, priceErr := h.adminProviderKeyPriceList(r, body.ID)
+			if priceErr == nil && sameAdminProviderKey(existing, body.ProviderID, body.OwnerIdentityIssuer, body.OwnerIdentitySubject, body.MerchantID, body.Name, body.Key, body.Status, prices, body.Prices) {
+				writeJSON(w, http.StatusOK, existing.response())
+				return
+			}
+		}
 		adminConflict(w)
 		return
 	}
 	writeJSON(w, http.StatusCreated, adminProviderKey{ID: body.ID, ProviderID: body.ProviderID, OwnerIdentityIssuer: body.OwnerIdentityIssuer, OwnerIdentitySubject: body.OwnerIdentitySubject, MerchantID: body.MerchantID, Name: body.Name, Status: body.Status, SecretConfigured: true, CreatedAt: now, UpdatedAt: now})
+}
+
+func sameAdminProviderKey(key adminProviderKeySecret, providerID, ownerIssuer, ownerSubject, merchantID, name, secret, status string, existingPrices, requestedPrices []keyPrice) bool {
+	return key.ProviderID == providerID && key.OwnerIdentityIssuer == ownerIssuer && key.OwnerIdentitySubject == ownerSubject && key.MerchantID == merchantID && key.Name == name && key.Key == secret && key.Status == status && samePrices(existingPrices, requestedPrices)
 }
 
 type adminProviderKeySecret struct {
@@ -767,6 +800,18 @@ func (h *Handler) adminProviderKeyPrices(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	defer tx.Rollback()
+	if _, err = tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "admin-provider-key-prices:"+id); err != nil {
+		internal(w)
+		return
+	}
+	var lockedKeyID string
+	if err = tx.GetContext(r.Context(), &lockedKeyID, `SELECT id FROM client_sync.provider_keys WHERE id=$1`, id); errors.Is(err, sql.ErrNoRows) {
+		notFound(w)
+		return
+	} else if err != nil {
+		internal(w)
+		return
+	}
 	for _, price := range body.Prices {
 		var count int
 		if err = tx.GetContext(r.Context(), &count, `SELECT count(*) FROM client_sync.models WHERE id=$1 AND provider_id=$2 AND status='active'`, price.ModelID, key.ProviderID); err != nil {
@@ -797,11 +842,13 @@ func (h *Handler) adminProviderKeyPrices(w http.ResponseWriter, r *http.Request,
 		internal(w)
 		return
 	}
-	prices, err := h.adminProviderKeyPriceList(r, id)
-	if err != nil {
-		internal(w)
-		return
-	}
+	prices := slices.Clone(body.Prices)
+	sort.Slice(prices, func(left, right int) bool {
+		if prices[left].ModelID == prices[right].ModelID {
+			return prices[left].Metric < prices[right].Metric
+		}
+		return prices[left].ModelID < prices[right].ModelID
+	})
 	writeJSON(w, http.StatusOK, map[string]any{"prices": prices})
 }
 

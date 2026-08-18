@@ -111,7 +111,7 @@ func (h *Handler) adminProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	existing, err := h.adminProduct(r, body.ID)
 	if err == nil {
-		if existing.MerchantID != body.MerchantID || existing.Name != body.Name || existing.BillingMode != body.BillingMode || existing.Published != body.Published || existing.Status != body.Status || existing.TermsVersion != body.TermsVersion {
+		if !sameAdminProduct(existing, body.MerchantID, body.Name, body.BillingMode, body.Published, body.Status, body.TermsVersion) {
 			adminConflict(w)
 			return
 		}
@@ -133,6 +133,10 @@ func (h *Handler) adminProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	now := h.config.Now().UTC()
 	if _, err = h.config.DB.ExecContext(r.Context(), `INSERT INTO products(id,merchant_id,name,billing_mode,published,status,terms_version,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)`, body.ID, body.MerchantID, body.Name, body.BillingMode, body.Published, body.Status, body.TermsVersion, now); err != nil {
+		if existing, getErr := h.adminProduct(r, body.ID); getErr == nil && sameAdminProduct(existing, body.MerchantID, body.Name, body.BillingMode, body.Published, body.Status, body.TermsVersion) {
+			writeJSON(w, http.StatusOK, existing)
+			return
+		}
 		adminConflict(w)
 		return
 	}
@@ -142,6 +146,10 @@ func (h *Handler) adminProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+func sameAdminProduct(product adminProduct, merchantID, name, billingMode string, published bool, status, termsVersion string) bool {
+	return product.MerchantID == merchantID && product.Name == name && product.BillingMode == billingMode && product.Published == published && product.Status == status && product.TermsVersion == termsVersion
 }
 
 func (h *Handler) adminProductResource(w http.ResponseWriter, r *http.Request, id string) {
@@ -240,6 +248,10 @@ func (h *Handler) adminProductListings(w http.ResponseWriter, r *http.Request) {
 	}
 	now := h.config.Now().UTC()
 	if _, err = h.config.DB.ExecContext(r.Context(), `INSERT INTO product_listings(id,product_id,site,title,description,billing_mode,price_text,display_order,status,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)`, body.ID, body.ProductID, body.Site, body.Title, body.Description, body.BillingMode, body.PriceText, body.DisplayOrder, body.Status, now); err != nil {
+		if existing, getErr := h.adminProductListing(r, body.ID); getErr == nil && sameProductListing(existing, body) {
+			writeJSON(w, http.StatusOK, existing)
+			return
+		}
 		adminConflict(w)
 		return
 	}
@@ -365,6 +377,10 @@ func (h *Handler) adminServicePrincipals(w http.ResponseWriter, r *http.Request)
 	}
 	roles, _ := json.Marshal(body.Roles)
 	if _, err = h.config.DB.ExecContext(r.Context(), `INSERT INTO service_principals(id,owner_user_id,identity_issuer,identity_subject,name,roles,status,created_at) VALUES($1,$2,$3,$4,$5,$6,'active',$7)`, body.ID, ownerID, body.IdentityIssuer, body.IdentitySubject, body.Name, roles, h.config.Now().UTC()); err != nil {
+		if existing, getErr := h.adminServicePrincipal(r, body.ID); getErr == nil && sameAdminServicePrincipal(existing, body.OwnerIdentityIssuer, body.OwnerIdentitySubject, body.IdentityIssuer, body.IdentitySubject, body.Name, body.Status, body.Roles) {
+			writeJSON(w, http.StatusOK, existing)
+			return
+		}
 		adminConflict(w)
 		return
 	}
@@ -374,6 +390,10 @@ func (h *Handler) adminServicePrincipals(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+func sameAdminServicePrincipal(principal adminServicePrincipal, ownerIssuer, ownerSubject, issuer, subject, name, status string, roles []string) bool {
+	return principal.OwnerIdentityIssuer == ownerIssuer && principal.OwnerIdentitySubject == ownerSubject && principal.IdentityIssuer == issuer && principal.IdentitySubject == subject && principal.Name == name && principal.Status == status && sameStrings(principal.Roles, roles)
 }
 
 func (h *Handler) adminServicePrincipalResource(w http.ResponseWriter, r *http.Request, id string) {

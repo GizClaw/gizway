@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ func TestAdminProviderPostgreSQLRollsBackBifrostWhenProjectionFails(t *testing.T
 		t.Skip("GIZWAY_TEST_POSTGRES_DSN is required")
 	}
 	dsn := testdb.NewDatabase(t)
-	database, err := storage.OpenGizWayPostgreSQL(dsn, true)
+	serviceDSN := testdb.SearchPathDSN(t, dsn, "public")
+	database, err := storage.OpenGizWayPostgreSQL(serviceDSN, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,5 +47,52 @@ func TestAdminProviderPostgreSQLRollsBackBifrostWhenProjectionFails(t *testing.T
 	}
 	if _, err := stores.Provider(t.Context(), "provider-rollback"); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("Bifrost Provider survived rolled-back projection: %v", err)
+	}
+	adminRequest := func(method, path, body string) *http.Request {
+		request := httptest.NewRequest(method, path, strings.NewReader(body))
+		request.Header.Set("X-GizWay-Admin-Key", "admin")
+		request.Header.Set("Content-Type", "application/json")
+		return request
+	}
+	for _, resource := range []struct {
+		path string
+		body string
+	}{
+		{"/admin/v1/providers", `{"id":"provider-concurrent","name":"Provider","kind":"openai","base_url":"https://provider.test","status":"active"}`},
+		{"/admin/v1/models", `{"id":"model-concurrent","provider_id":"provider-concurrent","name":"Model","provider_model":"upstream-model","status":"active"}`},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, adminRequest(http.MethodPost, resource.path, resource.body))
+		if recorder.Code != http.StatusCreated {
+			t.Fatalf("create %s status=%d body=%s", resource.path, recorder.Code, recorder.Body.String())
+		}
+	}
+	priceBodies := []string{
+		`{"prices":[{"metric":"input_tokens","unit_size":1,"price_microcredits":10}]}`,
+		`{"prices":[{"metric":"input_tokens","unit_size":1,"price_microcredits":20}]}`,
+	}
+	codes := make([]int, len(priceBodies))
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for index := range priceBodies {
+		group.Go(func() {
+			<-start
+			request := adminRequest(http.MethodPut, "/admin/v1/models/model-concurrent/customer-prices", priceBodies[index])
+			request.SetPathValue("model_id", "model-concurrent")
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			codes[index] = recorder.Code
+		})
+	}
+	close(start)
+	group.Wait()
+	for _, code := range codes {
+		if code != http.StatusOK {
+			t.Fatalf("concurrent price replacement statuses=%v", codes)
+		}
+	}
+	var price, count int64
+	if err := database.SQL.QueryRowx(`SELECT min(price_microcredits),count(*) FROM model_customer_prices WHERE model_id='model-concurrent'`).Scan(&price, &count); err != nil || count != 1 || price != 10 && price != 20 {
+		t.Fatalf("concurrent price final state price=%d count=%d error=%v", price, count, err)
 	}
 }
