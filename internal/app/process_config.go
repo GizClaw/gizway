@@ -40,6 +40,8 @@ const (
 	defaultCreditCacheCleanupInterval = "1m"
 )
 
+var databaseSchemaPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
 type ProcessConfig struct {
 	Version int `yaml:"version" json:"version"`
 	Server  struct {
@@ -161,6 +163,17 @@ type MachineClientConfig struct {
 }
 
 func LoadProcessConfig(path string, kind ProcessKind) (ProcessConfig, error) {
+	config, err := loadRawProcessConfig(path)
+	if err != nil {
+		return ProcessConfig{}, err
+	}
+	if err := ValidateProcessConfig(config, kind); err != nil {
+		return ProcessConfig{}, err
+	}
+	return config, nil
+}
+
+func loadRawProcessConfig(path string) (ProcessConfig, error) {
 	if path == "" {
 		return ProcessConfig{}, errors.New("--config is required")
 	}
@@ -180,9 +193,6 @@ func LoadProcessConfig(path string, kind ProcessKind) (ProcessConfig, error) {
 		return ProcessConfig{}, fmt.Errorf("decode config (unknown fields are forbidden): %w", err)
 	}
 	config.configDirectory = filepath.Dir(path)
-	if err := ValidateProcessConfig(config, kind); err != nil {
-		return ProcessConfig{}, err
-	}
 	return config, nil
 }
 
@@ -779,7 +789,7 @@ func withSearchPath(dsn, schema string) (string, error) {
 }
 
 func ensureDatabaseSchema(dsn, schema string) error {
-	if !regexp.MustCompile(`^[a-z][a-z0-9_]*$`).MatchString(schema) {
+	if !databaseSchemaPattern.MatchString(schema) {
 		return errors.New("database.schema must be a lowercase SQL identifier")
 	}
 	database, err := sqlx.Open("postgres", dsn)
@@ -790,6 +800,16 @@ func ensureDatabaseSchema(dsn, schema string) error {
 	if err := database.Ping(); err != nil {
 		return err
 	}
-	_, err = database.Exec(`CREATE SCHEMA IF NOT EXISTS ` + schema)
-	return err
+	tx, err := database.BeginTxx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(current_database() || ':' || $1, 0))`, schema); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE SCHEMA IF NOT EXISTS ` + schema); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
