@@ -315,6 +315,7 @@ services:
     volumes:
       - fixtures:/fixtures
       - ./secrets:/secrets:ro
+      - ./config/business-seed.yaml:/config/business-seed.yaml:ro
     command:
       - e2e-bootstrap
       - --mode=milestone-03
@@ -324,9 +325,7 @@ services:
       - --global-url=http://gizway-global:8080
       - --fixture-file=/fixtures/m03.vars
       - --identity-file=/fixtures/identity.vars
-      - --gizpay-dsn=postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable
-      - --cn-dsn=postgres://postgres:postgres@postgres-cn:5432/gizway?sslmode=disable&search_path=gizway
-      - --global-dsn=postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable&search_path=gizway
+      - --seed-config=/config/business-seed.yaml
       - --hmac-secret-file=/secrets/subscription-key-hmac
       - --cn-provider-url=http://fake-provider-cn:19000
       - --global-provider-url=http://fake-provider-global:19000

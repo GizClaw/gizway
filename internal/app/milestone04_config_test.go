@@ -39,6 +39,37 @@ func TestLoadProcessConfigAcceptsMilestone04SiteAndCatalogIdentity(t *testing.T)
 	if strings.Contains(public, "catalog-secret") || strings.Contains(public, "public_catalog_service_account") {
 		t.Fatalf("public runtime config leaked Service Account configuration: %s", public)
 	}
+	if strings.Contains(public, secret) || strings.Contains(public, "admin") {
+		t.Fatalf("public runtime config leaked Admin configuration: %s", public)
+	}
+}
+
+func TestAdminKeyConfigIsRequiredAndMustReferenceNonEmptyFile(t *testing.T) {
+	directory := t.TempDir()
+	secret := filepath.Join(directory, "secret")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	base := validM04GizWayYAML(secret)
+	missing := strings.Replace(base, "admin:\n  initial_key_file: "+secret+"\n", "", 1)
+	missingPath := filepath.Join(directory, "missing.yaml")
+	if err := os.WriteFile(missingPath, []byte(missing), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadProcessConfig(missingPath, ProcessGizWay); err == nil || !strings.Contains(err.Error(), "admin.initial_key_file is required") {
+		t.Fatalf("missing Admin Key error = %v", err)
+	}
+	empty := filepath.Join(directory, "empty")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	emptyPath := filepath.Join(directory, "empty.yaml")
+	if err := os.WriteFile(emptyPath, []byte(strings.Replace(base, "initial_key_file: "+secret, "initial_key_file: "+empty, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadProcessConfig(emptyPath, ProcessGizWay); err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Fatalf("empty Admin Key error = %v", err)
+	}
 }
 
 func TestMilestone04CatalogIdentityConfigValidation(t *testing.T) {
@@ -71,6 +102,8 @@ func validM04GizWayYAML(secret string) string {
 server:
   name: global.example.test
   listen_address: 127.0.0.1:0
+admin:
+  initial_key_file: ` + secret + `
 site:
   hostname: global.example.test
 identity:

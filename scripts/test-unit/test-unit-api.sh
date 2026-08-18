@@ -23,7 +23,7 @@ for command in docker hurlfmt go; do
     fi
 done
 
-stories="$(find "${repository_root}/tests/api/stories/24-milestone-03" "${repository_root}/tests/api/stories/25-milestone-04" -type f -name '*.hurl' -print | sort)"
+stories="$(find "${repository_root}/tests/api/stories/24-milestone-03" "${repository_root}/tests/api/stories/25-milestone-04" "${repository_root}/tests/api/stories/26-admin" -type f -name '*.hurl' -print | sort)"
 for story in ${stories}; do
     if hurlfmt --check "${story}"; then
         printf '%s\tPARSE_PASS\n' "${story#${repository_root}/}" >>"${results}"
@@ -32,7 +32,7 @@ for story in ${stories}; do
     fi
 done
 
-if "${script_dir}/test-unit-api-openapi.sh" && "${script_dir}/test-unit-api-contracts.sh"; then
+if "${script_dir}/test-unit-api-openapi.sh" && "${script_dir}/test-unit-api-contracts.sh" && "${script_dir}/check-e2e-api-seed.sh"; then
     printf 'openapi\tPASS\n' >>"${results}"
 else
     printf 'openapi\tFAIL\n' >>"${results}"
@@ -56,7 +56,7 @@ for story in ${stories}; do
         continue
     fi
     if [ "${stack_ready}" = true ] && docker compose --project-name "${project}" -f "${compose}" --profile milestone-03-api run --rm --no-deps \
-        hurl-api --test --variables-file /fixtures/m03.vars "/workspace/${story#${repository_root}/}"; then
+        hurl-api --test --variables-file /fixtures/m03.vars --secret "admin_key=$(docker compose --project-name "${project}" -f "${compose}" exec -T gizpay cat /fixtures/admin-key)" "/workspace/${story#${repository_root}/}"; then
         printf '%s\tPASS\n' "${story#${repository_root}/}" >>"${results}"
     else
         printf '%s\tFAIL\n' "${story#${repository_root}/}" >>"${results}"

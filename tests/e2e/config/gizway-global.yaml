@@ -2,6 +2,8 @@ version: 1
 server:
   name: global.e2e.gizway.test
   listen_address: 0.0.0.0:8080
+admin:
+  initial_key_file: /fixtures/admin-key
 database:
   dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
   schema: gizway

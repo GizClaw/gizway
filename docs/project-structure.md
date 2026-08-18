@@ -14,7 +14,8 @@ cmd/gizway     -> internal/app -> internal/gizway -> regional PostgreSQL -> regi
                                             |----> central GizPay APIs
 ```
 
-- `api/openapi`: the four Milestone 03 wire contracts.
+- `api/openapi`: seven root wire contracts, including separate GizPay and
+  GizWay Admin surfaces authenticated only by the configured initial Admin Key.
 - `data/sql/gizpay`: central identity, Account, Merchant, Product,
   Subscription, Key, Top-up, Charge, Commission, and ledger schema.
 - `data/sql/gizway`: regional Model, Provider Key billing/prices, AI Order,
@@ -28,6 +29,12 @@ cmd/gizway     -> internal/app -> internal/gizway -> regional PostgreSQL -> regi
 - `tests/powersync`: independent GizPay and regional PowerSync client contracts.
 - `tests/e2e`: disposable ZITADEL, PostgreSQL, GizPay, CN/Global GizWay,
   PowerSync, and Fake Provider composition.
+
+Fixed E2E business resources are declared in
+`tests/e2e/config/business-seed.yaml` and applied through generated Admin HTTP
+clients. Account, Subscription, Subscription Key, and Top-up setup continues
+through the public Account API. Seed code must not connect to business
+PostgreSQL or call Bifrost stores directly.
 
 The implemented Milestone 03 contract is represented by the OpenAPI documents,
 the current PostgreSQL schemas, and the API, SDK, PowerSync, and E2E acceptance

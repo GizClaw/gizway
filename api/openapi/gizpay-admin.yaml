@@ -1,0 +1,281 @@
+openapi: 3.1.0
+info: {title: GizPay Admin API, version: 4.0.0}
+servers: [{url: https://pay.gizway.com/admin/v1}]
+security: [{adminKey: []}]
+paths:
+  /products:
+    post:
+      operationId: createAdminProduct
+      requestBody: {$ref: '#/components/requestBodies/CreateProduct'}
+      responses:
+        '200': {$ref: '#/components/responses/Product'}
+        '201': {$ref: '#/components/responses/Product'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {$ref: 'common.yaml#/components/responses/Conflict'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    get:
+      operationId: listAdminProducts
+      responses:
+        '200': {$ref: '#/components/responses/ProductList'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+  /products/{product_id}:
+    parameters: [{$ref: '#/components/parameters/product_id'}]
+    get:
+      operationId: getAdminProduct
+      responses:
+        '200': {$ref: '#/components/responses/Product'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    patch:
+      operationId: updateAdminProduct
+      requestBody: {$ref: '#/components/requestBodies/UpdateProduct'}
+      responses:
+        '200': {$ref: '#/components/responses/Product'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    delete:
+      operationId: deleteAdminProduct
+      responses:
+        '204': {description: Product is inactive}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+  /product-listings:
+    post:
+      operationId: createAdminProductListing
+      requestBody: {$ref: '#/components/requestBodies/CreateProductListing'}
+      responses:
+        '200': {$ref: '#/components/responses/ProductListing'}
+        '201': {$ref: '#/components/responses/ProductListing'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {$ref: 'common.yaml#/components/responses/Conflict'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    get:
+      operationId: listAdminProductListings
+      responses:
+        '200': {$ref: '#/components/responses/ProductListingList'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+  /product-listings/{product_listing_id}:
+    parameters: [{$ref: '#/components/parameters/product_listing_id'}]
+    get:
+      operationId: getAdminProductListing
+      responses:
+        '200': {$ref: '#/components/responses/ProductListing'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    patch:
+      operationId: updateAdminProductListing
+      requestBody: {$ref: '#/components/requestBodies/UpdateProductListing'}
+      responses:
+        '200': {$ref: '#/components/responses/ProductListing'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    delete:
+      operationId: deleteAdminProductListing
+      responses:
+        '204': {description: Product Listing is inactive}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+  /service-principals:
+    post:
+      operationId: createAdminServicePrincipal
+      requestBody: {$ref: '#/components/requestBodies/CreateServicePrincipal'}
+      responses:
+        '200': {$ref: '#/components/responses/ServicePrincipal'}
+        '201': {$ref: '#/components/responses/ServicePrincipal'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '409': {$ref: 'common.yaml#/components/responses/Conflict'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    get:
+      operationId: listAdminServicePrincipals
+      responses:
+        '200': {$ref: '#/components/responses/ServicePrincipalList'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+  /service-principals/{service_principal_id}:
+    parameters: [{$ref: '#/components/parameters/service_principal_id'}]
+    get:
+      operationId: getAdminServicePrincipal
+      responses:
+        '200': {$ref: '#/components/responses/ServicePrincipal'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    patch:
+      operationId: updateAdminServicePrincipal
+      requestBody: {$ref: '#/components/requestBodies/UpdateServicePrincipal'}
+      responses:
+        '200': {$ref: '#/components/responses/ServicePrincipal'}
+        '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+    delete:
+      operationId: deleteAdminServicePrincipal
+      responses:
+        '204': {description: Service Principal is revoked}
+        '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '404': {$ref: 'common.yaml#/components/responses/NotFound'}
+        '500': {$ref: 'common.yaml#/components/responses/InternalError'}
+components:
+  securitySchemes:
+    adminKey: {type: apiKey, in: header, name: X-GizWay-Admin-Key}
+  parameters:
+    product_id: {name: product_id, in: path, required: true, schema: {type: string, minLength: 1}}
+    product_listing_id: {name: product_listing_id, in: path, required: true, schema: {type: string, minLength: 1}}
+    service_principal_id: {name: service_principal_id, in: path, required: true, schema: {type: string, minLength: 1}}
+  schemas:
+    Product:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_id, name, billing_mode, published, status, terms_version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        merchant_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1}
+        billing_mode: {type: string, const: pay_as_you_go}
+        published: {type: boolean}
+        status: {type: string, enum: [active, inactive]}
+        terms_version: {type: string, minLength: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CreateProduct:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_id, name, billing_mode, published, status, terms_version]
+      properties:
+        id: {type: string, minLength: 1}
+        merchant_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1}
+        billing_mode: {type: string, const: pay_as_you_go}
+        published: {type: boolean}
+        status: {type: string, enum: [active, inactive]}
+        terms_version: {type: string, minLength: 1}
+    UpdateProduct:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1}
+        published: {type: boolean}
+        status: {type: string, enum: [active, inactive]}
+        terms_version: {type: string, minLength: 1}
+    ProductList:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/Product'}}}
+    ProductListing:
+      type: object
+      additionalProperties: false
+      required: [id, product_id, site, title, description, billing_mode, price_text, display_order, status, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        product_id: {type: string, minLength: 1}
+        site: {type: string, minLength: 1}
+        title: {type: string, minLength: 1}
+        description: {type: string}
+        billing_mode: {type: string, const: pay_as_you_go}
+        price_text: {type: string}
+        display_order: {type: integer}
+        status: {type: string, enum: [active, inactive]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CreateProductListing:
+      type: object
+      additionalProperties: false
+      required: [id, product_id, site, title, description, billing_mode, price_text, display_order, status]
+      properties:
+        id: {type: string, minLength: 1}
+        product_id: {type: string, minLength: 1}
+        site: {type: string, minLength: 1}
+        title: {type: string, minLength: 1}
+        description: {type: string}
+        billing_mode: {type: string, const: pay_as_you_go}
+        price_text: {type: string}
+        display_order: {type: integer}
+        status: {type: string, enum: [active, inactive]}
+    UpdateProductListing:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: {type: string, minLength: 1}
+        description: {type: string}
+        price_text: {type: string}
+        display_order: {type: integer}
+        status: {type: string, enum: [active, inactive]}
+    ProductListingList:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/ProductListing'}}}
+    ServicePrincipal:
+      type: object
+      additionalProperties: false
+      required: [id, owner_identity_issuer, owner_identity_subject, identity_issuer, identity_subject, name, roles, status, created_at]
+      properties:
+        id: {type: string, minLength: 1}
+        owner_identity_issuer: {type: string, minLength: 1}
+        owner_identity_subject: {type: string, minLength: 1}
+        identity_issuer: {type: string, minLength: 1}
+        identity_subject: {type: string, minLength: 1}
+        name: {type: string, minLength: 1}
+        roles: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [credit_check, charge]}}
+        status: {type: string, enum: [active, revoked]}
+        created_at: {type: string, format: date-time}
+        revoked_at: {type: [string, 'null'], format: date-time}
+    CreateServicePrincipal:
+      type: object
+      additionalProperties: false
+      required: [id, owner_identity_issuer, owner_identity_subject, identity_issuer, identity_subject, name, roles, status]
+      properties:
+        id: {type: string, minLength: 1}
+        owner_identity_issuer: {type: string, minLength: 1}
+        owner_identity_subject: {type: string, minLength: 1}
+        identity_issuer: {type: string, minLength: 1}
+        identity_subject: {type: string, minLength: 1}
+        name: {type: string, minLength: 1}
+        roles: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [credit_check, charge]}}
+        status: {type: string, const: active}
+    UpdateServicePrincipal:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1}
+        roles: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [credit_check, charge]}}
+    ServicePrincipalList:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/ServicePrincipal'}}}
+  requestBodies:
+    CreateProduct: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateProduct'}}}}
+    UpdateProduct: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdateProduct'}}}}
+    CreateProductListing: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateProductListing'}}}}
+    UpdateProductListing: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdateProductListing'}}}}
+    CreateServicePrincipal: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateServicePrincipal'}}}}
+    UpdateServicePrincipal: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdateServicePrincipal'}}}}
+  responses:
+    Product: {description: Product state, content: {application/json: {schema: {$ref: '#/components/schemas/Product'}}}}
+    ProductList: {description: Product states, content: {application/json: {schema: {$ref: '#/components/schemas/ProductList'}}}}
+    ProductListing: {description: Product Listing state, content: {application/json: {schema: {$ref: '#/components/schemas/ProductListing'}}}}
+    ProductListingList: {description: Product Listing states, content: {application/json: {schema: {$ref: '#/components/schemas/ProductListingList'}}}}
+    ServicePrincipal: {description: Service Principal state, content: {application/json: {schema: {$ref: '#/components/schemas/ServicePrincipal'}}}}
+    ServicePrincipalList: {description: Service Principal states, content: {application/json: {schema: {$ref: '#/components/schemas/ServicePrincipalList'}}}}

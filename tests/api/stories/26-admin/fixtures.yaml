@@ -1,0 +1,9 @@
+version: 1
+services:
+  gizpay: http://gizpay:8081
+  gizway: http://gizway-cn:8080
+resources:
+  product_id: product_admin_hurl
+  provider_id: provider_admin_hurl
+  model_id: model_admin_hurl
+  provider_key_id: provider_key_admin_hurl

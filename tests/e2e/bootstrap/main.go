@@ -28,11 +28,11 @@ import (
 const zitadelAPIScope = "urn:zitadel:iam:org:project:id:zitadel:aud"
 
 type options struct {
-	mode, zitadelURL, outputDirectory, fixtureFile   string
-	gizpayURL, cnURL, globalURL                      string
-	identityFile, story                              string
-	gizpayDSN, cnDSN, globalDSN                      string
-	hmacSecretFile, cnProviderURL, globalProviderURL string
+	mode, zitadelURL, outputDirectory, fixtureFile string
+	gizpayURL, cnURL, globalURL                    string
+	identityFile, story                            string
+	seedConfigFile, hmacSecretFile                 string
+	cnProviderURL, globalProviderURL               string
 }
 
 func main() {
@@ -46,9 +46,7 @@ func main() {
 	flag.StringVar(&options.globalURL, "global-url", "", "Global GizWay base URL")
 	flag.StringVar(&options.identityFile, "identity-file", "/fixtures/identity.vars", "identity variables file")
 	flag.StringVar(&options.story, "story", "e2e", "isolated API story name")
-	flag.StringVar(&options.gizpayDSN, "gizpay-dsn", "", "GizPay PostgreSQL DSN")
-	flag.StringVar(&options.cnDSN, "cn-dsn", "", "CN PostgreSQL DSN")
-	flag.StringVar(&options.globalDSN, "global-dsn", "", "Global PostgreSQL DSN")
+	flag.StringVar(&options.seedConfigFile, "seed-config", "", "business Seed YAML configuration")
 	flag.StringVar(&options.hmacSecretFile, "hmac-secret-file", "", "shared HMAC Secret file")
 	flag.StringVar(&options.cnProviderURL, "cn-provider-url", "", "CN fake Provider URL")
 	flag.StringVar(&options.globalProviderURL, "global-provider-url", "", "Global fake Provider URL")
@@ -86,6 +84,14 @@ type zitadelClient struct {
 func bootstrapZITADEL(options options) error {
 	if options.zitadelURL == "" || options.outputDirectory == "" {
 		return errors.New("zitadel-url and output-directory are required")
+	}
+	adminKey := make([]byte, 32)
+	if _, err := rand.Read(adminKey); err != nil {
+		return fmt.Errorf("generate Admin Key: %w", err)
+	}
+	encodedAdminKey := base64.RawURLEncoding.EncodeToString(adminKey)
+	if err := os.WriteFile(filepath.Join(options.outputDirectory, "admin-key"), []byte(encodedAdminKey), 0600); err != nil {
+		return fmt.Errorf("write Admin Key: %w", err)
 	}
 	bootstrapKeyPath := filepath.Join(options.outputDirectory, "zitadel-bootstrap-machine.json")
 	var bootstrapKey machineKey
@@ -271,6 +277,8 @@ func writeGizWayE2EConfigs(outputDirectory string, values map[string]string, web
 server:
   name: %s.e2e.gizway.test
   listen_address: 0.0.0.0:8080
+admin:
+  initial_key_file: /fixtures/admin-key
 site:
   hostname: %s.localhost
 identity:
@@ -727,6 +735,7 @@ func mapIdentityVariables(values map[string]string, projects []projectFixture, k
 	values["service_subject"] = values["gizway-cn-service@subject"]
 	values["global_service_subject"] = values["gizway-global-service@subject"]
 	values["service_charger_subject"] = values["service-charger@subject"]
+	values["service_reader_subject"] = values["service-reader@subject"]
 	values["cn_admin_token"] = lookup("cn-administrator", 2)
 	values["admin_token"] = values["cn_admin_token"]
 	values["global_admin_token"] = lookup("global-administrator", 3)
