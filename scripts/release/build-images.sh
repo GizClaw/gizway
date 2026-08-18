@@ -4,8 +4,8 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 version="${RELEASE_VERSION:-${1:-}}"
 output_dir="${RELEASE_OUTPUT_DIR:-$root/tmp/release/images}"
-builder_args=()
-[[ -n "${BUILDX_BUILDER:-}" ]] && builder_args=(--builder "$BUILDX_BUILDER")
+build_command=(docker buildx build)
+[[ -n "${BUILDX_BUILDER:-}" ]] && build_command+=(--builder "$BUILDX_BUILDER")
 if [[ -z "$version" ]]; then
   printf 'RELEASE_VERSION or a tag argument is required\n' >&2
   exit 2
@@ -38,7 +38,7 @@ build_one() {
   local key="$1" image="$2" dockerfile="$3" layout
   layout="$output_dir/$key.oci.tar"
   rm -f "$layout" "$output_dir/$key.digest"
-  SOURCE_DATE_EPOCH="$source_date_epoch" docker buildx build "${builder_args[@]}" \
+  SOURCE_DATE_EPOCH="$source_date_epoch" "${build_command[@]}" \
     --platform linux/amd64 \
     --file "$root/$dockerfile" \
     --tag "$image:$version" \
@@ -47,7 +47,7 @@ build_one() {
     --build-arg "RELEASE_BUILD_TIME=$build_time" \
     --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
     --provenance=false --sbom=false \
-    --output "type=oci,dest=$layout" \
+    --output "type=oci,dest=$layout,rewrite-timestamp=true" \
     "$root"
   printf '%s\n' "$layout"
 }
