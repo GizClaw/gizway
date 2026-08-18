@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/idy/gizway/internal/buildinfo"
 )
 
 func TestMilestone03GizPayRouteBoundary(t *testing.T) {
@@ -77,7 +79,7 @@ func TestMilestone03HealthIsProcessOnly(t *testing.T) {
 	for _, surface := range []Surface{SurfaceGizPay, SurfaceGizWay} {
 		server := NewMilestone03(surface, surface.String(), nil, nil)
 		server.now = func() time.Time { return time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC) }
-		server.version = "test"
+		server.build = buildinfo.Info{Version: "v1.2.3", Revision: "0123456789abcdef", BuildTime: "2026-08-18T00:00:00Z"}
 		recorder := httptest.NewRecorder()
 		server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 		if recorder.Code != http.StatusOK {
@@ -89,7 +91,8 @@ func TestMilestone03HealthIsProcessOnly(t *testing.T) {
 		}
 		want := map[string]any{
 			"status": "healthy", "service": surface.String(),
-			"version": "test", "server_time": "2026-08-14T12:00:00Z",
+			"version": "v1.2.3", "revision": "0123456789abcdef",
+			"build_time": "2026-08-18T00:00:00Z", "server_time": "2026-08-14T12:00:00Z",
 		}
 		for key, value := range want {
 			if body[key] != value {

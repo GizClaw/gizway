@@ -6,6 +6,7 @@ on:
     branches:
       - main
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -57,14 +58,16 @@ jobs:
           hurl_checksum="${hurl_asset}.sha256"
           hurl_release="https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1"
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/$hurl_asset" "$hurl_release/$hurl_asset"
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/$hurl_checksum" "$hurl_release/$hurl_checksum"
           expected_hurl_sha256="$(cat "$RUNNER_TEMP/$hurl_checksum")"
           printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
             (cd "$RUNNER_TEMP" && sha256sum --check --strict)
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client "$RUNNER_TEMP/$hurl_asset"
+          timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          timeout 180 sudo apt-get install --yes postgresql-client ripgrep "$RUNNER_TEMP/$hurl_asset"
           hurl --version
 
       - name: Install pinned actionlint
@@ -105,6 +108,37 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      - name: Install pinned Hurl
+        shell: bash
+        run: |
+          set -euo pipefail
+          hurl_asset="hurl_8.0.1_amd64.deb"
+          hurl_checksum="${hurl_asset}.sha256"
+          hurl_release="https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1"
+          curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
+            --output "$RUNNER_TEMP/$hurl_asset" "$hurl_release/$hurl_asset"
+          curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
+            --output "$RUNNER_TEMP/$hurl_checksum" "$hurl_release/$hurl_checksum"
+          expected_hurl_sha256="$(cat "$RUNNER_TEMP/$hurl_checksum")"
+          printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
+            (cd "$RUNNER_TEMP" && sha256sum --check --strict)
+          timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          timeout 180 sudo apt-get install --yes ripgrep "$RUNNER_TEMP/$hurl_asset"
+          hurl --version
+
+      - name: Set up Node 22.22.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+          cache-dependency-path: tests/powersync/package-lock.json
+
+      - name: Install PowerSync test dependencies
+        working-directory: tests/powersync
+        run: npm ci
 
       - name: Run quota, product, and failure profiles
         run: make test-e2e
