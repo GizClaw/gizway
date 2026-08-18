@@ -58,14 +58,16 @@ jobs:
           hurl_checksum="${hurl_asset}.sha256"
           hurl_release="https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1"
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/$hurl_asset" "$hurl_release/$hurl_asset"
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/$hurl_checksum" "$hurl_release/$hurl_checksum"
           expected_hurl_sha256="$(cat "$RUNNER_TEMP/$hurl_checksum")"
           printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
             (cd "$RUNNER_TEMP" && sha256sum --check --strict)
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client "$RUNNER_TEMP/$hurl_asset"
+          timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          timeout 180 sudo apt-get install --yes postgresql-client "$RUNNER_TEMP/$hurl_asset"
           hurl --version
 
       - name: Install pinned actionlint
@@ -115,14 +117,16 @@ jobs:
           hurl_checksum="${hurl_asset}.sha256"
           hurl_release="https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1"
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/$hurl_asset" "$hurl_release/$hurl_asset"
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/$hurl_checksum" "$hurl_release/$hurl_checksum"
           expected_hurl_sha256="$(cat "$RUNNER_TEMP/$hurl_checksum")"
           printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
             (cd "$RUNNER_TEMP" && sha256sum --check --strict)
-          sudo apt-get update
-          sudo apt-get install --yes ripgrep "$RUNNER_TEMP/$hurl_asset"
+          timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          timeout 180 sudo apt-get install --yes ripgrep "$RUNNER_TEMP/$hurl_asset"
           hurl --version
 
       - name: Set up Node 22.22.1
