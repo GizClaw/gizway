@@ -107,5 +107,34 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install pinned Hurl
+        shell: bash
+        run: |
+          set -euo pipefail
+          hurl_asset="hurl_8.0.1_amd64.deb"
+          hurl_checksum="${hurl_asset}.sha256"
+          hurl_release="https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/$hurl_asset" "$hurl_release/$hurl_asset"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/$hurl_checksum" "$hurl_release/$hurl_checksum"
+          expected_hurl_sha256="$(cat "$RUNNER_TEMP/$hurl_checksum")"
+          printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
+            (cd "$RUNNER_TEMP" && sha256sum --check --strict)
+          sudo apt-get update
+          sudo apt-get install --yes "$RUNNER_TEMP/$hurl_asset"
+          hurl --version
+
+      - name: Set up Node 22.22.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+          cache-dependency-path: tests/powersync/package-lock.json
+
+      - name: Install PowerSync test dependencies
+        working-directory: tests/powersync
+        run: npm ci
+
       - name: Run quota, product, and failure profiles
         run: make test-e2e
