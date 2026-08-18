@@ -2,6 +2,8 @@ version: 1
 server:
   name: credit.e2e.gizway.test
   listen_address: 0.0.0.0:8081
+admin:
+  initial_key_file: /fixtures/admin-key
 database:
   dsn: postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable
   schema: public

@@ -1,0 +1,71 @@
+version: 1
+admin_key_file: /fixtures/admin-key
+gizpay:
+  base_url: http://gizpay:8081
+  products:
+    - {id: product_m03_payg, merchant_id: "${default_merchant_id}", name: M03 PAYG, billing_mode: pay_as_you_go, published: true, status: active, terms_version: m03-v1}
+    - {id: product_m03_hidden, merchant_id: "${default_merchant_id}", name: M03 Hidden PAYG, billing_mode: pay_as_you_go, published: false, status: active, terms_version: m03-v1}
+  product_listings:
+    - {id: listing_m04_payg_global, product_id: product_m03_payg, site: global.localhost, title: GizWay PAYG, description: Pay only for normalized model usage., billing_mode: pay_as_you_go, price_text: Usage based, display_order: 0, status: active}
+    - {id: listing_m04_payg_cn, product_id: product_m03_payg, site: cn.localhost, title: GizWay PAYG, description: Pay only for normalized model usage., billing_mode: pay_as_you_go, price_text: Usage based, display_order: 1, status: active}
+  service_principals:
+    - {id: svc_cn, owner_identity_issuer: "${fixture_issuer}", owner_identity_subject: "${human_subject}", identity_issuer: "${fixture_issuer}", identity_subject: "${service_subject}", name: svc_cn, roles: [credit_check, charge], status: active}
+    - {id: svc_global, owner_identity_issuer: "${fixture_issuer}", owner_identity_subject: "${human_subject}", identity_issuer: "${fixture_issuer}", identity_subject: "${global_service_subject}", name: svc_global, roles: [credit_check, charge], status: active}
+    - {id: svc_charger, owner_identity_issuer: "${fixture_issuer}", owner_identity_subject: "${human_subject}", identity_issuer: "${fixture_issuer}", identity_subject: "${service_charger_subject}", name: svc_charger, roles: [charge], status: active}
+regions:
+  - name: cn
+    base_url: http://gizway-cn:8080
+    providers:
+      - {id: provider_story_cn, name: Story cn, kind: openai, base_url: "${cn_provider_url}", status: active}
+    models:
+      - {id: story-text-cn, provider_id: provider_story_cn, name: story-text, provider_model: fake-text-v1, status: active}
+      - {id: story-text-zero-cn, provider_id: provider_story_cn, name: story-text-zero, provider_model: fake-text-v1, status: active}
+      - {id: story-text-inactive-cn, provider_id: provider_story_cn, name: story-text-inactive, provider_model: fake-text-v1, status: inactive}
+    model_customer_prices:
+      - {model_id: story-text-cn, prices: [{metric: input_tokens, unit_size: 1000000, price_microcredits: 1000}, {metric: output_tokens, unit_size: 1000000, price_microcredits: 2000}]}
+      - {model_id: story-text-zero-cn, prices: [{metric: input_tokens, unit_size: 1000000, price_microcredits: 0}, {metric: output_tokens, unit_size: 1000000, price_microcredits: 0}]}
+    model_listings:
+      - {id: listing_story_text_cn, model_id: story-text-cn, title: Story Text, description: Metered text generation for browser acceptance., family: Text, context: 128K, latency: Fast, accent: emerald, featured: true, display_order: 0, availability: available}
+      - {id: listing_story_text_zero_cn, model_id: story-text-zero-cn, title: Story Text Zero, description: Zero-price local execution for browser acceptance., family: Text, context: 128K, latency: Fast, accent: blue, featured: false, display_order: 1, availability: available}
+    provider_keys:
+      - id: pkey_m03_bootstrap_cn
+        provider_id: provider_story_cn
+        owner_identity_issuer: "${fixture_issuer}"
+        owner_identity_subject: "${human_subject}"
+        merchant_id: "${default_merchant_id}"
+        name: Bootstrap Provider Key
+        key: cn-provider-secret
+        status: active
+        prices:
+          - {model_id: story-text-cn, metric: input_tokens, unit_size: 1000000, microcredits_per_unit: 500}
+          - {model_id: story-text-cn, metric: output_tokens, unit_size: 1000000, microcredits_per_unit: 700}
+          - {model_id: story-text-zero-cn, metric: input_tokens, unit_size: 1000000, microcredits_per_unit: 0}
+          - {model_id: story-text-zero-cn, metric: output_tokens, unit_size: 1000000, microcredits_per_unit: 0}
+  - name: global
+    base_url: http://gizway-global:8080
+    providers:
+      - {id: provider_story_global, name: Story global, kind: openai, base_url: "${global_provider_url}", status: active}
+    models:
+      - {id: story-text-global, provider_id: provider_story_global, name: story-text, provider_model: fake-text-v1, status: active}
+      - {id: story-text-zero-global, provider_id: provider_story_global, name: story-text-zero, provider_model: fake-text-v1, status: active}
+      - {id: story-text-inactive-global, provider_id: provider_story_global, name: story-text-inactive, provider_model: fake-text-v1, status: inactive}
+    model_customer_prices:
+      - {model_id: story-text-global, prices: [{metric: input_tokens, unit_size: 1000000, price_microcredits: 1000}, {metric: output_tokens, unit_size: 1000000, price_microcredits: 2000}]}
+      - {model_id: story-text-zero-global, prices: [{metric: input_tokens, unit_size: 1000000, price_microcredits: 0}, {metric: output_tokens, unit_size: 1000000, price_microcredits: 0}]}
+    model_listings:
+      - {id: listing_story_text_global, model_id: story-text-global, title: Story Text, description: Metered text generation for browser acceptance., family: Text, context: 128K, latency: Fast, accent: emerald, featured: true, display_order: 0, availability: available}
+      - {id: listing_story_text_zero_global, model_id: story-text-zero-global, title: Story Text Zero, description: Zero-price local execution for browser acceptance., family: Text, context: 128K, latency: Fast, accent: blue, featured: false, display_order: 1, availability: available}
+    provider_keys:
+      - id: pkey_m03_bootstrap_global
+        provider_id: provider_story_global
+        owner_identity_issuer: "${fixture_issuer}"
+        owner_identity_subject: "${human_subject}"
+        merchant_id: "${default_merchant_id}"
+        name: Bootstrap Provider Key
+        key: global-provider-secret
+        status: active
+        prices:
+          - {model_id: story-text-global, metric: input_tokens, unit_size: 1000000, microcredits_per_unit: 500}
+          - {model_id: story-text-global, metric: output_tokens, unit_size: 1000000, microcredits_per_unit: 700}
+          - {model_id: story-text-zero-global, metric: input_tokens, unit_size: 1000000, microcredits_per_unit: 0}
+          - {model_id: story-text-zero-global, metric: output_tokens, unit_size: 1000000, microcredits_per_unit: 0}

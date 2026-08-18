@@ -19,11 +19,21 @@ func TestMilestone03GizPayRouteBoundary(t *testing.T) {
 		{http.MethodGet, "/account/v1/accounts/account-1/topups"},
 		{http.MethodPost, "/service/v1/subscription-credit-checks"},
 		{http.MethodPost, "/service/v1/payg-charges"},
+		{http.MethodPost, "/admin/v1/products"},
+		{http.MethodGet, "/admin/v1/product-listings"},
+		{http.MethodDelete, "/admin/v1/service-principals/principal-1"},
 	} {
 		recorder := httptest.NewRecorder()
 		server.Handler().ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
 		if recorder.Code != http.StatusNoContent {
 			t.Errorf("%s %s status=%d, want business handler", route.method, route.path, recorder.Code)
+		}
+	}
+	for _, path := range []string{"/admin/v1/providers", "/admin/v1/models", "/admin/v1/provider-keys"} {
+		recorder := httptest.NewRecorder()
+		server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("GET %s status=%d, want undeclared route", path, recorder.Code)
 		}
 	}
 }
@@ -52,13 +62,16 @@ func TestMilestone03RejectsUndeclaredMethodsBeforeBusinessHandler(t *testing.T) 
 	}
 }
 
-func TestMilestone03GizWayExposesCommandsAndRejectsAdmin(t *testing.T) {
+func TestMilestone03GizWayExposesCommandsAndOwnedAdminRoutes(t *testing.T) {
 	business := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	server := NewMilestone03(SurfaceGizWay, "gizway", business, nil)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/user/v1/providers/provider-1/keys"},
 		{http.MethodPut, "/user/v1/provider-keys/key-1/prices"},
 		{http.MethodPost, "/user/v1/provider-keys/key-1/disable"},
+		{http.MethodPost, "/admin/v1/providers"},
+		{http.MethodPut, "/admin/v1/models/model-1/customer-prices"},
+		{http.MethodPost, "/admin/v1/provider-keys/key-1/rotate-secret"},
 	} {
 		recorder := httptest.NewRecorder()
 		server.Handler().ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
@@ -66,11 +79,11 @@ func TestMilestone03GizWayExposesCommandsAndRejectsAdmin(t *testing.T) {
 			t.Errorf("%s %s status=%d, want business handler", route.method, route.path, recorder.Code)
 		}
 	}
-	for _, path := range []string{"/admin/v1/models", "/admin/v1/providers", "/admin/v1/ai-orders"} {
+	for _, path := range []string{"/admin/v1/products", "/admin/v1/product-listings", "/admin/v1/ai-orders"} {
 		recorder := httptest.NewRecorder()
 		server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if recorder.Code != http.StatusNotFound {
-			t.Errorf("GET %s status=%d, want deleted route", path, recorder.Code)
+			t.Errorf("GET %s status=%d, want undeclared route", path, recorder.Code)
 		}
 	}
 }

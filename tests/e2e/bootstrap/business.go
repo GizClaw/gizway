@@ -11,26 +11,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
-	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-
-	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
+	"github.com/idy/gizway/internal/generated/gizpayadmin"
+	"github.com/idy/gizway/internal/generated/gizwayadmin"
 	"github.com/idy/gizway/internal/subscriptionkey"
-	_ "github.com/lib/pq"
 )
 
 const fixtureIssuer = "http://identity.e2e.gizway.test:18080"
 
 type initializedAccount struct {
-	UserID            string `json:"user_id"`
-	AccountID         string `json:"account_id"`
-	LedgerAccountID   string `json:"ledger_account_id"`
-	DefaultMerchantID string `json:"default_merchant_id"`
+	AccountID         string
+	DefaultMerchantID string
 }
 
 func bootstrapMilestone03(options options) error {
@@ -38,11 +35,13 @@ func bootstrapMilestone03(options options) error {
 	if err != nil {
 		return err
 	}
-	if options.gizpayURL == "" || options.cnURL == "" || options.gizpayDSN == "" || options.cnDSN == "" || options.hmacSecretFile == "" {
-		return errors.New("milestone 03 bootstrap endpoints, DSNs, and HMAC secret are required")
+	if options.gizpayURL == "" || options.cnURL == "" || options.seedConfigFile == "" || options.hmacSecretFile == "" {
+		return errors.New("milestone 03 bootstrap endpoints, Seed config, and HMAC secret are required")
 	}
 	variables["pay_url"], variables["way_url"] = options.gizpayURL, options.cnURL
 	variables["cn_url"], variables["global_url"] = options.cnURL, options.globalURL
+	variables["cn_provider_url"], variables["global_provider_url"] = options.cnProviderURL, options.globalProviderURL
+	variables["fixture_issuer"] = fixtureIssuer
 	variables["provider_key_secret"] = "cn-provider-secret-two"
 	variables["provider_key_secret_two"] = "cn-provider-secret-three"
 	variables["gemini_operation"] = "story-text:generateContent"
@@ -62,36 +61,33 @@ func bootstrapMilestone03(options options) error {
 	if err := actionClient.configureUserInitializationAction("/fixtures"); err != nil {
 		return err
 	}
-	owner, err := initializeFixtureHuman(client, options.gizpayURL, options.gizpayDSN, variables["human_token"], variables["human_subject"], "human-primary")
+	owner, err := initializeFixtureHuman(client, options.gizpayURL, variables["human_token"], variables["human_subject"], "human-primary")
 	if err != nil {
 		return fmt.Errorf("initialize primary Human: %w", err)
 	}
-	other, err := initializeFixtureHuman(client, options.gizpayURL, options.gizpayDSN, variables["human_token_two"], variables["human_two_subject"], "human-two")
+	other, err := initializeFixtureHuman(client, options.gizpayURL, variables["human_token_two"], variables["human_two_subject"], "human-two")
 	if err != nil {
 		return fmt.Errorf("initialize second Human: %w", err)
 	}
-	var product struct {
-		ID string `json:"id"`
-	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/merchants/"+owner.DefaultMerchantID+"/products", variables["human_token"], map[string]any{"name": "M03 PAYG", "billing_mode": "pay_as_you_go", "terms_version": "m03-v1"}, &product); err != nil {
+	variables["default_merchant_id"] = owner.DefaultMerchantID
+	seed, adminKey, err := loadSeedConfig(options.seedConfigFile, variables)
+	if err != nil {
 		return err
 	}
-	var hiddenProduct struct {
-		ID string `json:"id"`
+	for pass := 1; pass <= 2; pass++ {
+		if err := seedBusinessResources(context.Background(), client, seed, adminKey); err != nil {
+			return fmt.Errorf("API Seed pass %d: %w", pass, err)
+		}
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/merchants/"+owner.DefaultMerchantID+"/products", variables["human_token"], map[string]any{"name": "M03 Hidden PAYG", "billing_mode": "pay_as_you_go", "terms_version": "m03-v1"}, &hiddenProduct); err != nil {
+	if err := verifySeedConflict(context.Background(), client, seed, adminKey); err != nil {
 		return err
 	}
-	if err := setProductPublished(options.gizpayDSN, hiddenProduct.ID, false); err != nil {
-		return err
-	}
-	if err := seedProductListings(options.gizpayDSN, product.ID); err != nil {
-		return err
-	}
+
+	productID := seed.GizPay.Products[0]["id"].(string)
 	var subscription struct {
 		ID string `json:"id"`
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+product.ID+"/subscriptions", variables["human_token"], map[string]any{"id": "sub_m03_bootstrap", "account_id": owner.AccountID, "terms_version": "m03-v1"}, &subscription); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+productID+"/subscriptions", variables["human_token"], map[string]any{"id": "sub_m03_bootstrap", "account_id": owner.AccountID, "terms_version": "m03-v1"}, &subscription); err != nil {
 		return err
 	}
 	var subscriptionKey struct{ ID, Key string }
@@ -112,7 +108,7 @@ func bootstrapMilestone03(options options) error {
 	var negativeSubscription struct {
 		ID string `json:"id"`
 	}
-	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+product.ID+"/subscriptions", variables["human_token_two"], map[string]any{"id": "sub_m03_negative", "account_id": other.AccountID, "terms_version": "m03-v1"}, &negativeSubscription); err != nil {
+	if err := bootstrapAPIJSON(client, http.MethodPost, options.gizpayURL+"/account/v1/products/"+productID+"/subscriptions", variables["human_token_two"], map[string]any{"id": "sub_m03_negative", "account_id": other.AccountID, "terms_version": "m03-v1"}, &negativeSubscription); err != nil {
 		return err
 	}
 	var negativeKey struct{ ID, Key string }
@@ -130,7 +126,7 @@ func bootstrapMilestone03(options options) error {
 	if err != nil {
 		return err
 	}
-	secret = []byte(strings.TrimSpace(string(secret)))
+	secret = bytes.TrimSpace(secret)
 	variables["raw_subscription_key"] = subscriptionKey.Key
 	variables["active_subscription_hmac"] = subscriptionkey.HMAC(secret, subscriptionKey.Key)
 	variables["revoked_subscription_key"] = revokedKey.Key
@@ -143,138 +139,191 @@ func bootstrapMilestone03(options options) error {
 	variables["provider_id"] = "provider_story_cn"
 	variables["account_id"] = owner.AccountID
 	variables["account_id_two"] = other.AccountID
-	variables["hidden_product_id"] = hiddenProduct.ID
-	variables["default_merchant_id"] = owner.DefaultMerchantID
-
-	if err := seedServicePrincipals(options.gizpayDSN, owner.UserID, variables); err != nil {
-		return err
-	}
-	if err := seedMilestone03Region(options.cnDSN, "cn", options.cnProviderURL, "cn-provider-secret", options.cnURL, variables["human_token"], owner.DefaultMerchantID, variables); err != nil {
-		return err
-	}
-	if options.globalDSN != "" && options.globalURL != "" {
-		if err := seedMilestone03Region(options.globalDSN, "global", options.globalProviderURL, "global-provider-secret", options.globalURL, variables["human_token"], owner.DefaultMerchantID, variables); err != nil {
-			return err
-		}
+	variables["hidden_product_id"] = seed.GizPay.Products[1]["id"].(string)
+	for _, region := range seed.Regions {
+		variables[region.Name+"_provider_key_id"] = region.ProviderKeys[0]["id"].(string)
 	}
 	return writeVariables(options.fixtureFile, variables)
 }
 
-func seedServicePrincipals(dsn, ownerUserID string, variables map[string]string) error {
-	db, err := waitDatabase(dsn)
+func seedBusinessResources(ctx context.Context, httpClient *http.Client, config seedConfig, adminKey []byte) error {
+	pay, err := gizpayadmin.NewClient(strings.TrimRight(config.GizPay.BaseURL, "/")+"/admin/v1", gizpayadmin.WithHTTPClient(httpClient), gizpayadmin.WithRequestEditorFn(adminKeyEditor(adminKey)))
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	now := time.Now().UTC()
-	fixtures := []struct {
-		id, subject string
-		roles       string
-	}{
-		{"svc_cn", variables["service_subject"], `["credit_check","charge"]`},
-		{"svc_global", variables["global_service_subject"], `["credit_check","charge"]`},
-		{"svc_charger", variables["service_charger_subject"], `["charge"]`},
-	}
-	for _, fixture := range fixtures {
-		if fixture.subject == "" {
-			return errors.New("service account subject fixture is missing")
+	for _, body := range config.GizPay.Products {
+		if err := seedCreate("GizPay", "Product", body, func(reader io.Reader) (*http.Response, error) {
+			return pay.CreateAdminProductWithBody(ctx, "application/json", reader)
+		}); err != nil {
+			return err
 		}
-		if _, err = db.Exec(`INSERT INTO service_principals(id,owner_user_id,identity_issuer,identity_subject,name,roles,status,created_at) VALUES($1,$2,$3,$4,$5,$6,'active',$7) ON CONFLICT(identity_issuer,identity_subject) DO NOTHING`, fixture.id, ownerUserID, fixtureIssuer, fixture.subject, fixture.id, fixture.roles, now); err != nil {
+	}
+	for _, body := range config.GizPay.ProductListings {
+		if err := seedCreate("GizPay", "Product Listing", body, func(reader io.Reader) (*http.Response, error) {
+			return pay.CreateAdminProductListingWithBody(ctx, "application/json", reader)
+		}); err != nil {
+			return err
+		}
+	}
+	for _, body := range config.GizPay.ServicePrincipals {
+		if err := seedCreate("GizPay", "Service Principal", body, func(reader io.Reader) (*http.Response, error) {
+			return pay.CreateAdminServicePrincipalWithBody(ctx, "application/json", reader)
+		}); err != nil {
+			return err
+		}
+	}
+	if err := verifyCollection("GizPay Product", seedIDs(config.GizPay.Products), func() (*http.Response, error) { return pay.ListAdminProducts(ctx) }); err != nil {
+		return err
+	}
+	if err := verifyCollection("GizPay Product Listing", seedIDs(config.GizPay.ProductListings), func() (*http.Response, error) { return pay.ListAdminProductListings(ctx) }); err != nil {
+		return err
+	}
+	if err := verifyCollection("GizPay Service Principal", seedIDs(config.GizPay.ServicePrincipals), func() (*http.Response, error) { return pay.ListAdminServicePrincipals(ctx) }); err != nil {
+		return err
+	}
+
+	for _, region := range config.Regions {
+		way, err := gizwayadmin.NewClient(strings.TrimRight(region.BaseURL, "/")+"/admin/v1", gizwayadmin.WithHTTPClient(httpClient), gizwayadmin.WithRequestEditorFn(adminKeyEditor(adminKey)))
+		if err != nil {
+			return err
+		}
+		for _, body := range region.Providers {
+			if err := seedCreate(region.Name, "Provider", body, func(reader io.Reader) (*http.Response, error) {
+				return way.CreateAdminProviderWithBody(ctx, "application/json", reader)
+			}); err != nil {
+				return err
+			}
+		}
+		for _, body := range region.Models {
+			if err := seedCreate(region.Name, "Model", body, func(reader io.Reader) (*http.Response, error) {
+				return way.CreateAdminModelWithBody(ctx, "application/json", reader)
+			}); err != nil {
+				return err
+			}
+		}
+		for _, body := range region.ModelCustomerPrices {
+			modelID := body.ModelID
+			if err := seedPut(region.Name, "Model customer prices", modelID, map[string]any{"prices": body.Prices}, func(contentType string, reader io.Reader) (*http.Response, error) {
+				return way.ReplaceAdminModelCustomerPricesWithBody(ctx, modelID, contentType, reader)
+			}); err != nil {
+				return err
+			}
+		}
+		for _, body := range region.ModelListings {
+			if err := seedCreate(region.Name, "Model Listing", body, func(reader io.Reader) (*http.Response, error) {
+				return way.CreateAdminModelListingWithBody(ctx, "application/json", reader)
+			}); err != nil {
+				return err
+			}
+		}
+		for _, body := range region.ProviderKeys {
+			if err := seedCreate(region.Name, "Provider Key", body, func(reader io.Reader) (*http.Response, error) {
+				return way.CreateAdminProviderKeyWithBody(ctx, "application/json", reader)
+			}); err != nil {
+				return err
+			}
+		}
+		if err := verifyCollection(region.Name+" Provider", seedIDs(region.Providers), func() (*http.Response, error) { return way.ListAdminProviders(ctx) }); err != nil {
+			return err
+		}
+		if err := verifyCollection(region.Name+" Model", seedIDs(region.Models), func() (*http.Response, error) { return way.ListAdminModels(ctx) }); err != nil {
+			return err
+		}
+		if err := verifyCollection(region.Name+" Model Listing", seedIDs(region.ModelListings), func() (*http.Response, error) { return way.ListAdminModelListings(ctx) }); err != nil {
+			return err
+		}
+		if err := verifyCollection(region.Name+" Provider Key", seedIDs(region.ProviderKeys), func() (*http.Response, error) { return way.ListAdminProviderKeys(ctx) }); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func seedProductListings(dsn, productID string) error {
-	db, err := waitDatabase(dsn)
+func seedCreate(service, kind string, body map[string]any, call func(io.Reader) (*http.Response, error)) error {
+	return seedRequest(service, kind, body["id"].(string), body, []int{http.StatusOK, http.StatusCreated}, call)
+}
+
+func seedPut(service, kind, id string, body any, call func(string, io.Reader) (*http.Response, error)) error {
+	return seedRequest(service, kind, id, body, []int{http.StatusOK}, func(reader io.Reader) (*http.Response, error) {
+		return call("application/json", reader)
+	})
+}
+
+func seedRequest(service, kind, id string, body any, allowed []int, call func(io.Reader) (*http.Response, error)) error {
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	for index, site := range []string{"global.localhost", "cn.localhost"} {
-		id := "listing_m04_payg_" + strings.TrimSuffix(site, ".localhost")
-		if _, err = db.Exec(`INSERT INTO product_listings(id,product_id,site,title,description,billing_mode,price_text,display_order,status)
-			VALUES($1,$2,$3,'GizWay PAYG','Pay only for normalized model usage.','pay_as_you_go','Usage based',$4,'active')
-			ON CONFLICT(product_id,site) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,price_text=EXCLUDED.price_text,display_order=EXCLUDED.display_order,status='active',updated_at=now()`, id, productID, site, index); err != nil {
-			return err
+	response, err := call(bytes.NewReader(raw))
+	if err != nil {
+		return fmt.Errorf("%s %s %s: %w", service, kind, id, err)
+	}
+	defer response.Body.Close()
+	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if slices.Contains(allowed, response.StatusCode) {
+		return nil
+	}
+	return fmt.Errorf("%s %s %s returned %d: %s", service, kind, id, response.StatusCode, strings.TrimSpace(string(responseBody)))
+}
+
+func verifyCollection(kind string, expected []string, call func() (*http.Response, error)) error {
+	response, err := call()
+	if err != nil {
+		return fmt.Errorf("list %s: %w", kind, err)
+	}
+	defer response.Body.Close()
+	var collection struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&collection) != nil {
+		return fmt.Errorf("list %s returned invalid response %d", kind, response.StatusCode)
+	}
+	for _, id := range expected {
+		found := false
+		for _, resource := range collection.Data {
+			if id == resource.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("list %s omitted %s", kind, id)
 		}
 	}
 	return nil
 }
 
-func seedMilestone03Region(dsn, region, providerURL, credential, apiURL, humanToken, merchantID string, variables map[string]string) error {
-	storeDSN, err := withoutSearchPath(dsn)
+func verifySeedConflict(ctx context.Context, httpClient *http.Client, config seedConfig, adminKey []byte) error {
+	region := config.Regions[0]
+	way, err := gizwayadmin.NewClient(strings.TrimRight(region.BaseURL, "/")+"/admin/v1", gizwayadmin.WithHTTPClient(httpClient), gizwayadmin.WithRequestEditorFn(adminKeyEditor(adminKey)))
 	if err != nil {
 		return err
 	}
-	stores, err := bifrostadapter.OpenStores(context.Background(), bifrostadapter.StoreConfig{Type: "postgresql", DSN: storeDSN, Schema: "bifrost_config"}, bifrostadapter.StoreConfig{Type: "postgresql", DSN: storeDSN, Schema: "bifrost_logs"})
+	conflict := make(map[string]any, len(region.Providers[0]))
+	maps.Copy(conflict, region.Providers[0])
+	conflict["kind"] = "anthropic"
+	raw, _ := json.Marshal(conflict)
+	response, err := way.CreateAdminProviderWithBody(ctx, "application/json", bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
-	defer stores.Close(context.Background())
-	providerID, modelID := "provider_story_"+region, "story-text-"+region
-	zeroModelID := "story-text-zero-" + region
-	if err = stores.CreateProvider(context.Background(), bifrostadapter.ProviderRecord{ID: providerID, Name: "Story " + region, Kind: "openai", BaseURL: providerURL, Status: "active", CreatedAt: time.Now().UTC()}); err != nil {
-		return err
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusConflict {
+		return fmt.Errorf("conflicting Provider Seed returned %d, want 409", response.StatusCode)
 	}
-	db, err := waitDatabase(dsn)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	tx, err := db.BeginTxx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`INSERT INTO client_sync.providers(id,name,kind,status) VALUES($1,$2,'openai','active')`, providerID, "Story "+region); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`INSERT INTO client_sync.models(id,provider_id,name,provider_model,status) VALUES($1,$2,'story-text','fake-text-v1','active')`, modelID, providerID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`INSERT INTO client_sync.models(id,provider_id,name,provider_model,status) VALUES($1,$2,'story-text-zero','fake-text-v1','active')`, zeroModelID, providerID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`INSERT INTO client_sync.models(id,provider_id,name,provider_model,status) VALUES($1,$2,'story-text-inactive','fake-text-v1','inactive')`, "story-text-inactive-"+region, providerID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`INSERT INTO model_customer_prices(model_id,metric,unit_size,price_microcredits) VALUES($1,'input_tokens',1000000,1000),($1,'output_tokens',1000000,2000)`, modelID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`INSERT INTO model_customer_prices(model_id,metric,unit_size,price_microcredits) VALUES($1,'input_tokens',1000000,0),($1,'output_tokens',1000000,0)`, zeroModelID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`INSERT INTO model_listings(id,model_id,title,description,family,context,latency,accent,featured,display_order,availability)
-		VALUES($1,$2,'Story Text','Metered text generation for browser acceptance.','Text','128K','Fast','emerald',true,0,'available'),
-		      ($3,$4,'Story Text Zero','Zero-price local execution for browser acceptance.','Text','128K','Fast','blue',false,1,'available')`, "listing_story_text_"+region, modelID, "listing_story_text_zero_"+region, zeroModelID); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	body := map[string]any{"id": "pkey_m03_bootstrap_" + region, "name": "Bootstrap Provider Key", "key": credential, "status": "active", "prices": []any{
-		map[string]any{"model_id": modelID, "metric": "input_tokens", "unit_size": 1000000, "microcredits_per_unit": 500},
-		map[string]any{"model_id": modelID, "metric": "output_tokens", "unit_size": 1000000, "microcredits_per_unit": 700},
-		map[string]any{"model_id": zeroModelID, "metric": "input_tokens", "unit_size": 1000000, "microcredits_per_unit": 0},
-		map[string]any{"model_id": zeroModelID, "metric": "output_tokens", "unit_size": 1000000, "microcredits_per_unit": 0},
-	}}
-	var key struct {
-		ProviderKeyID string `json:"provider_key_id"`
-		MerchantID    string `json:"merchant_id"`
-	}
-	if err = bootstrapAPIJSON(&http.Client{Timeout: 20 * time.Second}, http.MethodPost, strings.TrimRight(apiURL, "/")+"/user/v1/providers/"+providerID+"/keys", humanToken, body, &key); err != nil {
-		return err
-	}
-	if key.MerchantID != merchantID {
-		return fmt.Errorf("regional Provider Key merchant %q does not match initialized merchant %q", key.MerchantID, merchantID)
-	}
-	variables[region+"_provider_key_id"] = key.ProviderKeyID
 	return nil
 }
 
-func initializeFixtureHuman(client *http.Client, gizpayURL, gizpayDSN, token, subject, displayName string) (initializedAccount, error) {
+func adminKeyEditor(key []byte) func(context.Context, *http.Request) error {
+	return func(_ context.Context, request *http.Request) error {
+		request.Header.Set("X-GizWay-Admin-Key", string(key))
+		return nil
+	}
+}
+
+func initializeFixtureHuman(client *http.Client, gizpayURL, token, subject, displayName string) (initializedAccount, error) {
 	var initialized initializedAccount
 	secret, err := os.ReadFile("/fixtures/zitadel-action-signing-key")
 	if err != nil {
@@ -327,59 +376,10 @@ func initializeFixtureHuman(client *http.Client, gizpayURL, gizpayDSN, token, su
 	if initialized.DefaultMerchantID == "" {
 		return initialized, errors.New("default Merchant is missing")
 	}
-	db, err := waitDatabase(gizpayDSN)
-	if err != nil {
-		return initialized, err
-	}
-	defer db.Close()
-	if err = db.Get(&initialized.UserID, `SELECT id FROM users WHERE identity_issuer=$1 AND identity_subject=$2`, fixtureIssuer, subject); err != nil {
-		return initialized, fmt.Errorf("query initialized User: %w", err)
-	}
 	initialized.AccountID = accounts.Data[0].ID
 	return initialized, nil
 }
 
-func setProductPublished(dsn, productID string, published bool) error {
-	db, err := waitDatabase(dsn)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	result, err := db.Exec(`UPDATE products SET published=$1,updated_at=now() WHERE id=$2`, published, productID)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil || rows != 1 {
-		return fmt.Errorf("publish Product %q: affected %d rows: %w", productID, rows, err)
-	}
-	return nil
-}
-
-func withoutSearchPath(dsn string) (string, error) {
-	parsed, err := url.Parse(dsn)
-	if err != nil {
-		return "", err
-	}
-	query := parsed.Query()
-	query.Del("search_path")
-	parsed.RawQuery = query.Encode()
-	return parsed.String(), nil
-}
-func waitDatabase(dsn string) (*sqlx.DB, error) {
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		db, err := sqlx.Open("postgres", dsn)
-		if err == nil && db.Ping() == nil {
-			return db, nil
-		}
-		if db != nil {
-			_ = db.Close()
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	return nil, errors.New("database did not become ready")
-}
 func readVariables(path string) (map[string]string, error) {
 	file, err := os.Open(path)
 	if err != nil {

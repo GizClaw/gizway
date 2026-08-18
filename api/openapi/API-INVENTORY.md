@@ -1,7 +1,7 @@
 
 # Current implementation API inventory
 
-Final retained operation count: **41**.
+Final retained operation count: **81**.
 
 | OpenAPI file | Method | Path | operationId | Service | Status | Deletion reason | Hurl coverage |
 |---|---|---|---|---|---|---|---|
@@ -31,7 +31,47 @@ Final retained operation count: **41**.
 | account.yaml | POST | `/account/v1/subscriptions/{subscription_id}/keys` | createSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl<br>tests/api/stories/25-milestone-04/01-idempotent-writes.hurl |
 | account.yaml | GET | `/account/v1/subscriptions/{subscription_id}/keys/{subscription_key_id}` | getSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl |
 | account.yaml | POST | `/account/v1/subscriptions/{subscription_id}/keys/{subscription_key_id}/revoke` | revokeSubscriptionKey | GizPay | Keep | - | tests/api/stories/24-milestone-03/03-subscription-keys.hurl |
+| gizpay-admin.yaml | GET | `/admin/v1/product-listings` | listAdminProductListings | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | POST | `/admin/v1/product-listings` | createAdminProductListing | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | DELETE | `/admin/v1/product-listings/{product_listing_id}` | deleteAdminProductListing | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | GET | `/admin/v1/product-listings/{product_listing_id}` | getAdminProductListing | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | PATCH | `/admin/v1/product-listings/{product_listing_id}` | updateAdminProductListing | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | GET | `/admin/v1/products` | listAdminProducts | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | POST | `/admin/v1/products` | createAdminProduct | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | DELETE | `/admin/v1/products/{product_id}` | deleteAdminProduct | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | GET | `/admin/v1/products/{product_id}` | getAdminProduct | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | PATCH | `/admin/v1/products/{product_id}` | updateAdminProduct | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | GET | `/admin/v1/service-principals` | listAdminServicePrincipals | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | POST | `/admin/v1/service-principals` | createAdminServicePrincipal | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | DELETE | `/admin/v1/service-principals/{service_principal_id}` | deleteAdminServicePrincipal | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | GET | `/admin/v1/service-principals/{service_principal_id}` | getAdminServicePrincipal | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
+| gizpay-admin.yaml | PATCH | `/admin/v1/service-principals/{service_principal_id}` | updateAdminServicePrincipal | GizPay | Keep | - | tests/api/stories/26-admin/01-gizpay-admin-crud.hurl |
 | gizpay-webhooks.yaml | POST | `/webhooks/v1/zitadel/user-authenticated` | initializeHumanFromZitadel | GizPay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/model-listings` | listAdminModelListings | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | POST | `/admin/v1/model-listings` | createAdminModelListing | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | DELETE | `/admin/v1/model-listings/{model_listing_id}` | deleteAdminModelListing | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/model-listings/{model_listing_id}` | getAdminModelListing | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | PATCH | `/admin/v1/model-listings/{model_listing_id}` | updateAdminModelListing | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/models` | listAdminModels | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | POST | `/admin/v1/models` | createAdminModel | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | DELETE | `/admin/v1/models/{model_id}` | deleteAdminModel | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/models/{model_id}` | getAdminModel | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | PATCH | `/admin/v1/models/{model_id}` | updateAdminModel | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/models/{model_id}/customer-prices` | getAdminModelCustomerPrices | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | PUT | `/admin/v1/models/{model_id}/customer-prices` | replaceAdminModelCustomerPrices | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/provider-keys` | listAdminProviderKeys | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | POST | `/admin/v1/provider-keys` | createAdminProviderKey | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | DELETE | `/admin/v1/provider-keys/{provider_key_id}` | deleteAdminProviderKey | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/provider-keys/{provider_key_id}` | getAdminProviderKey | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | PATCH | `/admin/v1/provider-keys/{provider_key_id}` | updateAdminProviderKey | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/provider-keys/{provider_key_id}/prices` | getAdminProviderKeyPrices | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | PUT | `/admin/v1/provider-keys/{provider_key_id}/prices` | replaceAdminProviderKeyPrices | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | POST | `/admin/v1/provider-keys/{provider_key_id}/rotate-secret` | rotateAdminProviderKeySecret | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/providers` | listAdminProviders | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | POST | `/admin/v1/providers` | createAdminProvider | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | DELETE | `/admin/v1/providers/{provider_id}` | deleteAdminProvider | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | GET | `/admin/v1/providers/{provider_id}` | getAdminProvider | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
+| gizway-admin.yaml | PATCH | `/admin/v1/providers/{provider_id}` | updateAdminProvider | GizWay | Keep | - | tests/api/stories/26-admin/02-gizway-admin-crud.hurl |
 | gizway-public.yaml | GET | `/auth/catalog-token` | getPublicCatalogToken | GizWay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
 | gizway-public.yaml | GET | `/auth/runtime-config` | getPublicRuntimeConfig | GizWay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
 | gizway-public.yaml | POST | `/v1/chat/completions` | createChatCompletion | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |

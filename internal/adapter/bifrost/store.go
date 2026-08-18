@@ -272,26 +272,44 @@ func (s *Stores) UpdateKeyInTransaction(ctx context.Context, record KeyRecord, t
 
 func (s *Stores) CreateProvider(ctx context.Context, record ProviderRecord) error {
 	return s.configTransaction(ctx, func(tx *gorm.DB) error {
-		if err := s.Config.AddProvider(ctx, schemas.ModelProvider(record.ID), providerConfig(record), tx); err != nil {
-			return err
-		}
-		// Bifrost's single-provider AddProvider API does not currently persist
-		// ProviderConfig.Status or Description. Keep those official table fields
-		// in the same transaction so the regional active-state contract is not
-		// lost between create and the first lookup.
-		return tx.Model(&tables.TableProvider{}).Where("name = ?", record.ID).
-			Updates(map[string]any{"status": record.Status, "description": record.Name}).Error
+		return s.CreateProviderInTransaction(ctx, record, tx)
 	})
+}
+
+// CreateProviderInTransaction persists Bifrost Provider state in a caller-owned
+// transaction so GizWay can update its regional projection atomically.
+func (s *Stores) CreateProviderInTransaction(ctx context.Context, record ProviderRecord, tx *gorm.DB) error {
+	if tx == nil {
+		return errors.New("bifrost config store transaction is required")
+	}
+	if err := s.Config.AddProvider(ctx, schemas.ModelProvider(record.ID), providerConfig(record), tx); err != nil {
+		return err
+	}
+	// Bifrost's single-provider AddProvider API does not currently persist
+	// ProviderConfig.Status or Description. Keep those official table fields
+	// in the same transaction so the regional active-state contract is not
+	// lost between create and the first lookup.
+	return tx.Model(&tables.TableProvider{}).Where("name = ?", record.ID).
+		Updates(map[string]any{"status": record.Status, "description": record.Name}).Error
 }
 
 func (s *Stores) UpdateProvider(ctx context.Context, record ProviderRecord) error {
 	return s.configTransaction(ctx, func(tx *gorm.DB) error {
-		if err := s.Config.UpdateProvider(ctx, schemas.ModelProvider(record.ID), providerConfig(record), tx); err != nil {
-			return err
-		}
-		return tx.Model(&tables.TableProvider{}).Where("name = ?", record.ID).
-			Updates(map[string]any{"status": record.Status, "description": record.Name}).Error
+		return s.UpdateProviderInTransaction(ctx, record, tx)
 	})
+}
+
+// UpdateProviderInTransaction updates Bifrost Provider state in a caller-owned
+// transaction so GizWay can update its regional projection atomically.
+func (s *Stores) UpdateProviderInTransaction(ctx context.Context, record ProviderRecord, tx *gorm.DB) error {
+	if tx == nil {
+		return errors.New("bifrost config store transaction is required")
+	}
+	if err := s.Config.UpdateProvider(ctx, schemas.ModelProvider(record.ID), providerConfig(record), tx); err != nil {
+		return err
+	}
+	return tx.Model(&tables.TableProvider{}).Where("name = ?", record.ID).
+		Updates(map[string]any{"status": record.Status, "description": record.Name}).Error
 }
 
 func (s *Stores) Provider(ctx context.Context, id string) (ProviderRecord, error) {

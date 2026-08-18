@@ -59,7 +59,7 @@ func Inventory(openAPIDirectory, hurlDirectory string) ([]InventoryEntry, error)
 	entries := make([]InventoryEntry, 0, len(operations))
 	for key, operation := range operations {
 		service := "GizPay"
-		if operation.Document == "gizway-user.yaml" || operation.Document == "gizway-public.yaml" {
+		if operation.Document == "gizway-admin.yaml" || operation.Document == "gizway-user.yaml" || operation.Document == "gizway-public.yaml" {
 			service = "GizWay"
 		}
 		files := append([]string(nil), coveredBy[key]...)
@@ -177,10 +177,10 @@ func removedMilestone01Path(path string) bool {
 // paths and operation IDs while remaining independent services.
 func requestTargetsDocument(variable, document string) bool {
 	if variable == "way_url" {
-		return document == "gizway-user.yaml" || document == "gizway-public.yaml"
+		return document == "gizway-admin.yaml" || document == "gizway-user.yaml" || document == "gizway-public.yaml"
 	}
 	if variable == "pay_url" {
-		return document != "gizway-user.yaml" && document != "gizway-public.yaml"
+		return document != "gizway-admin.yaml" && document != "gizway-user.yaml" && document != "gizway-public.yaml"
 	}
 	return false
 }

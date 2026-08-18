@@ -12,4 +12,4 @@ packages="$(${go_command} list ./... | grep -v '/web/apps/gizway/node_modules/')
 "${go_command}" vet ${packages}
 GO="${go_command}" "${script_dir}/lint-go-modernize.sh" ${packages}
 "${go_command}" tool staticcheck ${packages}
-"${go_command}" tool govulncheck ${packages}
+GO="${go_command}" "${script_dir}/govulncheck.sh" ${packages}
