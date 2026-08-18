@@ -28,6 +28,7 @@ import (
 )
 
 type Config struct {
+	AdminKey              []byte
 	DB                    *sqlx.DB
 	Verifier              *identity.Verifier
 	HumanAudience         string
@@ -72,6 +73,10 @@ func New(config Config) (*Handler, error) {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/admin/v1/") {
+		h.serveAdmin(w, r)
+		return
+	}
 	if r.Method == http.MethodPost && r.URL.Path == "/webhooks/v1/zitadel/user-authenticated" {
 		h.zitadelUserAuthenticated(w, r)
 		return

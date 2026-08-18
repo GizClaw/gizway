@@ -24,6 +24,7 @@ import (
 )
 
 type Config struct {
+	AdminKey                   []byte
 	DB                         *sqlx.DB
 	DatabaseSchema             string
 	Verifier                   *identity.Verifier
@@ -221,6 +222,10 @@ func (h *Handler) Close() error {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/admin/v1/") {
+		h.serveAdmin(w, r)
+		return
+	}
 	if r.Method == http.MethodGet && r.URL.Path == "/auth/catalog-token" {
 		h.publicCatalogToken(w, r)
 		return
@@ -333,10 +338,10 @@ func (h *Handler) ownerMerchant(ctx context.Context, authorization string, princ
 }
 
 type keyPrice struct {
-	ModelID      string `json:"model_id"`
-	Metric       string `json:"metric"`
-	UnitSize     int64  `json:"unit_size"`
-	Microcredits int64  `json:"microcredits_per_unit"`
+	ModelID      string `db:"model_id" json:"model_id"`
+	Metric       string `db:"metric" json:"metric"`
+	UnitSize     int64  `db:"unit_size" json:"unit_size"`
+	Microcredits int64  `db:"microcredits_per_unit" json:"microcredits_per_unit"`
 }
 
 func validMetric(metric string) bool { return metric == "input_tokens" || metric == "output_tokens" }

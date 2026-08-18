@@ -47,6 +47,9 @@ type ProcessConfig struct {
 		ListenAddress   string `yaml:"listen_address" json:"listen_address"`
 		ShutdownTimeout string `yaml:"shutdown_timeout" json:"shutdown_timeout,omitempty"`
 	} `yaml:"server" json:"server"`
+	Admin struct {
+		InitialKeyFile string `yaml:"initial_key_file" json:"-"`
+	} `yaml:"admin" json:"-"`
 	Site struct {
 		Hostname string `yaml:"hostname" json:"hostname"`
 	} `yaml:"site" json:"site"`
@@ -199,7 +202,11 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 	if config.SubscriptionKeys.HMAC.SecretFile == "" {
 		return errors.New("subscription_keys.hmac.secret_file is required")
 	}
+	if config.Admin.InitialKeyFile == "" {
+		return errors.New("admin.initial_key_file is required")
+	}
 	files := []string{
+		config.Admin.InitialKeyFile,
 		config.SubscriptionKeys.HMAC.SecretFile,
 		config.Authentication.ZITADEL.ManagementClient.PrivateKeyFile,
 		config.Authentication.ServiceAccount.PrivateKeyFile,
@@ -440,6 +447,10 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 	}
 	defer database.Close()
 	logger := processLogger(config.Logging.Level, config.Logging.Format)
+	adminKey, err := readConfiguredSecret(config, config.Admin.InitialKeyFile)
+	if err != nil {
+		return fmt.Errorf("read Admin Key: %w", err)
+	}
 	zitadelClient := &http.Client{Timeout: 10 * time.Second}
 	var business http.Handler
 	if kind == ProcessGizPay {
@@ -484,6 +495,7 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 		recheckInterval, _ := time.ParseDuration(recheckValue)
 		verifier := identity.NewVerifierWithRefreshAndClient(config.Authentication.ZITADEL.Issuer, config.Authentication.ZITADEL.JWKSURL, durationOr(config.Authentication.ZITADEL.JWKSRefreshInterval, 5*time.Minute), zitadelClient)
 		business, err = payservice.New(payservice.Config{
+			AdminKey:              adminKey,
 			DB:                    database.SQL,
 			Verifier:              verifier,
 			HumanAudience:         config.Authentication.ZITADEL.HumanAudience,
@@ -599,6 +611,7 @@ func RunProcess(config ProcessConfig, kind ProcessKind) error {
 			publicCatalogToken = manager.Current
 		}
 		business, err = wayservice.New(wayservice.Config{
+			AdminKey:                   adminKey,
 			DB:                         database.SQL,
 			DatabaseSchema:             config.Database.Schema,
 			Verifier:                   verifier,

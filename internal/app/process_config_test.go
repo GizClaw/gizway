@@ -38,6 +38,8 @@ func TestLoadProcessConfigDefaultsCreditIntervals(t *testing.T) {
 server:
   name: global.example.test
   listen_address: 127.0.0.1:0
+admin:
+  initial_key_file: ` + secret + `
 database:
   dsn: postgres://localhost/db
   schema: gizway
@@ -126,6 +128,7 @@ func validGizWayProcessConfigForDurationTests(t *testing.T) ProcessConfig {
 	config.Server.ListenAddress = "127.0.0.1:0"
 	config.Database.DSN = "postgres://localhost/db"
 	config.Database.Schema = "gizway"
+	config.Admin.InitialKeyFile = secret
 	config.SubscriptionKeys.HMAC.SecretFile = secret
 	config.Authentication.ZITADEL.Issuer = "https://identity.example.test"
 	config.Authentication.ZITADEL.JWKSURL = "https://identity.example.test/oauth/v2/keys"

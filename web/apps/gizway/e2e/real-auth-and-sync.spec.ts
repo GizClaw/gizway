@@ -14,6 +14,12 @@ function docker(...arguments_: string[]) {
   execFileSync("docker", arguments_, { stdio: "pipe" });
 }
 
+function setModelListingAvailability(availability: "available" | "unavailable") {
+  const container = composeContainer("gizway-global");
+  const body = JSON.stringify({ availability });
+  docker("exec", container, "sh", "-ec", `curl --fail --silent --show-error -X PATCH http://localhost:8080/admin/v1/model-listings/listing_story_text_global -H "Content-Type: application/json" -H "X-GizWay-Admin-Key: $(cat /fixtures/admin-key)" --data '${body}' >/dev/null && curl --fail --silent --show-error -X PATCH http://localhost:8080/admin/v1/model-listings/listing_story_text_zero_global -H "Content-Type: application/json" -H "X-GizWay-Admin-Key: $(cat /fixtures/admin-key)" --data '${body}' >/dev/null`);
+}
+
 function startDeniedPowerSync(service: "gizpay" | "cn" | "global"): () => void {
   const project = process.env.M04_E2E_COMPOSE_PROJECT;
   if (!project) throw new Error("M04_E2E_COMPOSE_PROJECT is required for real state tests");
@@ -204,15 +210,14 @@ test("public Catalog renders real prices, empty data and an offline service, the
   await page.goto("/");
   await expect(page.getByTestId("public-model-catalog-state")).toHaveText("2", { timeout: 60_000 });
   await expect(page.getByText("input_tokens: 1,000 GIZ Credit / 1M · output_tokens: 2,000 GIZ Credit / 1M", { exact: true })).toBeVisible();
-  const postgres = composeContainer("postgres-global");
   try {
-    docker("exec", postgres, "psql", "-U", "postgres", "-d", "gizway", "-c", "UPDATE gizway.model_listings SET availability='unavailable'");
+    setModelListingAvailability("unavailable");
     await expect(page.getByTestId("public-model-catalog-state")).toHaveAttribute("data-state", "empty", { timeout: 60_000 });
     await expect(page.getByTestId("public-model-catalog-state")).toHaveText("0");
     await expect(page.getByTestId("public-gizway-catalog-notice")).toHaveAttribute("data-state", "empty");
     await expect(page.getByTestId("public-gizway-catalog-notice")).toBeVisible();
   } finally {
-    docker("exec", postgres, "psql", "-U", "postgres", "-d", "gizway", "-c", "UPDATE gizway.model_listings SET availability='available'");
+    setModelListingAvailability("available");
   }
   await expect(page.getByTestId("public-model-catalog-state")).toHaveText("2", { timeout: 60_000 });
   await expect(page.getByTestId("public-gizway-catalog-notice")).toHaveCount(0);

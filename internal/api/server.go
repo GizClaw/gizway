@@ -102,10 +102,10 @@ func surfaceHandler(surface Surface, next http.Handler) http.Handler {
 		allowed := path == "/healthz" || strings.HasPrefix(path, "/test/")
 		if surface == SurfaceGizPay {
 			allowed = allowed || strings.HasPrefix(path, "/account/") || strings.HasPrefix(path, "/service/") ||
-				strings.HasPrefix(path, "/webhooks/")
+				strings.HasPrefix(path, "/webhooks/") || strings.HasPrefix(path, "/admin/")
 		} else {
 			allowed = allowed || strings.HasPrefix(path, "/user/") || strings.HasPrefix(path, "/v1/") ||
-				strings.HasPrefix(path, "/v1beta/") || strings.HasPrefix(path, "/auth/")
+				strings.HasPrefix(path, "/v1beta/") || strings.HasPrefix(path, "/auth/") || strings.HasPrefix(path, "/admin/")
 		}
 		if !allowed {
 			writeError(w, http.StatusNotFound, "not_found", "resource not found")

@@ -4,11 +4,18 @@ The Hurl files below `stories/24-milestone-03/` are the current durable API
 specifications. The suite starts fresh GizPay and regional PostgreSQL databases,
 embedded Bifrost stores, deterministic AI providers, and ZITADEL identities.
 
+`stories/26-admin/` is the black-box TDD contract for the Admin Key-only CRUD
+surfaces. The disposable business Seed uses those generated Admin clients and
+the existing Account API; it does not prepare business state with SQL.
+
 Run the black-box API suite from the repository root:
 
 ```sh
 make test-unit-api
 ```
+
+Run one Admin story with `MILESTONE_STORY_FILTER=01-gizpay-admin-crud make
+test-unit-api` (or the corresponding story basename).
 
 Run the complete Milestone 03 acceptance matrix with:
 
