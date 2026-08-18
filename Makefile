@@ -123,6 +123,7 @@ build-images:
 
 test-release-images:
 	@./tests/release/tag-validation.sh
+	@./tests/release/build-images.sh
 	@./tests/release/publish-images.sh
 	@./scripts/release/verify-images.sh
 	@./tests/release/smoke.sh
