@@ -9,15 +9,12 @@ import (
 	"testing"
 )
 
-func TestMilestone03OpenAPIRootsReplaceAdminAndOldKeyContract(t *testing.T) {
+func TestMilestone03OpenAPIRootsRetainCurrentContracts(t *testing.T) {
 	root := filepath.Join("..", "..", "api", "openapi")
-	for _, name := range []string{"account.yaml", "gizpay-webhooks.yaml", "internal-gizpay.yaml", "gizway-public.yaml", "gizway-user.yaml"} {
+	for _, name := range []string{"account.yaml", "gizpay-admin.yaml", "gizpay-webhooks.yaml", "gizway-admin.yaml", "internal-gizpay.yaml", "gizway-public.yaml", "gizway-user.yaml"} {
 		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
 			t.Errorf("Milestone 03 OpenAPI root %s: %v", name, err)
 		}
-	}
-	if _, err := os.Stat(filepath.Join(root, "gizway-admin.yaml")); !os.IsNotExist(err) {
-		t.Error("Milestone 03 must delete gizway-admin.yaml")
 	}
 
 	for _, name := range []string{"account.yaml", "internal-gizpay.yaml", "gizway-public.yaml"} {

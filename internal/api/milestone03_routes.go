@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
-	for _, route := range []string{
+	routes := []string{
 		"POST /webhooks/v1/zitadel/user-authenticated",
 		"GET /account/v1/accounts",
 		"GET /account/v1/accounts/{account_id}/balance",
@@ -45,7 +45,55 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 		"POST /v1beta/models/{operation}",
 		"POST /v1/realtime/client_secrets",
 		"GET /v1/realtime",
-	} {
+	}
+	if s.surface == SurfaceGizPay {
+		routes = append(routes,
+			"POST /admin/v1/products",
+			"GET /admin/v1/products",
+			"GET /admin/v1/products/{product_id}",
+			"PATCH /admin/v1/products/{product_id}",
+			"DELETE /admin/v1/products/{product_id}",
+			"POST /admin/v1/product-listings",
+			"GET /admin/v1/product-listings",
+			"GET /admin/v1/product-listings/{product_listing_id}",
+			"PATCH /admin/v1/product-listings/{product_listing_id}",
+			"DELETE /admin/v1/product-listings/{product_listing_id}",
+			"POST /admin/v1/service-principals",
+			"GET /admin/v1/service-principals",
+			"GET /admin/v1/service-principals/{service_principal_id}",
+			"PATCH /admin/v1/service-principals/{service_principal_id}",
+			"DELETE /admin/v1/service-principals/{service_principal_id}",
+		)
+	} else {
+		routes = append(routes,
+			"POST /admin/v1/providers",
+			"GET /admin/v1/providers",
+			"GET /admin/v1/providers/{provider_id}",
+			"PATCH /admin/v1/providers/{provider_id}",
+			"DELETE /admin/v1/providers/{provider_id}",
+			"POST /admin/v1/models",
+			"GET /admin/v1/models",
+			"GET /admin/v1/models/{model_id}",
+			"PATCH /admin/v1/models/{model_id}",
+			"DELETE /admin/v1/models/{model_id}",
+			"GET /admin/v1/models/{model_id}/customer-prices",
+			"PUT /admin/v1/models/{model_id}/customer-prices",
+			"POST /admin/v1/model-listings",
+			"GET /admin/v1/model-listings",
+			"GET /admin/v1/model-listings/{model_listing_id}",
+			"PATCH /admin/v1/model-listings/{model_listing_id}",
+			"DELETE /admin/v1/model-listings/{model_listing_id}",
+			"POST /admin/v1/provider-keys",
+			"GET /admin/v1/provider-keys",
+			"GET /admin/v1/provider-keys/{provider_key_id}",
+			"PATCH /admin/v1/provider-keys/{provider_key_id}",
+			"DELETE /admin/v1/provider-keys/{provider_key_id}",
+			"POST /admin/v1/provider-keys/{provider_key_id}/rotate-secret",
+			"GET /admin/v1/provider-keys/{provider_key_id}/prices",
+			"PUT /admin/v1/provider-keys/{provider_key_id}/prices",
+		)
+	}
+	for _, route := range routes {
 		mux.Handle(route, http.HandlerFunc(s.milestone03NotImplemented))
 	}
 }
