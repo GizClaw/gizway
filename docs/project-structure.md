@@ -32,3 +32,21 @@ cmd/gizway     -> internal/app -> internal/gizway -> regional PostgreSQL -> regi
 The implemented Milestone 03 contract is represented by the OpenAPI documents,
 the current PostgreSQL schemas, and the API, SDK, PowerSync, and E2E acceptance
 tests listed above.
+
+## Release ownership
+
+This repository owns three first-party `linux/amd64` production images:
+
+- `ghcr.io/idy/gizway-gizpay` for the central GizPay process;
+- `ghcr.io/idy/gizway-gateway` for either regional GizWay process;
+- `ghcr.io/idy/gizway-web` for the vinext standalone server.
+
+A strict SemVer Git tag runs the existing CI at that exact commit, builds and
+smokes OCI layouts once, publishes immutable version and full-revision tags to
+public GHCR packages, and keyless-signs the resulting digests with the GitHub
+Actions OIDC identity. The repository never stores signing keys or publishes a
+mutable `latest` tag.
+
+`GizClaw/deploy` owns production configuration, Secret delivery, signature
+verification, digest pinning, rollout, and rollback. Nothing in this release
+workflow contacts or mutates a production environment.

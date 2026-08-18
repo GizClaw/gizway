@@ -1,0 +1,197 @@
+name: Release OCI images
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      revision: ${{ steps.tag.outputs.revision }}
+      build_time: ${{ steps.tag.outputs.build_time }}
+      source_date_epoch: ${{ steps.tag.outputs.source_date_epoch }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch current main
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - name: Validate strict SemVer and main ancestry
+        id: tag
+        run: ./scripts/release/validate-tag.sh "${GITHUB_REF_NAME}" --require-main
+
+  ci:
+    name: Existing repository gates
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  web-and-powersync:
+    name: Web and offline PowerSync gates
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 22.22.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+          cache-dependency-path: |
+            web/apps/gizway/package-lock.json
+            tests/powersync/package-lock.json
+      - name: Run Web release gates
+        working-directory: web/apps/gizway
+        run: |
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm test
+      - name: Run offline PowerSync contracts
+        working-directory: tests/powersync
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+  publish:
+    name: Build, verify, publish, and sign
+    needs: [validate, ci, web-and-powersync]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      RELEASE_REVISION: ${{ needs.validate.outputs.revision }}
+      RELEASE_BUILD_TIME: ${{ needs.validate.outputs.build_time }}
+      SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.source_date_epoch }}
+      GH_TOKEN: ${{ github.token }}
+      ORAS_VERSION: 1.3.3
+      ORAS_SHA256: 9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59
+      COSIGN_VERSION: 3.1.3
+      COSIGN_SHA256: 4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Install pinned ORAS and Cosign
+        shell: bash
+        run: |
+          set -euo pipefail
+          oras_asset="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/$oras_asset" \
+            "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/$oras_asset"
+          printf '%s  %s\n' "$ORAS_SHA256" "$RUNNER_TEMP/$oras_asset" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$oras_asset" -C "$RUNNER_TEMP" oras
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+          printf '%s  %s\n' "$COSIGN_SHA256" "$RUNNER_TEMP/cosign" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/cosign"
+          sudo install "$RUNNER_TEMP/oras" /usr/local/bin/oras
+          sudo install "$RUNNER_TEMP/cosign" /usr/local/bin/cosign
+          oras version
+          cosign version
+      - name: Build each candidate once
+        run: make build-images
+      - name: Verify and smoke candidate layouts
+        run: make test-release-images
+      - name: Log in to GHCR
+        run: printf '%s' "${{ github.token }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Publish immutable version and revision tags
+        run: ./scripts/release/publish-images.sh
+      - name: Require anonymous digest access
+        shell: bash
+        run: |
+          set -euo pipefail
+          anonymous_config="$(mktemp -d)"
+          printf '{}\n' >"$anonymous_config/config.json"
+          for key in gizpay gizway web; do
+            case "$key" in
+              gizpay) image=ghcr.io/idy/gizway-gizpay ;;
+              gizway) image=ghcr.io/idy/gizway-gateway ;;
+              web) image=ghcr.io/idy/gizway-web ;;
+            esac
+            digest="$(<"tmp/release/images/$key.digest")"
+            if ! oras manifest fetch --registry-config "$anonymous_config/config.json" "$image@$digest" >/dev/null; then
+              printf '::error::%s is not public. Set all three GHCR packages to Public, then rerun this same tag. No signature or GitHub Release was created.\n' "$image"
+              exit 1
+            fi
+          done
+      - name: Keyless-sign and verify exact workflow identity
+        shell: bash
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
+          for key in gizpay gizway web; do
+            case "$key" in
+              gizpay) image=ghcr.io/idy/gizway-gizpay ;;
+              gizway) image=ghcr.io/idy/gizway-gateway ;;
+              web) image=ghcr.io/idy/gizway-web ;;
+            esac
+            ref="$image@$(<"tmp/release/images/$key.digest")"
+            cosign sign "$ref"
+            cosign verify \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$identity" \
+              "$ref"
+          done
+      - name: Create deterministic release manifest
+        run: ./scripts/release/create-manifest.sh
+      - name: Create or verify GitHub Release
+        shell: bash
+        env:
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          manifest=tmp/release/release-manifest.json
+          identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            # shellcheck disable=SC2016
+            printf 'Public OCI images for `%s`. Pull by the digests in `release-manifest.json`.\n\n' "$RELEASE_VERSION"
+            printf 'Verify each digest with:\n\n```sh\n'
+            printf "cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity '%s' IMAGE@DIGEST\n" "$identity"
+            printf '```\n'
+          } >"$notes"
+          if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
+            existing="$RUNNER_TEMP/existing-release-manifest.json"
+            gh release download "$RELEASE_VERSION" --pattern release-manifest.json --output "$existing" --clobber
+            cmp --silent "$manifest" "$existing"
+            actual_prerelease="$(gh release view "$RELEASE_VERSION" --json isPrerelease --jq .isPrerelease)"
+            [[ "$actual_prerelease" == "$PRERELEASE" ]]
+            exit 0
+          fi
+          args=(release create "$RELEASE_VERSION" "$manifest#release-manifest.json" --verify-tag --title "$RELEASE_VERSION" --notes-file "$notes")
+          [[ "$PRERELEASE" == true ]] && args+=(--prerelease)
+          gh "${args[@]}"

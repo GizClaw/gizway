@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/idy/gizway/internal/buildinfo"
 )
 
 // Surface selects the service-owned route set.
@@ -25,7 +26,7 @@ type Server struct {
 	business http.Handler
 	surface  Surface
 	name     string
-	version  string
+	build    buildinfo.Info
 	now      func() time.Time
 	advance  func(time.Duration) time.Time
 }
@@ -33,7 +34,7 @@ type Server struct {
 // NewMilestone03 composes a service-owned business handler behind the single
 // route manifest and the local-only health probe.
 func NewMilestone03(surface Surface, name string, business http.Handler, advance func(time.Duration) time.Time) *Server {
-	server := &Server{surface: surface, name: name, version: currentBuildVersion(), business: business, now: time.Now, advance: advance}
+	server := &Server{surface: surface, name: name, build: buildinfo.Current(), business: business, now: time.Now, advance: advance}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.milestone03Health)
 	if advance != nil {
@@ -51,16 +52,10 @@ func (s *Server) CloseRealtimeConnections(context.Context) error { return nil }
 
 func (s *Server) milestone03Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "healthy", "service": s.surface.String(), "version": s.version,
+		"status": "healthy", "service": s.surface.String(),
+		"version": s.build.Version, "revision": s.build.Revision, "build_time": s.build.BuildTime,
 		"server_time": s.now().UTC().Format(time.RFC3339),
 	})
-}
-
-func currentBuildVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
-		return info.Main.Version
-	}
-	return "unknown"
 }
 
 func (s *Server) milestone03NotImplemented(w http.ResponseWriter, r *http.Request) {
