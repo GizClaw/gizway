@@ -67,7 +67,7 @@ jobs:
           printf '%s  %s\n' "$expected_hurl_sha256" "$hurl_asset" |
             (cd "$RUNNER_TEMP" && sha256sum --check --strict)
           timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
-          timeout 180 sudo apt-get install --yes postgresql-client "$RUNNER_TEMP/$hurl_asset"
+          timeout 180 sudo apt-get install --yes postgresql-client ripgrep "$RUNNER_TEMP/$hurl_asset"
           hurl --version
 
       - name: Install pinned actionlint
