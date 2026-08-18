@@ -51,7 +51,8 @@ func initializeGizPaySystem(ctx context.Context, tx *sqlx.Tx) error {
 		`INSERT INTO accounts(id,owner_user_id,status) VALUES
 		 ('acct_platform','usr_platform','active') ON CONFLICT (id) DO NOTHING`,
 		`INSERT INTO ledger_accounts(id,owner_account_id,asset_code,status) VALUES
-		 ('led_acct_platform','acct_platform','credit','active') ON CONFLICT (id) DO NOTHING`,
+		 ('led_acct_platform','acct_platform','credit','active'),
+		 ('led_clearing',NULL,'clearing','active') ON CONFLICT (id) DO NOTHING`,
 	}
 	for _, statement := range statements {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {

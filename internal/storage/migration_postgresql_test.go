@@ -175,6 +175,21 @@ func TestPostgreSQLMigrateRejectsConflictingGizPaySystemRows(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLMigrateRestoresMissingGizPaySystemRow(t *testing.T) {
+	dsn := testdb.NewDatabase(t)
+	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
+		t.Fatal(err)
+	}
+	database := openMigrationDatabase(t, dsn)
+	if _, err := database.ExecContext(t.Context(), `DELETE FROM ledger_accounts WHERE id=$1`, storage.PlatformClearingID); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
+		t.Fatalf("restore missing system row: %v", err)
+	}
+	assertGizPaySystemRows(t, database)
+}
+
 func TestPostgreSQLMigrationClosesConnectionsOnFailure(t *testing.T) {
 	baseDSN := testdb.NewDatabase(t)
 	parsed, err := url.Parse(baseDSN)
