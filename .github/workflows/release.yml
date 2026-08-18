@@ -28,7 +28,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-          persist-credentials: false
+          # The next step refreshes origin/main so ancestry is checked against
+          # the current protected branch, including for this private repository.
+          persist-credentials: true
       - name: Fetch current main
         run: git fetch --no-tags origin main:refs/remotes/origin/main
       - name: Validate strict SemVer and main ancestry
