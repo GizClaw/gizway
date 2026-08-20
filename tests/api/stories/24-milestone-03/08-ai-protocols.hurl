@@ -11,7 +11,7 @@
 # protocol-case: m03.gemini.generate
 # protocol covers: Gemini x-goog-api-key authentication and model operation mapping
 
-GET {{way_url}}/v1/models
+GET {{way_url}}/openai/v1/models
 Authorization: Bearer {{raw_subscription_key}}
 
 HTTP 200
@@ -20,7 +20,7 @@ jsonpath "$.object" == "list"
 jsonpath "$.data[0].id" exists
 
 
-POST {{way_url}}/v1/chat/completions
+POST {{way_url}}/openai/v1/chat/completions
 Authorization: Bearer {{raw_subscription_key}}
 Content-Type: application/json
 {"model":"{{seeded_model_name}}","messages":[{"role":"user","content":"m03 marker"}],"stream":false}
@@ -31,7 +31,7 @@ jsonpath "$.choices[0].message.content" contains "deterministic story response"
 jsonpath "$.usage" exists
 
 
-POST {{way_url}}/v1/messages
+POST {{way_url}}/anthropic/v1/messages
 x-api-key: {{raw_subscription_key}}
 anthropic-version: 2023-06-01
 Content-Type: application/json
@@ -43,7 +43,7 @@ jsonpath "$.content[0].text" contains "deterministic story response"
 jsonpath "$.usage" exists
 
 
-POST {{way_url}}/v1beta/models/{{gemini_operation}}
+POST {{way_url}}/genai/v1beta/models/{{gemini_operation}}
 x-goog-api-key: {{raw_subscription_key}}
 Content-Type: application/json
 {"contents":[{"role":"user","parts":[{"text":"m03 marker"}]}]}
@@ -54,7 +54,7 @@ jsonpath "$.candidates[0].content.parts[0].text" contains "deterministic story r
 jsonpath "$.usageMetadata" exists
 
 
-POST {{way_url}}/v1/realtime/client_secrets
+POST {{way_url}}/openai/v1/realtime/client_secrets
 Authorization: Bearer {{raw_subscription_key}}
 Content-Type: application/json
 {"model":"{{seeded_model_name}}","transport":"websocket"}
@@ -84,7 +84,7 @@ jsonpath "$.driven" == true
 
 
 # The ephemeral Secret is one-purpose after a successful connection.
-GET {{way_url}}/v1/realtime?session_id={{realtime_session_id}}
+GET {{way_url}}/openai/v1/realtime?session_id={{realtime_session_id}}
 Authorization: Bearer {{realtime_secret}}
 Connection: Upgrade
 Upgrade: websocket
@@ -92,7 +92,7 @@ Upgrade: websocket
 HTTP 401
 
 
-GET {{way_url}}/v1/realtime
+GET {{way_url}}/openai/v1/realtime
 Authorization: Bearer invalid-realtime-secret
 Connection: Upgrade
 Upgrade: websocket

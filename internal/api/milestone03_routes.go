@@ -39,12 +39,12 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 		"POST /user/v1/provider-keys/{provider_key_id}/disable",
 		"GET /auth/catalog-token",
 		"GET /auth/runtime-config",
-		"GET /v1/models",
-		"POST /v1/chat/completions",
-		"POST /v1/messages",
-		"POST /v1beta/models/{operation}",
-		"POST /v1/realtime/client_secrets",
-		"GET /v1/realtime",
+		"GET /openai/v1/models",
+		"POST /openai/v1/chat/completions",
+		"POST /anthropic/v1/messages",
+		"POST /genai/v1beta/models/{operation}",
+		"POST /openai/v1/realtime/client_secrets",
+		"GET /openai/v1/realtime",
 	}
 	if s.surface == SurfaceGizPay {
 		routes = append(routes,

@@ -1,41 +1,21 @@
-# Milestone 05 release acceptance
+# Milestone 05 acceptance
 
-Local release validation uses:
+The only integration lifecycle entry is:
 
 ```sh
-RELEASE_VERSION=v0.2.0 make build-images
-make test-release-images
+./tests/e2e/run.sh all
+./tests/e2e/run.sh api
+./tests/e2e/run.sh sdk
+./tests/e2e/run.sh powersync
+./tests/e2e/run.sh web
 ```
 
-`build-images` writes three OCI layouts from one commit-derived metadata set.
-`test-release-images` covers accepted and rejected tag forms, validates platform,
-user, command, OCI labels and digest syntax, then loads the same layouts into an
-isolated Compose project. The smoke test starts two disposable PostgreSQL
-instances, generates temporary test-only credentials and configuration, checks
-all three health contracts, verifies runtime users and absent development tools,
-tests a failing configuration, sends SIGTERM, and removes containers, networks,
-volumes and credentials on every exit path.
+Every mode creates one disposable Compose project. `all` creates it once and runs every gate. The lifecycle is `empty databases -> three business init jobs -> ZITADEL standard init -> services -> API resource jobs -> tests`; it replays all init/resource jobs to prove idempotence and removes volumes and runtime outputs on exit.
 
-The API and release Compose projects additionally require successful GizPay,
-CN GizWay, and Global GizWay migration jobs before their long-running services
-start. The harness reruns every job and compares migration timestamps and
-GizPay fixed rows to prove exact replay/no-op behavior. Runtime container
-commands are inspected to ensure `--initialize` is absent. Focused PostgreSQL
-tests cover concurrent serialization, rollback/retry, schema ownership,
-gapped/newer history, conflicting fixed rows, Bifrost exclusion, and connection
-cleanup.
+Acceptance requires:
 
-The `v0.2.0` tag additionally requires evidence that:
-
-1. all three GHCR packages are Public and anonymously pullable by digest with an
-   empty Docker credential configuration;
-2. rerunning the same tag preserves all three digests;
-3. every digest verifies against the exact GitHub Actions issuer and tagged
-   workflow identity;
-4. the downloaded Release manifest matches the tag commit, commit time,
-   platform, remote digests and signing identity;
-5. no mutable alias, PAT, long-lived signing key, Artifact Attestation,
-   production deploy, or Playwright CI gate was introduced.
-
-These checks qualify publication only. Production rollout and post-deploy smoke
-belong to `GizClaw/deploy` and require a separate decision.
+1. exactly seven release images and thirteen long-running instances in `release/images.json`;
+2. no Node runtime in `gizway-web` and no E2E-only configuration in a release image;
+3. no root `/v1` or `/v1beta` public AI route;
+4. no SQL product seed, custom ZITADEL init steps, hidden bootstrap image, or production deployment manifest;
+5. all seven immutable image digests built once, verified, anonymously readable, keyless-signed, and recorded in the release manifest.

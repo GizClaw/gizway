@@ -46,7 +46,7 @@ help:
 		'  test-e2e-sdk        run the official SDK compatibility matrix' \
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
 		'  test-e2e-web        run real Global/CN browser acceptance' \
-		'  build-images        build three linux/amd64 production OCI layouts' \
+		'  build-images        build seven linux/amd64 production OCI layouts' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
 fmt: fmt-go fmt-hurl fmt-module
@@ -107,16 +107,16 @@ test-unit-web:
 	@./scripts/test-unit/test-unit-web.sh
 
 test-e2e:
-	@./tests/e2e/run.sh
+	@./tests/e2e/run.sh all
 
 test-e2e-sdk:
-	@./tests/e2e/run-sdk.sh
+	@./tests/e2e/run.sh sdk
 
 test-e2e-powersync:
-	@./tests/e2e/run-powersync.sh
+	@./tests/e2e/run.sh powersync
 
 test-e2e-web:
-	@./tests/e2e/run-web.sh
+	@./tests/e2e/run.sh web
 
 build-images:
 	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"

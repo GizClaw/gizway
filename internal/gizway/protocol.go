@@ -133,7 +133,7 @@ type realtimeSession struct {
 }
 
 func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && r.URL.Path == "/v1/realtime" {
+	if r.Method == http.MethodGet && r.URL.Path == "/openai/v1/realtime" {
 		h.realtimeSocket(w, r)
 		return
 	}
@@ -153,7 +153,7 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 		errJSON(w, http.StatusPaymentRequired, "credit_denied", "Credit denied")
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+	if r.Method == http.MethodGet && r.URL.Path == "/openai/v1/models" {
 		rows, err := h.many(`SELECT name id FROM client_sync.models WHERE status='active' ORDER BY name`)
 		if err != nil {
 			internal(w)
@@ -165,19 +165,19 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": rows})
 		return
 	}
-	if r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions" {
+	if r.Method == http.MethodPost && r.URL.Path == "/openai/v1/chat/completions" {
 		h.chat(w, r, keyHMAC, admission, "openai")
 		return
 	}
-	if r.Method == http.MethodPost && r.URL.Path == "/v1/messages" {
+	if r.Method == http.MethodPost && r.URL.Path == "/anthropic/v1/messages" {
 		h.chat(w, r, keyHMAC, admission, "anthropic")
 		return
 	}
-	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1beta/models/") {
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/genai/v1beta/models/") {
 		h.chat(w, r, keyHMAC, admission, "gemini")
 		return
 	}
-	if r.Method == http.MethodPost && r.URL.Path == "/v1/realtime/client_secrets" {
+	if r.Method == http.MethodPost && r.URL.Path == "/openai/v1/realtime/client_secrets" {
 		h.createRealtimeSecret(w, r, keyHMAC, admission)
 		return
 	}
@@ -599,7 +599,7 @@ func (call resolvedCall) selected(keyID string) (resolvedCall, error) {
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request, keyHMAC string, admission creditAdmission, protocol string) {
 	var body chatRequest
 	if protocol == "gemini" {
-		modelOperation := strings.TrimPrefix(r.URL.Path, "/v1beta/models/")
+		modelOperation := strings.TrimPrefix(r.URL.Path, "/genai/v1beta/models/")
 		body.Stream = strings.HasSuffix(modelOperation, ":streamGenerateContent")
 		body.Model = strings.TrimSuffix(strings.TrimSuffix(modelOperation, ":generateContent"), ":streamGenerateContent")
 		var gemini struct {

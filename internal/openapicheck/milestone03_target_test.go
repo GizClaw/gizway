@@ -69,9 +69,9 @@ func TestMilestone03DocumentedOperationsHaveHurlRequests(t *testing.T) {
 			"GET {{pay_url}}/account/v1/service-accounts",
 			"POST {{pay_url}}/account/v1/service-accounts",
 			"DELETE {{pay_url}}/account/v1/service-accounts/{{service_account_id}}",
-			"POST {{pay_url}}/service/v1/subscription-credit-checks",
-			"POST {{pay_url}}/service/v1/payg-charges",
-			"GET {{pay_url}}/service/v1/payg-charges/{{external_order_id}}",
+			"POST {{pay_internal_url}}/service/v1/subscription-credit-checks",
+			"POST {{pay_internal_url}}/service/v1/payg-charges",
+			"GET {{pay_internal_url}}/service/v1/payg-charges/{{external_order_id}}",
 		},
 		"06-provider-key-commands.hurl": {
 			"POST {{way_url}}/user/v1/providers/{{provider_id}}/keys",
@@ -83,12 +83,12 @@ func TestMilestone03DocumentedOperationsHaveHurlRequests(t *testing.T) {
 			"GET {{way_url}}/healthz",
 		},
 		"08-ai-protocols.hurl": {
-			"GET {{way_url}}/v1/models",
-			"POST {{way_url}}/v1/chat/completions",
-			"POST {{way_url}}/v1/messages",
-			"POST {{way_url}}/v1beta/models/{{gemini_operation}}",
-			"POST {{way_url}}/v1/realtime/client_secrets",
-			"GET {{way_url}}/v1/realtime",
+			"GET {{way_url}}/openai/v1/models",
+			"POST {{way_url}}/openai/v1/chat/completions",
+			"POST {{way_url}}/anthropic/v1/messages",
+			"POST {{way_url}}/genai/v1beta/models/{{gemini_operation}}",
+			"POST {{way_url}}/openai/v1/realtime/client_secrets",
+			"GET {{way_url}}/openai/v1/realtime",
 		},
 	}
 	for name, requests := range expected {

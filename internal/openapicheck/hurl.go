@@ -82,7 +82,7 @@ func Inventory(openAPIDirectory, hurlDirectory string) ([]InventoryEntry, error)
 	return entries, nil
 }
 
-var hurlRequestPattern = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\{\{(base_url|pay_url|way_url)\}\}([^[:space:]]+)`)
+var hurlRequestPattern = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\{\{(base_url|pay_url|way_url|pay_internal_url|way_internal_url)\}\}([^[:space:]]+)`)
 
 // CheckHurlCoverage binds every `# covers:` declaration to an actual request
 // in the same Hurl file. A comment can no longer make CI green unless the file
@@ -172,14 +172,15 @@ func removedMilestone01Path(path string) bool {
 }
 
 // Hurl must name the concrete deployment it contacts. Central contracts use
-// pay_url and the regional contract uses way_url; base_url is intentionally
-// not accepted for OpenAPI ownership because the two Admin surfaces share
-// paths and operation IDs while remaining independent services.
+// Public contracts use pay_url and way_url. Internal service/admin contracts
+// use the matching *_internal_url so their tests cannot imply that Traefik
+// exposes those routes. base_url is intentionally not accepted because the
+// two Admin surfaces share paths while remaining independent services.
 func requestTargetsDocument(variable, document string) bool {
-	if variable == "way_url" {
+	if variable == "way_url" || variable == "way_internal_url" {
 		return document == "gizway-admin.yaml" || document == "gizway-user.yaml" || document == "gizway-public.yaml"
 	}
-	if variable == "pay_url" {
+	if variable == "pay_url" || variable == "pay_internal_url" {
 		return document != "gizway-admin.yaml" && document != "gizway-user.yaml" && document != "gizway-public.yaml"
 	}
 	return false

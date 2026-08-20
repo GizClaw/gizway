@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info: {title: GizPay Admin API, version: 4.0.0}
-servers: [{url: https://pay.gizway.com/admin/v1}]
+servers: [{url: https://pay.gizclaw.com/admin/v1}]
 security: [{adminKey: []}]
 paths:
   /products:

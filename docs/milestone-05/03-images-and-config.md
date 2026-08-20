@@ -1,51 +1,19 @@
 # Milestone 05 images and configuration
 
-Gizway publishes three production OCI images for `linux/amd64`:
+GizWay publishes exactly seven `linux/amd64` OCI images. The machine-readable source of truth is `release/images.json`.
 
-| Process | Image | Runtime command |
+| Image | Runtime | Long-running instances |
 | --- | --- | --- |
-| GizPay | `ghcr.io/idy/gizway-gizpay` | `/usr/local/bin/gizpay` |
-| Regional GizWay | `ghcr.io/idy/gizway-gateway` | `/usr/local/bin/gizway` |
-| Web | `ghcr.io/idy/gizway-web` | `node dist/standalone/server.js` |
+| `gizway-gizpay` | independent `gizpay` Go binary | Pay |
+| `gizway-gateway` | independent `gizway` Go binary | Global, CN |
+| `gizway-web` | Caddy static server | Global, CN |
+| `gizway-entry` | Traefik with built-in route contract | Global, CN, Central |
+| `gizway-zitadel` | pinned ZITADEL wrapper | Identity API |
+| `gizway-zitadel-login` | pinned official Login wrapper | Login UI |
+| `gizway-powersync` | pinned PowerSync wrapper with three profiles | Pay, Global, CN |
 
-The Go and Node builder/runtime bases are pinned by manifest digest. Go
-binaries are static, trimmed, and run as numeric non-root user `65532:65532`.
-The Web image runs as the Node image's non-root `node` user and contains the
-standalone dependency closure, not the full builder `node_modules` or developer
-tools. Production Dockerfiles never reference the E2E Dockerfiles.
+That is seven released images and thirteen long-running instances. Node is permitted in the Web builder and in upstream products that officially require it; no first-party production Node server exists. `gizway-web` contains only Caddy and static assets.
 
-Release builds receive only `version`, full Git `revision`, and the commit's UTC
-committer time. They become OCI labels and immutable `/healthz` fields. Local
-builds return `devel`, `unknown`, and `unknown`. Runtime configuration, database
-DSNs, URLs, credentials, provider keys, and Secrets remain runtime inputs and
-must never be supplied as Docker build arguments or copied into image layers.
+Fixed product routing and profile configuration lives in the wrapper images. Hostnames, upstream URLs, database connections, master keys, credentials, TLS certificates, and private keys are runtime inputs. Entry images never request certificates; a deployment mounts externally managed certificate files read-only.
 
-All three health endpoints are process-only probes. They return `status`,
-`service`, `version`, `revision`, `build_time`, and a newly calculated UTC
-`server_time`; they do not query databases or upstream services.
-
-## One-shot migration commands
-
-Before starting either Go service, run the matching image once with its normal
-version-1 YAML file:
-
-```sh
-gizpay --config=/config/gizpay.yaml --migrate-only
-gizway --config=/config/gizway-global.yaml --migrate-only
-gizway --config=/config/gizway-cn.yaml --migrate-only
-```
-
-Migration mode strictly rejects unknown YAML fields but validates only
-`version`, `database.dsn`, and the lowercase `database.schema`. It does not
-require or read Admin, HMAC, OIDC, Provider callback, or TLS Secret files, and
-it does not start HTTP, workers, upstream clients, or Bifrost stores. It is
-mutually exclusive with `--initialize`, `--check-config`, and
-`--print-effective-config`.
-
-After the job exits successfully, start the long-running process with only
-`--config`; deployment commands must not include `--initialize`:
-
-```sh
-gizpay --config=/config/gizpay.yaml
-gizway --config=/config/gizway-global.yaml
-```
+The public AI surface is intentionally protocol-specific: `/openai/v1/...`, `/anthropic/v1/...`, and `/genai/v1beta/...`. Root `/v1`, root `/v1beta`, and Bifrost aggregate APIs are not exposed.

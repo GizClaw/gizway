@@ -209,6 +209,9 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 	if config.Database.DSN == "" || config.Database.Schema == "" {
 		return errors.New("database.dsn and database.schema are required")
 	}
+	if config.Database.Initialize {
+		return errors.New("database.initialize is forbidden for serve; run the init subcommand")
+	}
 	if config.SubscriptionKeys.HMAC.SecretFile == "" {
 		return errors.New("subscription_keys.hmac.secret_file is required")
 	}

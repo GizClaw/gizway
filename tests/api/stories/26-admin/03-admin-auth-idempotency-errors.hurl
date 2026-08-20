@@ -1,13 +1,13 @@
 # Admin authentication, idempotency, conflict, dependency, and redaction failures.
 
-GET {{pay_url}}/admin/v1/products
+GET {{pay_internal_url}}/admin/v1/products
 
 HTTP 401
 [Asserts]
 jsonpath "$.error.code" == "invalid_admin_key"
 
 
-GET {{way_url}}/admin/v1/providers
+GET {{way_internal_url}}/admin/v1/providers
 X-GizWay-Admin-Key: wrong-admin-key
 
 HTTP 401
@@ -15,7 +15,7 @@ HTTP 401
 jsonpath "$.error.code" == "invalid_admin_key"
 
 
-POST {{pay_url}}/admin/v1/products
+POST {{pay_internal_url}}/admin/v1/products
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -31,7 +31,7 @@ Content-Type: application/json
 HTTP 201
 
 
-POST {{pay_url}}/admin/v1/products
+POST {{pay_internal_url}}/admin/v1/products
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -47,7 +47,7 @@ Content-Type: application/json
 HTTP 200
 
 
-POST {{pay_url}}/admin/v1/products
+POST {{pay_internal_url}}/admin/v1/products
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -65,7 +65,7 @@ HTTP 409
 jsonpath "$.error.code" == "resource_id_conflict"
 
 
-POST {{way_url}}/admin/v1/models
+POST {{way_internal_url}}/admin/v1/models
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -81,13 +81,13 @@ HTTP 404
 jsonpath "$.error.code" == "dependency_not_found"
 
 
-DELETE {{pay_url}}/admin/v1/products/product_admin_idempotent
+DELETE {{pay_internal_url}}/admin/v1/products/product_admin_idempotent
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
 
 
-DELETE {{pay_url}}/admin/v1/products/product_admin_idempotent
+DELETE {{pay_internal_url}}/admin/v1/products/product_admin_idempotent
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204

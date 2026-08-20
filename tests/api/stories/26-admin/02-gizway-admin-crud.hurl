@@ -10,7 +10,7 @@
 # covers: gizway-admin.yaml#updateAdminProviderKey gizway-admin.yaml#deleteAdminProviderKey gizway-admin.yaml#rotateAdminProviderKeySecret
 # covers: gizway-admin.yaml#getAdminProviderKeyPrices gizway-admin.yaml#replaceAdminProviderKeyPrices
 
-POST {{way_url}}/admin/v1/providers
+POST {{way_internal_url}}/admin/v1/providers
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -26,7 +26,7 @@ HTTP 201
 jsonpath "$.id" == "provider_admin_hurl"
 
 
-GET {{way_url}}/admin/v1/providers
+GET {{way_internal_url}}/admin/v1/providers
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -34,7 +34,7 @@ HTTP 200
 jsonpath "$.data[?(@.id == 'provider_admin_hurl')].name" contains "Admin Hurl Provider"
 
 
-GET {{way_url}}/admin/v1/providers/provider_admin_hurl
+GET {{way_internal_url}}/admin/v1/providers/provider_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -42,7 +42,7 @@ HTTP 200
 jsonpath "$.kind" == "openai"
 
 
-PATCH {{way_url}}/admin/v1/providers/provider_admin_hurl
+PATCH {{way_internal_url}}/admin/v1/providers/provider_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -54,7 +54,7 @@ HTTP 200
 jsonpath "$.name" == "Admin Hurl Provider Updated"
 
 
-POST {{way_url}}/admin/v1/models
+POST {{way_internal_url}}/admin/v1/models
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -70,7 +70,7 @@ HTTP 201
 jsonpath "$.id" == "model_admin_hurl"
 
 
-GET {{way_url}}/admin/v1/models
+GET {{way_internal_url}}/admin/v1/models
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -78,7 +78,7 @@ HTTP 200
 jsonpath "$.data[?(@.id == 'model_admin_hurl')].provider_id" contains "provider_admin_hurl"
 
 
-GET {{way_url}}/admin/v1/models/model_admin_hurl
+GET {{way_internal_url}}/admin/v1/models/model_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -86,7 +86,7 @@ HTTP 200
 jsonpath "$.name" == "admin-hurl-model"
 
 
-PATCH {{way_url}}/admin/v1/models/model_admin_hurl
+PATCH {{way_internal_url}}/admin/v1/models/model_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -98,7 +98,7 @@ HTTP 200
 jsonpath "$.name" == "admin-hurl-model-updated"
 
 
-PUT {{way_url}}/admin/v1/models/model_admin_hurl/customer-prices
+PUT {{way_internal_url}}/admin/v1/models/model_admin_hurl/customer-prices
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -113,7 +113,7 @@ HTTP 200
 jsonpath "$.prices" count == 2
 
 
-GET {{way_url}}/admin/v1/models/model_admin_hurl/customer-prices
+GET {{way_internal_url}}/admin/v1/models/model_admin_hurl/customer-prices
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -121,7 +121,7 @@ HTTP 200
 jsonpath "$.prices" count == 2
 
 
-POST {{way_url}}/admin/v1/model-listings
+POST {{way_internal_url}}/admin/v1/model-listings
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -143,7 +143,7 @@ HTTP 201
 jsonpath "$.id" == "model_listing_admin_hurl"
 
 
-GET {{way_url}}/admin/v1/model-listings
+GET {{way_internal_url}}/admin/v1/model-listings
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -151,7 +151,7 @@ HTTP 200
 jsonpath "$.data[?(@.id == 'model_listing_admin_hurl')].model_id" contains "model_admin_hurl"
 
 
-GET {{way_url}}/admin/v1/model-listings/model_listing_admin_hurl
+GET {{way_internal_url}}/admin/v1/model-listings/model_listing_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -159,7 +159,7 @@ HTTP 200
 jsonpath "$.availability" == "available"
 
 
-PATCH {{way_url}}/admin/v1/model-listings/model_listing_admin_hurl
+PATCH {{way_internal_url}}/admin/v1/model-listings/model_listing_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -173,13 +173,13 @@ jsonpath "$.title" == "Admin Hurl Model Updated"
 jsonpath "$.featured" == false
 
 
-POST {{way_url}}/admin/v1/provider-keys
+POST {{way_internal_url}}/admin/v1/provider-keys
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
   "id": "provider_key_admin_hurl",
   "provider_id": "provider_admin_hurl",
-  "owner_identity_issuer": "http://identity.e2e.gizway.test:18080",
+  "owner_identity_issuer": "https://identity.e2e.gizclaw.test:18080",
   "owner_identity_subject": "{{human_subject}}",
   "merchant_id": "{{default_merchant_id}}",
   "name": "Admin Hurl Key",
@@ -198,7 +198,7 @@ jsonpath "$.secret_configured" == true
 body not contains "hurl-admin-secret"
 
 
-GET {{way_url}}/admin/v1/provider-keys
+GET {{way_internal_url}}/admin/v1/provider-keys
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -207,7 +207,7 @@ jsonpath "$.data[?(@.id == 'provider_key_admin_hurl')].name" contains "Admin Hur
 body not contains "hurl-admin-secret"
 
 
-GET {{way_url}}/admin/v1/provider-keys/provider_key_admin_hurl
+GET {{way_internal_url}}/admin/v1/provider-keys/provider_key_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -216,7 +216,7 @@ jsonpath "$.provider_id" == "provider_admin_hurl"
 body not contains "hurl-admin-secret"
 
 
-PATCH {{way_url}}/admin/v1/provider-keys/provider_key_admin_hurl
+PATCH {{way_internal_url}}/admin/v1/provider-keys/provider_key_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -229,7 +229,7 @@ HTTP 200
 jsonpath "$.name" == "Admin Hurl Key Updated"
 
 
-POST {{way_url}}/admin/v1/provider-keys/provider_key_admin_hurl/rotate-secret
+POST {{way_internal_url}}/admin/v1/provider-keys/provider_key_admin_hurl/rotate-secret
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -242,7 +242,7 @@ jsonpath "$.secret_configured" == true
 body not contains "hurl-admin-secret-rotated"
 
 
-GET {{way_url}}/admin/v1/provider-keys/provider_key_admin_hurl/prices
+GET {{way_internal_url}}/admin/v1/provider-keys/provider_key_admin_hurl/prices
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -250,7 +250,7 @@ HTTP 200
 jsonpath "$.prices" count == 2
 
 
-PUT {{way_url}}/admin/v1/provider-keys/provider_key_admin_hurl/prices
+PUT {{way_internal_url}}/admin/v1/provider-keys/provider_key_admin_hurl/prices
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -265,25 +265,25 @@ HTTP 200
 jsonpath "$.prices[0].microcredits_per_unit" == 600
 
 
-DELETE {{way_url}}/admin/v1/provider-keys/provider_key_admin_hurl
+DELETE {{way_internal_url}}/admin/v1/provider-keys/provider_key_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
 
 
-DELETE {{way_url}}/admin/v1/model-listings/model_listing_admin_hurl
+DELETE {{way_internal_url}}/admin/v1/model-listings/model_listing_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
 
 
-DELETE {{way_url}}/admin/v1/models/model_admin_hurl
+DELETE {{way_internal_url}}/admin/v1/models/model_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
 
 
-DELETE {{way_url}}/admin/v1/providers/provider_admin_hurl
+DELETE {{way_internal_url}}/admin/v1/providers/provider_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204

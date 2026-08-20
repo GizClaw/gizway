@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info: {title: GizWay Public AI API, version: 4.0.0}
-servers: [{url: https://api.gizway.com}]
+servers: [{url: https://gateway.gizclaw.com}]
 security: [{subscriptionKey: []}, {anthropicSubscriptionKey: []}, {geminiSubscriptionKey: []}]
 paths:
   /auth/runtime-config:
@@ -21,33 +21,33 @@ paths:
         '503':
           description: public_catalog_token_unavailable
           content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}
-  /v1/models:
+  /openai/v1/models:
     get:
       operationId: listModels
       responses: {'200': {$ref: '#/components/responses/ModelList'}}
-  /v1/chat/completions:
+  /openai/v1/chat/completions:
     post:
       operationId: createChatCompletion
       requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
       responses: {'200': {$ref: '#/components/responses/AIResponse'}}
-  /v1/messages:
+  /anthropic/v1/messages:
     post:
       operationId: createAnthropicMessage
       parameters: [{name: anthropic-version, in: header, required: true, schema: {type: string, minLength: 1}}]
       requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
       responses: {'200': {$ref: '#/components/responses/AIResponse'}}
-  /v1beta/models/{operation}:
+  /genai/v1beta/models/{operation}:
     parameters: [{name: operation, in: path, required: true, schema: {type: string, minLength: 1}}]
     post:
       operationId: generateGeminiContent
       requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
       responses: {'200': {$ref: '#/components/responses/AIResponse'}}
-  /v1/realtime/client_secrets:
+  /openai/v1/realtime/client_secrets:
     post:
       operationId: createRealtimeClientSecret
       requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [model, transport], properties: {model: {type: string, minLength: 1}, transport: {type: string, const: websocket}}}}}}
       responses: {'201': {description: Ephemeral regional Realtime session, content: {application/json: {schema: {$ref: '#/components/schemas/RealtimeSecret'}}}}}
-  /v1/realtime:
+  /openai/v1/realtime:
     get:
       operationId: connectRealtimeWebSocket
       security: [{realtimeSecret: []}]

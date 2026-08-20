@@ -95,6 +95,14 @@ bifrost:
 	if configured.CreditCache.CleanupInterval != "37s" || configuredCreditCacheCleanupInterval(configured) != 37*time.Second {
 		t.Fatalf("configured credit_cache.cleanup_interval = %q (%s), want 37s", configured.CreditCache.CleanupInterval, configuredCreditCacheCleanupInterval(configured))
 	}
+
+	withManagementCredentials := configYAML + "initialization:\n  database_admin_dsn: postgres://admin:secret@localhost/db\n"
+	if err := os.WriteFile(configPath, []byte(withManagementCredentials), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadProcessConfig(configPath, ProcessGizWay); err == nil || !strings.Contains(err.Error(), "field initialization not found") {
+		t.Fatalf("serve config accepted initialization credentials: %v", err)
+	}
 }
 
 func TestCreditCacheCleanupIntervalValidationAndRuntimeValue(t *testing.T) {

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info: {title: GizWay User Command API, version: 4.0.0}
-servers: [{url: https://api.gizway.com/user/v1}]
+servers: [{url: https://gateway.gizclaw.com/user/v1}]
 security: [{humanBearer: []}]
 paths:
   /providers/{provider_id}/keys:

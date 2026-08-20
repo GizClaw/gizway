@@ -18,31 +18,43 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) == 0 {
+		return errors.New("command is required: serve or init")
+	}
+	switch args[0] {
+	case "serve":
+		return runServe(args[1:])
+	case "init":
+		return runInit(args[1:])
+	default:
+		return fmt.Errorf("unsupported command %q: want serve or init", args[0])
+	}
+}
+
+func runInit(args []string) error {
+	flags := flag.NewFlagSet("gizway init", flag.ContinueOnError)
+	configPath := flags.String("config", "", "YAML configuration file")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("gizway init accepts no positional arguments")
+	}
+	config, err := app.LoadInitConfig(*configPath, app.ProcessGizWay)
+	if err != nil {
+		return err
+	}
+	return app.RunInitialization(config, app.ProcessGizWay)
+}
+
+func runServe(args []string) error {
 	flags := flag.NewFlagSet("gizway", flag.ContinueOnError)
 	configPath := flags.String("config", "", "YAML configuration file")
 	serverName := flags.String("server-name", "", "override server.name")
 	check := flags.Bool("check-config", false, "validate configuration and exit")
-	initialize := flags.Bool("initialize", false, "initialize an empty database")
-	migrateOnly := flags.Bool("migrate-only", false, "apply service schema migrations and exit")
 	printEffective := flags.String("print-effective-config", "", "print redacted effective configuration")
 	if err := flags.Parse(args); err != nil {
 		return err
-	}
-	initializeSet := false
-	flags.Visit(func(current *flag.Flag) {
-		if current.Name == "initialize" {
-			initializeSet = true
-		}
-	})
-	if *migrateOnly && (initializeSet || *check || *printEffective != "") {
-		return errors.New("--migrate-only cannot be combined with --initialize, --check-config, or --print-effective-config")
-	}
-	if *migrateOnly {
-		config, err := app.LoadMigrationConfig(*configPath)
-		if err != nil {
-			return err
-		}
-		return app.RunMigrations(config, app.ProcessGizWay)
 	}
 	config, err := app.LoadProcessConfig(*configPath, app.ProcessGizWay)
 	if err != nil {
@@ -50,9 +62,6 @@ func run(args []string) error {
 	}
 	if *serverName != "" {
 		config.Server.Name = *serverName
-	}
-	if initializeSet {
-		config.Database.Initialize = *initialize
 	}
 	if err := app.ValidateProcessConfig(config, app.ProcessGizWay); err != nil {
 		return err

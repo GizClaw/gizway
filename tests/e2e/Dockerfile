@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 go build -o /out/gizpay ./cmd/gizpay \
  && CGO_ENABLED=0 go build -o /out/fake-ai-provider ./cmd/fake-ai-provider \
  && CGO_ENABLED=0 go build -o /out/fake-credit-spy ./cmd/fake-credit-spy \
  && CGO_ENABLED=0 go build -o /out/fake-oauth-spy ./cmd/fake-oauth-spy \
- && CGO_ENABLED=0 go build -o /out/e2e-bootstrap ./tests/e2e/bootstrap
+ && CGO_ENABLED=0 go build -o /out/e2e-resources ./tests/e2e/resources
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \

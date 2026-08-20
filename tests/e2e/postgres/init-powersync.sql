@@ -1,3 +1,0 @@
-CREATE DATABASE gizpay_sync;
-CREATE DATABASE cn_sync;
-CREATE DATABASE global_sync;

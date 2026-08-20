@@ -24,3 +24,4 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /out/gizway /usr/local/bin/gizway
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/gizway"]
+CMD ["serve"]

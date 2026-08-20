@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { GizWayConnector } from '../connectors/gizway.js';
 import { GizWaySchema } from '../schemas/gizway.js';
-import { loadEnvironment, temporaryDatabase, waitForFirstSync } from './helpers.js';
+import { createAIUsage, loadEnvironment, temporaryDatabase, waitForFirstSync } from './helpers.js';
 
 describe('PowerSync region isolation', () => {
   test('CN and Global model IDs are disjoint', async (context) => {
     const env = loadEnvironment();
     if (env == null || env.gizwayCNEndpoint === '') return context.skip();
+    await Promise.all([createAIUsage(env.wayURL, env.subscriptionKey), createAIUsage(env.cnURL, env.subscriptionKey)]);
     const global = await temporaryDatabase(GizWaySchema, 'global');
     const cn = await temporaryDatabase(GizWaySchema, 'cn');
     try {
