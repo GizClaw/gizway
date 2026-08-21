@@ -93,20 +93,11 @@ jobs:
       - name: Run Go race tests
         run: make test-unit-go-race
 
-      - name: Prepare external API E2E TLS fixture
-        shell: bash
+      - name: Validate API contracts
         run: |
-          set -euo pipefail
-          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-            -subj '/CN=global.e2e.gizclaw.test' \
-            -addext 'subjectAltName=DNS:global.e2e.gizclaw.test,DNS:cn.e2e.gizclaw.test,DNS:identity.e2e.gizclaw.test,DNS:pay.e2e.gizclaw.test' \
-            -keyout "$RUNNER_TEMP/gizway-api-e2e-tls.key" \
-            -out "$RUNNER_TEMP/gizway-api-e2e-tls.crt"
-          echo "TLS_CERT_FILE=$RUNNER_TEMP/gizway-api-e2e-tls.crt" >> "$GITHUB_ENV"
-          echo "TLS_KEY_FILE=$RUNNER_TEMP/gizway-api-e2e-tls.key" >> "$GITHUB_ENV"
-
-      - name: Run fake-provider API tests
-        run: make test-unit-api
+          scripts/test-unit/test-unit-api-openapi.sh
+          scripts/test-unit/test-unit-api-contracts.sh
+          scripts/test-unit/check-e2e-api-seed.sh
 
       - name: Run PostgreSQL unit tests
         run: make test-unit-postgresql
@@ -169,6 +160,7 @@ jobs:
             -addext 'subjectAltName=DNS:global.e2e.gizclaw.test,DNS:cn.e2e.gizclaw.test,DNS:identity.e2e.gizclaw.test,DNS:pay.e2e.gizclaw.test' \
             -keyout "$RUNNER_TEMP/gizway-e2e-tls.key" \
             -out "$RUNNER_TEMP/gizway-e2e-tls.crt"
+          chmod 0644 "$RUNNER_TEMP/gizway-e2e-tls.key"
           echo "TLS_CERT_FILE=$RUNNER_TEMP/gizway-e2e-tls.crt" >> "$GITHUB_ENV"
           echo "TLS_KEY_FILE=$RUNNER_TEMP/gizway-e2e-tls.key" >> "$GITHUB_ENV"
 
