@@ -103,7 +103,18 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 			if !geminiRegistered {
 				// net/http patterns cannot embed a wildcard before a literal suffix in one segment.
 				// Register one dispatch pattern; the protocol handler enforces the two exact operations.
-				mux.Handle("POST "+"/genai/v1beta/models/{operation}", http.HandlerFunc(s.milestone03NotImplemented))
+				mux.Handle("POST "+"/genai/v1beta/models/{operation}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					operation := r.PathValue("operation")
+					if model, generate := strings.CutSuffix(operation, ":generateContent"); generate && model != "" {
+						s.milestone03NotImplemented(w, r)
+						return
+					}
+					if model, stream := strings.CutSuffix(operation, ":streamGenerateContent"); stream && model != "" {
+						s.milestone03NotImplemented(w, r)
+						return
+					}
+					http.NotFound(w, r)
+				}))
 				geminiRegistered = true
 			}
 			continue

@@ -1228,13 +1228,6 @@ func (r GenerateGeminiContentResponse) ContentType() string {
 type StreamGeminiContentResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *map[string]interface{}
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r StreamGeminiContentResponse) GetJSON200() *map[string]interface{} {
-	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -1776,19 +1769,6 @@ func ParseStreamGeminiContentResponse(rsp *http.Response) (*StreamGeminiContentR
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/event-stream) unsupported
-
-	}
-
 	return response, nil
 }
 
@@ -2267,8 +2247,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/anthropic/v1/messages", wrapper.CreateAnthropicMessage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/catalog-token", wrapper.GetPublicCatalogToken)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/runtime-config", wrapper.GetPublicRuntimeConfig)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/genai/v1beta/models/{model}:generateContent", wrapper.GenerateGeminiContent)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/genai/v1beta/models/{model}:streamGenerateContent", wrapper.StreamGeminiContent)
+	registerGeminiHandlers(m, options.BaseURL, wrapper)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/openai/v1/chat/completions", wrapper.CreateChatCompletion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/openai/v1/models", wrapper.ListModels)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/openai/v1/realtime", wrapper.ConnectRealtimeWebSocket)
@@ -2282,31 +2261,32 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"YDIn5az8IwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

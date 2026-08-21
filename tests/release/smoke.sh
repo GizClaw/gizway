@@ -29,18 +29,30 @@ while IFS=$'\t' read -r key _ expected; do
   docker inspect --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}' "$container" | grep -F "$expected" >/dev/null
 done < <(jq -r '.images[] | [.key,.image,.command] | @tsv' "$catalog")
 
+entry_env=(
+  -e PROFILE=global -e TLS_CERT_FILE=/etc/hosts -e TLS_KEY_FILE=/etc/hosts
+  -e GLOBAL_HOST=global.e2e.gizclaw.test -e GIZPAY_UPSTREAM=http://gizpay:8081
+  -e GIZWAY_UPSTREAM=http://gizway:8080 -e WEB_UPSTREAM=http://web:8080
+  -e POWERSYNC_PAY_UPSTREAM=http://powersync-pay:8080 -e POWERSYNC_GIZWAY_UPSTREAM=http://powersync-global:8080
+)
 assert_native_entrypoint_executes() {
   local key="$1" image="$2" status=0
-  # A timeout is success for upstream servers that ignore --help: surviving proves their native
-  # entrypoint started. Docker/runtime/exec failures remain hard failures below.
-  timeout 10 docker run --rm "$image" --help >"$temporary/$key.log" 2>&1 || status=$?
-  case "$status" in
-    125|126|127)
-      printf '%s native entrypoint did not execute successfully (status %s)\n' "$key" "$status" >&2
-      cat "$temporary/$key.log" >&2
-      return 1
-      ;;
-  esac
+  if [[ "$key" == entry ]]; then
+    timeout 10 docker run --rm "${entry_env[@]}" "$image" --help >"$temporary/$key.log" 2>&1 || status=$?
+  else
+    timeout 10 docker run --rm "$image" --help >"$temporary/$key.log" 2>&1 || status=$?
+  fi
+  if [[ "$key" == zitadel-login && "$status" == 124 ]] && grep -F 'Ready' "$temporary/$key.log" >/dev/null; then
+    return 0
+  fi
+  if [[ "$key" =~ ^giz(pay|way)$ && "$status" == 1 ]] && grep -Fx 'unsupported command "--help": want serve or init' "$temporary/$key.log" >/dev/null; then
+    return 0
+  fi
+  if [[ "$status" != 0 ]]; then
+    printf '%s native entrypoint did not complete its probe (status %s)\n' "$key" "$status" >&2
+    cat "$temporary/$key.log" >&2
+    return 1
+  fi
 }
 while IFS=$'\t' read -r key _image; do
   variable="$(tr '[:lower:]-' '[:upper:]_' <<<"${key}_IMAGE")"
@@ -58,12 +70,6 @@ test -f "$temporary/powersync/pay/service.yaml" -a -f "$temporary/powersync/glob
 if docker run --rm "$GIZPAY_IMAGE" init --config=/missing >/dev/null 2>&1; then echo 'gizpay init accepted missing config' >&2; exit 1; fi
 if docker run --rm "$GIZWAY_IMAGE" init --config=/missing >/dev/null 2>&1; then echo 'gizway init accepted missing config' >&2; exit 1; fi
 if docker run --rm "$ENTRY_IMAGE" >/dev/null 2>&1; then echo 'entry accepted missing runtime inputs' >&2; exit 1; fi
-entry_env=(
-  -e PROFILE=global -e TLS_CERT_FILE=/etc/hosts -e TLS_KEY_FILE=/etc/hosts
-  -e GLOBAL_HOST=global.e2e.gizclaw.test -e GIZPAY_UPSTREAM=http://gizpay:8081
-  -e GIZWAY_UPSTREAM=http://gizway:8080 -e WEB_UPSTREAM=http://web:8080
-  -e POWERSYNC_PAY_UPSTREAM=http://powersync-pay:8080 -e POWERSYNC_GIZWAY_UPSTREAM=http://powersync-global:8080
-)
 if docker run --rm "${entry_env[@]}" -e 'GLOBAL_HOST=global.e2e.gizclaw.test|inject' "$ENTRY_IMAGE" >/dev/null 2>&1; then
   echo 'entry accepted template metacharacters in a host' >&2; exit 1
 fi

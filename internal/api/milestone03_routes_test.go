@@ -93,8 +93,8 @@ func TestMilestone03GizWayExposesCommandsAndOwnedAdminRoutes(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/genai/v1beta/models/model:unknown", nil))
-	if recorder.Code != http.StatusNoContent {
-		t.Errorf("generic GenAI router status=%d, want business handler to enforce operation whitelist", recorder.Code)
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("generic GenAI router status=%d, want unknown operation rejected", recorder.Code)
 	}
 	for _, path := range []string{"/admin/v1/products", "/admin/v1/product-listings", "/admin/v1/ai-orders"} {
 		recorder := httptest.NewRecorder()

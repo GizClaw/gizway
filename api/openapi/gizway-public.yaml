@@ -47,7 +47,7 @@ paths:
     post:
       operationId: streamGeminiContent
       requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
-      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+      responses: {'200': {$ref: '#/components/responses/AIStreamResponse'}}
   /openai/v1/realtime/client_secrets:
     post:
       operationId: createRealtimeClientSecret
@@ -166,3 +166,4 @@ components:
   responses:
     ModelList: {description: Regional active models, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Model'}}}}}}}
     AIResponse: {description: Provider-compatible response, content: {application/json: {schema: {$ref: '#/components/schemas/AIResponse'}}, text/event-stream: {schema: {type: string}}}}
+    AIStreamResponse: {description: Provider-compatible server-sent event stream, content: {text/event-stream: {schema: {type: string}}}}
