@@ -29,7 +29,7 @@ Authorization: Bearer {{human_token}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data[?(@.id == '{{topup_id}}')]" count == 1
+jsonpath "$.data[?(@.id == '{{topup_id}}')].id" == "{{topup_id}}"
 
 
 GET {{pay_url}}/account/v1/accounts/{{account_id}}/balance

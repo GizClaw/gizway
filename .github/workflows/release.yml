@@ -136,18 +136,13 @@ jobs:
           set -euo pipefail
           anonymous_config="$(mktemp -d)"
           printf '{}\n' >"$anonymous_config/config.json"
-          for key in gizpay gizway web; do
-            case "$key" in
-              gizpay) image=ghcr.io/idy/gizway-gizpay ;;
-              gizway) image=ghcr.io/idy/gizway-gateway ;;
-              web) image=ghcr.io/idy/gizway-web ;;
-            esac
+          while IFS=$'\t' read -r key image; do
             digest="$(<"tmp/release/images/$key.digest")"
             if ! oras manifest fetch --registry-config "$anonymous_config/config.json" "$image@$digest" >/dev/null; then
-              printf '::error::%s is not public. Set all three GHCR packages to Public, then rerun this same tag. No signature or GitHub Release was created.\n' "$image"
+              printf '::error::%s is not public. Set all seven GHCR packages to Public, then rerun this same tag. No signature or GitHub Release was created.\n' "$image"
               exit 1
             fi
-          done
+          done < <(jq -r '.images[] | [.key,.image] | @tsv' release/images.json)
       - name: Keyless-sign and verify exact workflow identity
         shell: bash
         env:
@@ -155,19 +150,14 @@ jobs:
         run: |
           set -euo pipefail
           identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
-          for key in gizpay gizway web; do
-            case "$key" in
-              gizpay) image=ghcr.io/idy/gizway-gizpay ;;
-              gizway) image=ghcr.io/idy/gizway-gateway ;;
-              web) image=ghcr.io/idy/gizway-web ;;
-            esac
+          while IFS=$'\t' read -r key image; do
             ref="$image@$(<"tmp/release/images/$key.digest")"
             cosign sign "$ref"
             cosign verify \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               --certificate-identity "$identity" \
               "$ref"
-          done
+          done < <(jq -r '.images[] | [.key,.image] | @tsv' release/images.json)
       - name: Create deterministic release manifest
         run: ./scripts/release/create-manifest.sh
       - name: Create or verify GitHub Release

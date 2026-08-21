@@ -172,11 +172,11 @@ export function serviceSyncState(database: Pick<PowerSyncDatabase, "currentStatu
 
 function syncStateFromStatus(status: PowerSyncDatabase["currentStatus"], fallback: ServiceSyncState): ServiceSyncState {
   if (status.connected && status.hasSynced === true) return "ready";
+  if (status.hasSynced === true) return "offline";
   if (status.downloadError) {
     const current = classifySyncError(status.downloadError);
-    return fallback === "denied" && current === "sync_error" && status.hasSynced !== true ? "denied" : current;
+    return fallback === "denied" && current === "sync_error" ? "denied" : current;
   }
-  if (status.hasSynced === true) return "offline";
   return fallback;
 }
 

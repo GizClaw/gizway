@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info: {title: GizPay Service API, version: 4.0.0}
-servers: [{url: https://pay.gizway.com/service/v1}]
+servers: [{url: https://pay.gizclaw.com/service/v1}]
 security: [{serviceBearer: []}]
 paths:
   /subscription-credit-checks:

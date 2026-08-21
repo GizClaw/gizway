@@ -72,12 +72,29 @@ func TestMilestone03GizWayExposesCommandsAndOwnedAdminRoutes(t *testing.T) {
 		{http.MethodPost, "/admin/v1/providers"},
 		{http.MethodPut, "/admin/v1/models/model-1/customer-prices"},
 		{http.MethodPost, "/admin/v1/provider-keys/key-1/rotate-secret"},
+		{http.MethodGet, "/openai/v1/models"},
+		{http.MethodPost, "/openai/v1/chat/completions"},
+		{http.MethodPost, "/anthropic/v1/messages"},
+		{http.MethodPost, "/genai/v1beta/models/model:generateContent"},
+		{http.MethodPost, "/genai/v1beta/models/model:streamGenerateContent"},
 	} {
 		recorder := httptest.NewRecorder()
 		server.Handler().ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
 		if recorder.Code != http.StatusNoContent {
 			t.Errorf("%s %s status=%d, want business handler", route.method, route.path, recorder.Code)
 		}
+	}
+	for _, path := range []string{"/v1/models", "/v1/chat/completions", "/v1/messages", "/v1beta/models/model:generateContent"} {
+		recorder := httptest.NewRecorder()
+		server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("GET %s status=%d, want legacy path rejected", path, recorder.Code)
+		}
+	}
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/genai/v1beta/models/model:unknown", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("generic GenAI router status=%d, want unknown operation rejected", recorder.Code)
 	}
 	for _, path := range []string{"/admin/v1/products", "/admin/v1/product-listings", "/admin/v1/ai-orders"} {
 		recorder := httptest.NewRecorder()

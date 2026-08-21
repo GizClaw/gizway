@@ -13,7 +13,7 @@ func geminiClient(t *testing.T, baseURL, key string) *genai.Client {
 	t.Helper()
 	client, err := genai.NewClient(t.Context(), &genai.ClientConfig{
 		APIKey: key, Backend: genai.BackendGeminiAPI,
-		HTTPOptions: genai.HTTPOptions{BaseURL: baseURL, APIVersion: "v1beta"},
+		HTTPOptions: genai.HTTPOptions{BaseURL: baseURL + "/genai", APIVersion: "v1beta"},
 	})
 	if err != nil {
 		t.Fatal(err)

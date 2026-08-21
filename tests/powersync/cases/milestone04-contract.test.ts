@@ -23,7 +23,7 @@ describe('Milestone 04 PowerSync contract', () => {
   });
 
   test('publishes the unique default Merchant ID in my_profile', async () => {
-    const gizpay = await readFile(new URL('../config/gizpay-sync-config.yaml', import.meta.url), 'utf8');
+    const gizpay = await readFile(new URL('../../../docker/gizway-powersync/config/pay/sync-config.yaml', import.meta.url), 'utf8');
     const profileQuery = gizpay.split('SELECT my_profile.id')[1]?.split('- |')[0] ?? '';
     expect(profileQuery).toContain('my_profile.merchant_id');
     expect(profileQuery).toContain('FROM client_sync.user_profiles AS "my_profile"');
@@ -36,14 +36,14 @@ describe('Milestone 04 PowerSync contract', () => {
   });
 
   test('authorizes public Catalog by common and regional roles only', async () => {
-    const gizpay = await readFile(new URL('../config/gizpay-sync-config.yaml', import.meta.url), 'utf8');
+    const gizpay = await readFile(new URL('../../../docker/gizway-powersync/config/pay/sync-config.yaml', import.meta.url), 'utf8');
     expect(gizpay).toContain('product_listings');
     expect(gizpay).toContain('public_catalog_global');
     expect(gizpay).toContain('public_catalog_cn');
     const publicCatalog = gizpay.split('current_user:')[0] ?? '';
     expect(publicCatalog).toContain("->> 'public_catalog' IS NULL");
-    const cn = await readFile(new URL('../config/gizway-cn-sync-config.yaml', import.meta.url), 'utf8');
-    const global = await readFile(new URL('../config/gizway-global-sync-config.yaml', import.meta.url), 'utf8');
+    const cn = await readFile(new URL('../../../docker/gizway-powersync/config/cn/sync-config.yaml', import.meta.url), 'utf8');
+    const global = await readFile(new URL('../../../docker/gizway-powersync/config/global/sync-config.yaml', import.meta.url), 'utf8');
     const roleClaim = 'urn:zitadel:iam:org:project:386000000000000001:roles';
 	for (const config of [gizpay, cn, global]) {
 		expect(config).toContain(roleClaim);

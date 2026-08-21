@@ -1,6 +1,9 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 	routes := []string{
@@ -39,12 +42,13 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 		"POST /user/v1/provider-keys/{provider_key_id}/disable",
 		"GET /auth/catalog-token",
 		"GET /auth/runtime-config",
-		"GET /v1/models",
-		"POST /v1/chat/completions",
-		"POST /v1/messages",
-		"POST /v1beta/models/{operation}",
-		"POST /v1/realtime/client_secrets",
-		"GET /v1/realtime",
+		"GET /openai/v1/models",
+		"POST /openai/v1/chat/completions",
+		"POST /anthropic/v1/messages",
+		"POST /genai/v1beta/models/{model}:generateContent",
+		"POST /genai/v1beta/models/{model}:streamGenerateContent",
+		"POST /openai/v1/realtime/client_secrets",
+		"GET /openai/v1/realtime",
 	}
 	if s.surface == SurfaceGizPay {
 		routes = append(routes,
@@ -93,7 +97,28 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 			"PUT /admin/v1/provider-keys/{provider_key_id}/prices",
 		)
 	}
+	geminiRegistered := false
 	for _, route := range routes {
+		if strings.HasPrefix(route, "POST "+"/genai/") {
+			if !geminiRegistered {
+				// net/http patterns cannot embed a wildcard before a literal suffix in one segment.
+				// Register one dispatch pattern; the protocol handler enforces the two exact operations.
+				mux.Handle("POST "+"/genai/v1beta/models/{operation}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					operation := r.PathValue("operation")
+					if model, generate := strings.CutSuffix(operation, ":generateContent"); generate && model != "" {
+						s.milestone03NotImplemented(w, r)
+						return
+					}
+					if model, stream := strings.CutSuffix(operation, ":streamGenerateContent"); stream && model != "" {
+						s.milestone03NotImplemented(w, r)
+						return
+					}
+					http.NotFound(w, r)
+				}))
+				geminiRegistered = true
+			}
+			continue
+		}
 		mux.Handle(route, http.HandlerFunc(s.milestone03NotImplemented))
 	}
 }

@@ -12,7 +12,7 @@ header "Content-Type" startsWith "application/json"
 jsonpath "$.error.code" == "not_found"
 
 
-POST {{pay_url}}/webhooks/v1/zitadel/user-authenticated
+POST {{pay_internal_url}}/webhooks/v1/zitadel/user-authenticated
 Content-Type: application/json
 {
   "user": {

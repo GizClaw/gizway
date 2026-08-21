@@ -15,7 +15,7 @@ func TestAnthropicOfficialSDKMessages(t *testing.T) {
 		t.Skip("billing assertion environment is not configured")
 	}
 	before := assertions.CaptureBillingSnapshot(t, env.GlobalDSN, env.PayDSN, env.ProviderURL)
-	client := anthropic.NewClient(anthropicoption.WithAPIKey(env.SubscriptionKey), anthropicoption.WithBaseURL(env.GlobalURL))
+	client := anthropic.NewClient(anthropicoption.WithAPIKey(env.SubscriptionKey), anthropicoption.WithBaseURL(env.GlobalURL+"/anthropic"))
 	message, err := client.Messages.New(t.Context(), anthropic.MessageNewParams{
 		Model: anthropic.Model(env.GlobalModel), MaxTokens: 64,
 		Messages: []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock("return the m03-anthropic marker"))},
@@ -41,7 +41,7 @@ func TestAnthropicOfficialSDKStreaming(t *testing.T) {
 		t.Skip("billing assertion environment is not configured")
 	}
 	before := assertions.CaptureBillingSnapshot(t, env.GlobalDSN, env.PayDSN, env.ProviderURL)
-	client := anthropic.NewClient(anthropicoption.WithAPIKey(env.SubscriptionKey), anthropicoption.WithBaseURL(env.GlobalURL))
+	client := anthropic.NewClient(anthropicoption.WithAPIKey(env.SubscriptionKey), anthropicoption.WithBaseURL(env.GlobalURL+"/anthropic"))
 	stream := client.Messages.NewStreaming(t.Context(), anthropic.MessageNewParams{
 		Model: anthropic.Model(env.GlobalModel), MaxTokens: 64,
 		Messages: []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock("stream the m03-anthropic marker"))},
@@ -66,7 +66,7 @@ func TestAnthropicOfficialSDKStreaming(t *testing.T) {
 func TestAnthropicOfficialSDKRejectsInvalidKeyAndModel(t *testing.T) {
 	env := fixture.Load(t)
 	request := func(key, model string) error {
-		client := anthropic.NewClient(anthropicoption.WithAPIKey(key), anthropicoption.WithBaseURL(env.GlobalURL), anthropicoption.WithMaxRetries(0))
+		client := anthropic.NewClient(anthropicoption.WithAPIKey(key), anthropicoption.WithBaseURL(env.GlobalURL+"/anthropic"), anthropicoption.WithMaxRetries(0))
 		_, err := client.Messages.New(t.Context(), anthropic.MessageNewParams{
 			Model: anthropic.Model(model), MaxTokens: 8,
 			Messages: []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock("must not reach provider"))},
@@ -100,7 +100,7 @@ func TestAnthropicOfficialSDKFailureBillingBoundaries(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			before := assertions.CaptureBillingSnapshot(t, env.GlobalDSN, env.PayDSN, env.ProviderURL)
-			client := anthropic.NewClient(anthropicoption.WithAPIKey(test.key), anthropicoption.WithBaseURL(env.GlobalURL), anthropicoption.WithMaxRetries(0))
+			client := anthropic.NewClient(anthropicoption.WithAPIKey(test.key), anthropicoption.WithBaseURL(env.GlobalURL+"/anthropic"), anthropicoption.WithMaxRetries(0))
 			_, err := client.Messages.New(t.Context(), anthropic.MessageNewParams{
 				Model: anthropic.Model(test.model), MaxTokens: 32,
 				Messages: []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(test.prompt))},

@@ -56,6 +56,27 @@ func TestAnthropicVersionIsRequired(t *testing.T) {
 	}
 }
 
+func TestGeminiProtocolAllowsOnlyLiteralOperations(t *testing.T) {
+	for path, wantStream := range map[string]bool{
+		"/genai/v1beta/models/gemini-2.5:generateContent":       false,
+		"/genai/v1beta/models/gemini-2.5:streamGenerateContent": true,
+	} {
+		model, stream, ok := geminiModelOperation(path)
+		if !ok || model != "gemini-2.5" || stream != wantStream {
+			t.Fatalf("geminiModelOperation(%q) = %q, %v, %v", path, model, stream, ok)
+		}
+	}
+	for _, path := range []string{
+		"/genai/v1beta/models/gemini-2.5:unknown",
+		"/genai/v1beta/models/:generateContent",
+		"/genai/v1beta/models/a/b:generateContent",
+	} {
+		if _, _, ok := geminiModelOperation(path); ok {
+			t.Fatalf("unknown Gemini operation %q was accepted", path)
+		}
+	}
+}
+
 func TestPruneRealtimeSessionsRemovesUnusedExpiredSecrets(t *testing.T) {
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	handler := &Handler{
