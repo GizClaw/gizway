@@ -168,7 +168,8 @@ func CheckHurlCoverage(openAPIDirectory, hurlDirectory string) error {
 // breaking refactor did not retain a second operational health contract.
 func removedMilestone01Path(path string) bool {
 	return path == "/livez" || path == "/readyz" || path == "/internal/v1/readyz" ||
-		path == "/account/v1/initialize"
+		path == "/account/v1/initialize" || path == "/v1/chat/completions" ||
+		strings.HasPrefix(path, "/v1beta/models/") || path == "/genai/v1beta/models/story-text:unknownOperation"
 }
 
 // Hurl must name the concrete deployment it contacts. Central contracts use

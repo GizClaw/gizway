@@ -12,6 +12,18 @@ for tls_input in TLS_CERT_FILE TLS_KEY_FILE; do
     exit 2
   fi
 done
+for command in docker openssl curl; do
+  command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 2; }
+done
+openssl x509 -in "$TLS_CERT_FILE" -noout -checkend 60 >/dev/null || { echo "TLS certificate must remain valid for the E2E run" >&2; exit 2; }
+certificate_sans="$(openssl x509 -in "$TLS_CERT_FILE" -noout -text)"
+for host in global.e2e.gizclaw.test cn.e2e.gizclaw.test identity.e2e.gizclaw.test pay.e2e.gizclaw.test; do
+  printf '%s\n' "$certificate_sans" | grep -F "DNS:$host" >/dev/null || { echo "TLS certificate lacks SAN $host" >&2; exit 2; }
+done
+certificate_key="$(openssl x509 -in "$TLS_CERT_FILE" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256)"
+private_key="$(openssl pkey -in "$TLS_KEY_FILE" -pubout -outform DER | openssl dgst -sha256)"
+[ "$certificate_key" = "$private_key" ] || { echo "TLS private key does not match certificate" >&2; exit 2; }
+tls_spki="$(openssl x509 -in "$TLS_CERT_FILE" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | openssl base64 -A)"
 project="gizway-e2e-${mode}-$$"
 fixture="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e.XXXXXX")"
 results="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e-results.XXXXXX")"
@@ -41,6 +53,21 @@ wait_job() {
   [ "$(docker inspect --format '{{.State.ExitCode}}' "$container")" -eq 0 ]
 }
 
+wait_healthy() {
+  service="$1"
+  container="$(docker compose --project-name "$project" -f "$compose" ps --quiet "$service")"
+  [ -n "$container" ] || return 1
+  attempt=0
+  while [ "$attempt" -lt 120 ]; do
+    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")"
+    [ "$health" = healthy ] && return 0
+    [ "$health" = unhealthy ] && return 1
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  return 1
+}
+
 run_case() {
   name="$1"; shift
   if "$@"; then printf '%s\tPASS\n' "$name" >>"$results"; else status=$?; printf '%s\tFAIL(%s)\n' "$name" "$status" >>"$results"; fi
@@ -52,9 +79,18 @@ for job in gizpay-init gizway-global-init gizway-cn-init business-resources; do
   docker compose --project-name "$project" -f "$compose" run --rm --no-deps "$job" || fail_with_logs
 done
 for entry in entry-central entry-global entry-cn; do
-  container="$(docker compose --project-name "$project" -f "$compose" ps --quiet "$entry")"
-  [ -n "$container" ] || fail_with_logs
+	wait_healthy "$entry" || fail_with_logs
 done
+if curl --noproxy '*' --fail --silent --show-error --cacert "$TLS_CERT_FILE" \
+  --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
+  echo "Entry accepted a certificate/SNI mismatch" >&2
+  fail_with_logs
+fi
+if curl --noproxy '*' --insecure --fail --silent --show-error \
+  --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
+  echo "Entry routed an unknown host" >&2
+  fail_with_logs
+fi
 
 docker run --rm -v "${project}_fixtures:/fixtures:ro" busybox:1.37.0 cat /fixtures/m03.vars >"$fixture"
 # shellcheck disable=SC1090
@@ -110,6 +146,7 @@ run_powersync() {
 # shellcheck disable=SC2154
 run_web() {
   (cd "$root/web/apps/gizway" && M04_REAL_E2E=1 M04_E2E_COMPOSE_PROJECT="$project" M04_WEB_EXTERNAL=1 \
+    M04_TLS_SPKI="$tls_spki" \
     M04_WEB_PORT=3000 M04_WEB_CN_PORT=3001 M04_E2E_USERNAME="$human_username" M04_E2E_PASSWORD="$human_password" \
     M04_E2E_NEW_USERNAME="$web_first_login_username" M04_E2E_NEW_PASSWORD="$web_first_login_password" \
     npm run test:e2e -- e2e/real-auth-and-sync.spec.ts)

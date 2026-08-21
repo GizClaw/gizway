@@ -13,8 +13,11 @@ ARG RELEASE_BUILD_TIME
 LABEL org.opencontainers.image.source="https://github.com/idy/gizway" \
       org.opencontainers.image.version="${RELEASE_VERSION}" \
       org.opencontainers.image.revision="${RELEASE_REVISION}" \
-      org.opencontainers.image.created="${RELEASE_BUILD_TIME}"
+      org.opencontainers.image.created="${RELEASE_BUILD_TIME}" \
+      org.opencontainers.image.base.name="caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 COPY docker/gizway-web/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist/ /srv/
 USER 65532:65532
 EXPOSE 8080
+ENTRYPOINT ["caddy"]
+CMD ["run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

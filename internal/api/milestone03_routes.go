@@ -1,6 +1,9 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 	routes := []string{
@@ -42,7 +45,8 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 		"GET /openai/v1/models",
 		"POST /openai/v1/chat/completions",
 		"POST /anthropic/v1/messages",
-		"POST /genai/v1beta/models/{operation}",
+		"POST /genai/v1beta/models/{model}:generateContent",
+		"POST /genai/v1beta/models/{model}:streamGenerateContent",
 		"POST /openai/v1/realtime/client_secrets",
 		"GET /openai/v1/realtime",
 	}
@@ -93,7 +97,17 @@ func (s *Server) registerMilestone03Routes(mux *http.ServeMux) {
 			"PUT /admin/v1/provider-keys/{provider_key_id}/prices",
 		)
 	}
+	geminiRegistered := false
 	for _, route := range routes {
+		if strings.HasPrefix(route, "POST "+"/genai/") {
+			if !geminiRegistered {
+				// net/http patterns cannot embed a wildcard before a literal suffix in one segment.
+				// Register one dispatch pattern; the protocol handler enforces the two exact operations.
+				mux.Handle("POST "+"/genai/v1beta/models/{operation}", http.HandlerFunc(s.milestone03NotImplemented))
+				geminiRegistered = true
+			}
+			continue
+		}
 		mux.Handle(route, http.HandlerFunc(s.milestone03NotImplemented))
 	}
 }

@@ -23,4 +23,3 @@ variables:
   provider_id: seeded regional Bifrost Provider ID
   provider_key_secret: raw Provider Key contributed by human_token
   provider_key_secret_two: replacement raw Provider Key
-  gemini_operation: story-text:generateContent

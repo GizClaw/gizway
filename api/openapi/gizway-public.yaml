@@ -36,10 +36,16 @@ paths:
       parameters: [{name: anthropic-version, in: header, required: true, schema: {type: string, minLength: 1}}]
       requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
       responses: {'200': {$ref: '#/components/responses/AIResponse'}}
-  /genai/v1beta/models/{operation}:
-    parameters: [{name: operation, in: path, required: true, schema: {type: string, minLength: 1}}]
+  /genai/v1beta/models/{model}:generateContent:
+    parameters: [{name: model, in: path, required: true, schema: {type: string, minLength: 1}}]
     post:
       operationId: generateGeminiContent
+      requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
+      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+  /genai/v1beta/models/{model}:streamGenerateContent:
+    parameters: [{name: model, in: path, required: true, schema: {type: string, minLength: 1}}]
+    post:
+      operationId: streamGeminiContent
       requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
       responses: {'200': {$ref: '#/components/responses/AIResponse'}}
   /openai/v1/realtime/client_secrets:

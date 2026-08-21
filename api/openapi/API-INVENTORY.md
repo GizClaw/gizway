@@ -1,7 +1,7 @@
 
 # Current implementation API inventory
 
-Final retained operation count: **81**.
+Final retained operation count: **82**.
 
 | OpenAPI file | Method | Path | operationId | Service | Status | Deletion reason | Hurl coverage |
 |---|---|---|---|---|---|---|---|
@@ -75,7 +75,8 @@ Final retained operation count: **81**.
 | gizway-public.yaml | POST | `/anthropic/v1/messages` | createAnthropicMessage | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-public.yaml | GET | `/auth/catalog-token` | getPublicCatalogToken | GizWay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
 | gizway-public.yaml | GET | `/auth/runtime-config` | getPublicRuntimeConfig | GizWay | Keep | - | tests/api/stories/25-milestone-04/02-auth-catalog-and-errors.hurl |
-| gizway-public.yaml | POST | `/genai/v1beta/models/{operation}` | generateGeminiContent | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
+| gizway-public.yaml | POST | `/genai/v1beta/models/{model}:generateContent` | generateGeminiContent | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
+| gizway-public.yaml | POST | `/genai/v1beta/models/{model}:streamGenerateContent` | streamGeminiContent | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-public.yaml | POST | `/openai/v1/chat/completions` | createChatCompletion | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-public.yaml | GET | `/openai/v1/models` | listModels | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |
 | gizway-public.yaml | GET | `/openai/v1/realtime` | connectRealtimeWebSocket | GizWay | Keep | - | tests/api/stories/24-milestone-03/08-ai-protocols.hurl |

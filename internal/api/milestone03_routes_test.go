@@ -76,6 +76,7 @@ func TestMilestone03GizWayExposesCommandsAndOwnedAdminRoutes(t *testing.T) {
 		{http.MethodPost, "/openai/v1/chat/completions"},
 		{http.MethodPost, "/anthropic/v1/messages"},
 		{http.MethodPost, "/genai/v1beta/models/model:generateContent"},
+		{http.MethodPost, "/genai/v1beta/models/model:streamGenerateContent"},
 	} {
 		recorder := httptest.NewRecorder()
 		server.Handler().ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
@@ -89,6 +90,11 @@ func TestMilestone03GizWayExposesCommandsAndOwnedAdminRoutes(t *testing.T) {
 		if recorder.Code != http.StatusNotFound {
 			t.Errorf("GET %s status=%d, want legacy path rejected", path, recorder.Code)
 		}
+	}
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/genai/v1beta/models/model:unknown", nil))
+	if recorder.Code != http.StatusNoContent {
+		t.Errorf("generic GenAI router status=%d, want business handler to enforce operation whitelist", recorder.Code)
 	}
 	for _, path := range []string{"/admin/v1/products", "/admin/v1/product-listings", "/admin/v1/ai-orders"} {
 		recorder := httptest.NewRecorder()

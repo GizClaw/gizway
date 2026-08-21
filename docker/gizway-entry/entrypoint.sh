@@ -28,12 +28,28 @@ for name in GLOBAL_HOST CN_HOST AUTH_HOST PAY_HOST; do
   eval "value=\${$name:-}"
   case "$value" in
     '') ;;
+    *[!a-z0-9.-]*) echo "$name contains invalid host characters" >&2; exit 2 ;;
     *.gizclaw.com|*.gizclaw.test) ;;
     *) echo "$name must be a gizclaw.com or gizclaw.test host" >&2; exit 2 ;;
   esac
 done
 
+for name in GIZPAY_UPSTREAM GIZWAY_UPSTREAM WEB_UPSTREAM ZITADEL_UPSTREAM ZITADEL_LOGIN_UPSTREAM POWERSYNC_PAY_UPSTREAM POWERSYNC_GIZWAY_UPSTREAM; do
+  eval "value=\${$name:-}"
+  case "$value" in
+    '') ;;
+    http://*|https://*)
+      if ! printf '%s\n' "$value" | grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]+)?$'; then
+        echo "$name must be an origin URL without a path, query, fragment, or template metacharacters" >&2
+        exit 2
+      fi
+      ;;
+    *) echo "$name must use http:// or https://" >&2; exit 2 ;;
+  esac
+done
+
 for path in "$TLS_CERT_FILE" "$TLS_KEY_FILE"; do
+  case "$path" in *[!A-Za-z0-9._/-]*) echo "TLS input path contains invalid template characters" >&2; exit 2;; esac
   if [ ! -r "$path" ]; then
     echo "TLS input is not readable: $path" >&2
     exit 2

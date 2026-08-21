@@ -44,7 +44,6 @@ func bootstrapMilestone03(options options) error {
 	variables["fixture_issuer"] = fixtureIssuer
 	variables["provider_key_secret"] = "cn-provider-secret-two"
 	variables["provider_key_secret_two"] = "cn-provider-secret-three"
-	variables["gemini_operation"] = "story-text:generateContent"
 	variables["seeded_model_name"] = "story-text"
 	variables["zero_price_model"] = "story-text-zero"
 

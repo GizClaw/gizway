@@ -125,6 +125,18 @@ type GenerateGeminiContentJSONBody struct {
 	} `json:"generationConfig,omitempty"`
 }
 
+// StreamGeminiContentJSONBody defines parameters for StreamGeminiContent.
+type StreamGeminiContentJSONBody struct {
+	Contents         []map[string]interface{} `json:"contents"`
+	GenerationConfig *struct {
+		MaxOutputTokens *int      `json:"maxOutputTokens,omitempty"`
+		StopSequences   *[]string `json:"stopSequences,omitempty"`
+		Temperature     *float32  `json:"temperature,omitempty"`
+		TopK            *int      `json:"topK,omitempty"`
+		TopP            *float32  `json:"topP,omitempty"`
+	} `json:"generationConfig,omitempty"`
+}
+
 // CreateChatCompletionJSONBody defines parameters for CreateChatCompletion.
 type CreateChatCompletionJSONBody struct {
 	MaxTokens *int `json:"max_tokens,omitempty"`
@@ -169,6 +181,9 @@ type CreateAnthropicMessageJSONRequestBody CreateAnthropicMessageJSONBody
 
 // GenerateGeminiContentJSONRequestBody defines body for GenerateGeminiContent for application/json ContentType.
 type GenerateGeminiContentJSONRequestBody GenerateGeminiContentJSONBody
+
+// StreamGeminiContentJSONRequestBody defines body for StreamGeminiContent for application/json ContentType.
+type StreamGeminiContentJSONRequestBody StreamGeminiContentJSONBody
 
 // CreateChatCompletionJSONRequestBody defines body for CreateChatCompletion for application/json ContentType.
 type CreateChatCompletionJSONRequestBody CreateChatCompletionJSONBody
@@ -264,13 +279,21 @@ type ClientInterface interface {
 	// GetPublicRuntimeConfig performs a GET /auth/runtime-config (the `GetPublicRuntimeConfig` operationId) request.
 	GetPublicRuntimeConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GenerateGeminiContentWithBody performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request,
+	// GenerateGeminiContentWithBody performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request,
 	// with any type of body and a specified content type.
-	GenerateGeminiContentWithBody(ctx context.Context, operation string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GenerateGeminiContentWithBody(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GenerateGeminiContent performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request.
+	// GenerateGeminiContent performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request.
 	// Takes a body of the `application/json` content type.
-	GenerateGeminiContent(ctx context.Context, operation string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GenerateGeminiContent(ctx context.Context, model string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StreamGeminiContentWithBody performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request,
+	// with any type of body and a specified content type.
+	StreamGeminiContentWithBody(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StreamGeminiContent performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request.
+	// Takes a body of the `application/json` content type.
+	StreamGeminiContent(ctx context.Context, model string, body StreamGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateChatCompletionWithBody performs a POST /openai/v1/chat/completions (the `CreateChatCompletion` operationId) request,
 	// with any type of body and a specified content type.
@@ -349,10 +372,10 @@ func (c *Client) GetPublicRuntimeConfig(ctx context.Context, reqEditors ...Reque
 	return c.Client.Do(req)
 }
 
-// GenerateGeminiContentWithBody performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request,
+// GenerateGeminiContentWithBody performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) GenerateGeminiContentWithBody(ctx context.Context, operation string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGenerateGeminiContentRequestWithBody(c.Server, operation, contentType, body)
+func (c *Client) GenerateGeminiContentWithBody(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGenerateGeminiContentRequestWithBody(c.Server, model, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -363,10 +386,38 @@ func (c *Client) GenerateGeminiContentWithBody(ctx context.Context, operation st
 	return c.Client.Do(req)
 }
 
-// GenerateGeminiContent performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request.
+// GenerateGeminiContent performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) GenerateGeminiContent(ctx context.Context, operation string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGenerateGeminiContentRequest(c.Server, operation, body)
+func (c *Client) GenerateGeminiContent(ctx context.Context, model string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGenerateGeminiContentRequest(c.Server, model, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StreamGeminiContentWithBody performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) StreamGeminiContentWithBody(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStreamGeminiContentRequestWithBody(c.Server, model, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StreamGeminiContent performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) StreamGeminiContent(ctx context.Context, model string, body StreamGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStreamGeminiContentRequest(c.Server, model, body)
 	if err != nil {
 		return nil, err
 	}
@@ -567,23 +618,23 @@ func NewGetPublicRuntimeConfigRequest(server string) (*http.Request, error) {
 }
 
 // NewGenerateGeminiContentRequest calls the generic GenerateGeminiContent builder with application/json body
-func NewGenerateGeminiContentRequest(server string, operation string, body GenerateGeminiContentJSONRequestBody) (*http.Request, error) {
+func NewGenerateGeminiContentRequest(server string, model string, body GenerateGeminiContentJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewGenerateGeminiContentRequestWithBody(server, operation, "application/json", bodyReader)
+	return NewGenerateGeminiContentRequestWithBody(server, model, "application/json", bodyReader)
 }
 
 // NewGenerateGeminiContentRequestWithBody constructs an http.Request for the GenerateGeminiContent method, with any body, and a specified content type
-func NewGenerateGeminiContentRequestWithBody(server string, operation string, contentType string, body io.Reader) (*http.Request, error) {
+func NewGenerateGeminiContentRequestWithBody(server string, model string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "model", model, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +644,54 @@ func NewGenerateGeminiContentRequestWithBody(server string, operation string, co
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/genai/v1beta/models/%s", pathParam0)
+	operationPath := fmt.Sprintf("/genai/v1beta/models/%s:generateContent", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewStreamGeminiContentRequest calls the generic StreamGeminiContent builder with application/json body
+func NewStreamGeminiContentRequest(server string, model string, body StreamGeminiContentJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStreamGeminiContentRequestWithBody(server, model, "application/json", bodyReader)
+}
+
+// NewStreamGeminiContentRequestWithBody constructs an http.Request for the StreamGeminiContent method, with any body, and a specified content type
+func NewStreamGeminiContentRequestWithBody(server string, model string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "model", model, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/genai/v1beta/models/%s:streamGenerateContent", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -834,15 +932,25 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	GetPublicRuntimeConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPublicRuntimeConfigResponse, error)
 
-	// GenerateGeminiContentWithBodyWithResponse performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request,
+	// GenerateGeminiContentWithBodyWithResponse performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GenerateGeminiContentWithBodyWithResponse(ctx context.Context, operation string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error)
+	GenerateGeminiContentWithBodyWithResponse(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error)
 
-	// GenerateGeminiContentWithResponse performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request.
+	// GenerateGeminiContentWithResponse performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	GenerateGeminiContentWithResponse(ctx context.Context, operation string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error)
+	GenerateGeminiContentWithResponse(ctx context.Context, model string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error)
+
+	// StreamGeminiContentWithBodyWithResponse performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	StreamGeminiContentWithBodyWithResponse(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StreamGeminiContentResponse, error)
+
+	// StreamGeminiContentWithResponse performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	StreamGeminiContentWithResponse(ctx context.Context, model string, body StreamGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*StreamGeminiContentResponse, error)
 
 	// CreateChatCompletionWithBodyWithResponse performs a POST /openai/v1/chat/completions (the `CreateChatCompletion` operationId) request,
 	// with any type of body and a specified content type.
@@ -1117,6 +1225,47 @@ func (r GenerateGeminiContentResponse) ContentType() string {
 	return ""
 }
 
+type StreamGeminiContentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *map[string]interface{}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r StreamGeminiContentResponse) GetJSON200() *map[string]interface{} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r StreamGeminiContentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r StreamGeminiContentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StreamGeminiContentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r StreamGeminiContentResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type CreateChatCompletionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1348,26 +1497,48 @@ func (c *ClientWithResponses) GetPublicRuntimeConfigWithResponse(ctx context.Con
 	return ParseGetPublicRuntimeConfigResponse(rsp)
 }
 
-// GenerateGeminiContentWithBodyWithResponse performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request,
+// GenerateGeminiContentWithBodyWithResponse performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request,
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GenerateGeminiContentWithBodyWithResponse(ctx context.Context, operation string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error) {
-	rsp, err := c.GenerateGeminiContentWithBody(ctx, operation, contentType, body, reqEditors...)
+func (c *ClientWithResponses) GenerateGeminiContentWithBodyWithResponse(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error) {
+	rsp, err := c.GenerateGeminiContentWithBody(ctx, model, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseGenerateGeminiContentResponse(rsp)
 }
 
-// GenerateGeminiContentWithResponse performs a POST /genai/v1beta/models/{operation} (the `GenerateGeminiContent` operationId) request.
+// GenerateGeminiContentWithResponse performs a POST /genai/v1beta/models/{model}:generateContent (the `GenerateGeminiContent` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GenerateGeminiContentWithResponse(ctx context.Context, operation string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error) {
-	rsp, err := c.GenerateGeminiContent(ctx, operation, body, reqEditors...)
+func (c *ClientWithResponses) GenerateGeminiContentWithResponse(ctx context.Context, model string, body GenerateGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*GenerateGeminiContentResponse, error) {
+	rsp, err := c.GenerateGeminiContent(ctx, model, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseGenerateGeminiContentResponse(rsp)
+}
+
+// StreamGeminiContentWithBodyWithResponse performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) StreamGeminiContentWithBodyWithResponse(ctx context.Context, model string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StreamGeminiContentResponse, error) {
+	rsp, err := c.StreamGeminiContentWithBody(ctx, model, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStreamGeminiContentResponse(rsp)
+}
+
+// StreamGeminiContentWithResponse performs a POST /genai/v1beta/models/{model}:streamGenerateContent (the `StreamGeminiContent` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) StreamGeminiContentWithResponse(ctx context.Context, model string, body StreamGeminiContentJSONRequestBody, reqEditors ...RequestEditorFn) (*StreamGeminiContentResponse, error) {
+	rsp, err := c.StreamGeminiContent(ctx, model, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStreamGeminiContentResponse(rsp)
 }
 
 // CreateChatCompletionWithBodyWithResponse performs a POST /openai/v1/chat/completions (the `CreateChatCompletion` operationId) request,
@@ -1592,6 +1763,35 @@ func ParseGenerateGeminiContentResponse(rsp *http.Response) (*GenerateGeminiCont
 	return response, nil
 }
 
+// ParseStreamGeminiContentResponse parses an HTTP response from a StreamGeminiContentWithResponse call
+func ParseStreamGeminiContentResponse(rsp *http.Response) (*StreamGeminiContentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StreamGeminiContentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 200:
+		// Content-type (text/event-stream) unsupported
+
+	}
+
+	return response, nil
+}
+
 // ParseCreateChatCompletionResponse parses an HTTP response from a CreateChatCompletionWithResponse call
 func ParseCreateChatCompletionResponse(rsp *http.Response) (*CreateChatCompletionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1716,8 +1916,11 @@ type ServerInterface interface {
 	// (GET /auth/runtime-config)
 	GetPublicRuntimeConfig(w http.ResponseWriter, r *http.Request)
 
-	// (POST /genai/v1beta/models/{operation})
-	GenerateGeminiContent(w http.ResponseWriter, r *http.Request, operation string)
+	// (POST /genai/v1beta/models/{model}:generateContent)
+	GenerateGeminiContent(w http.ResponseWriter, r *http.Request, model string)
+
+	// (POST /genai/v1beta/models/{model}:streamGenerateContent)
+	StreamGeminiContent(w http.ResponseWriter, r *http.Request, model string)
 
 	// (POST /openai/v1/chat/completions)
 	CreateChatCompletion(w http.ResponseWriter, r *http.Request)
@@ -1820,17 +2023,43 @@ func (siw *ServerInterfaceWrapper) GenerateGeminiContent(w http.ResponseWriter, 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "operation" -------------
-	var operation string
+	// ------------- Path parameter "model" -------------
+	var model string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "model", r.PathValue("model"), &model, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operation", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GenerateGeminiContent(w, r, operation)
+		siw.Handler.GenerateGeminiContent(w, r, model)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamGeminiContent operation middleware
+func (siw *ServerInterfaceWrapper) StreamGeminiContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "model" -------------
+	var model string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model", r.PathValue("model"), &model, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamGeminiContent(w, r, model)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2038,7 +2267,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/anthropic/v1/messages", wrapper.CreateAnthropicMessage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/catalog-token", wrapper.GetPublicCatalogToken)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/runtime-config", wrapper.GetPublicRuntimeConfig)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/genai/v1beta/models/{operation}", wrapper.GenerateGeminiContent)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/genai/v1beta/models/{model}:generateContent", wrapper.GenerateGeminiContent)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/genai/v1beta/models/{model}:streamGenerateContent", wrapper.StreamGeminiContent)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/openai/v1/chat/completions", wrapper.CreateChatCompletion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/openai/v1/models", wrapper.ListModels)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/openai/v1/realtime", wrapper.ConnectRealtimeWebSocket)
@@ -2052,31 +2282,31 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"uG+LZhpFKUXY0O1Vyp9YRjdXTOaknJd/BAAA//8=",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

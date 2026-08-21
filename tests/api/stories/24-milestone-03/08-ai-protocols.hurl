@@ -1,6 +1,6 @@
 # M03 stable wire checks complementing the official SDK E2E.
 # covers: gizway-public.yaml#listModels gizway-public.yaml#createChatCompletion
-# covers: gizway-public.yaml#createAnthropicMessage gizway-public.yaml#generateGeminiContent
+# covers: gizway-public.yaml#createAnthropicMessage gizway-public.yaml#generateGeminiContent gizway-public.yaml#streamGeminiContent
 # covers: gizway-public.yaml#createRealtimeClientSecret gizway-public.yaml#connectRealtimeWebSocket
 # protocol-case: m03.openai.models
 # protocol covers: OpenAI Models response shape and Subscription Key bearer authentication
@@ -10,6 +10,8 @@
 # protocol covers: Anthropic x-api-key authentication and version forwarding
 # protocol-case: m03.gemini.generate
 # protocol covers: Gemini x-goog-api-key authentication and model operation mapping
+# protocol-case: m03.ai.rejected-routes
+# protocol covers: removed root APIs and unknown prefixed operations return 404
 
 GET {{way_url}}/openai/v1/models
 Authorization: Bearer {{raw_subscription_key}}
@@ -43,7 +45,7 @@ jsonpath "$.content[0].text" contains "deterministic story response"
 jsonpath "$.usage" exists
 
 
-POST {{way_url}}/genai/v1beta/models/{{gemini_operation}}
+POST {{way_url}}/genai/v1beta/models/{{seeded_model_name}}:generateContent
 x-goog-api-key: {{raw_subscription_key}}
 Content-Type: application/json
 {"contents":[{"role":"user","parts":[{"text":"m03 marker"}]}]}
@@ -52,6 +54,38 @@ HTTP 200
 [Asserts]
 jsonpath "$.candidates[0].content.parts[0].text" contains "deterministic story response"
 jsonpath "$.usageMetadata" exists
+
+
+POST {{way_url}}/genai/v1beta/models/{{seeded_model_name}}:streamGenerateContent
+x-goog-api-key: {{raw_subscription_key}}
+Content-Type: application/json
+{"contents":[{"role":"user","parts":[{"text":"m03 marker"}]}]}
+
+HTTP 200
+
+
+POST {{way_url}}/v1/chat/completions
+Authorization: Bearer {{raw_subscription_key}}
+Content-Type: application/json
+{"model":"{{seeded_model_name}}","messages":[{"role":"user","content":"removed route"}]}
+
+HTTP 404
+
+
+POST {{way_url}}/v1beta/models/{{seeded_model_name}}:generateContent
+x-goog-api-key: {{raw_subscription_key}}
+Content-Type: application/json
+{"contents":[{"role":"user","parts":[{"text":"removed route"}]}]}
+
+HTTP 404
+
+
+POST {{way_url}}/genai/v1beta/models/story-text:unknownOperation
+x-goog-api-key: {{raw_subscription_key}}
+Content-Type: application/json
+{"contents":[{"role":"user","parts":[{"text":"unknown route"}]}]}
+
+HTTP 404
 
 
 POST {{way_url}}/openai/v1/realtime/client_secrets

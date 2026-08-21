@@ -7,4 +7,5 @@ done
 find "$root/tests/api" -type f -name '*.hurl' -print0 | xargs -0 hurlfmt --check
 "$root/scripts/test-unit/test-unit-api-openapi.sh"
 "$root/scripts/test-unit/test-unit-api-contracts.sh"
-exec "$root/scripts/test-unit/check-e2e-api-seed.sh"
+"$root/scripts/test-unit/check-e2e-api-seed.sh"
+exec "$root/tests/e2e/run.sh" api

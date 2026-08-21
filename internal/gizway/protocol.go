@@ -137,6 +137,10 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 		h.realtimeSocket(w, r)
 		return
 	}
+	if !supportedProtocolRequest(r) {
+		http.NotFound(w, r)
+		return
+	}
 	rawKey, keyErr := protocolSubscriptionKey(r)
 	if keyErr != nil {
 		errJSON(w, http.StatusUnauthorized, "invalid_subscription_key", "Subscription Key is required")
@@ -173,7 +177,7 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 		h.chat(w, r, keyHMAC, admission, "anthropic")
 		return
 	}
-	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/genai/v1beta/models/") {
+	if _, _, ok := geminiModelOperation(r.URL.Path); r.Method == http.MethodPost && ok {
 		h.chat(w, r, keyHMAC, admission, "gemini")
 		return
 	}
@@ -181,7 +185,34 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 		h.createRealtimeSecret(w, r, keyHMAC, admission)
 		return
 	}
-	errJSON(w, http.StatusNotImplemented, "not_implemented", "protocol handler not implemented")
+	http.NotFound(w, r)
+}
+
+func supportedProtocolRequest(r *http.Request) bool {
+	if r.Method == http.MethodGet && r.URL.Path == "/openai/v1/models" {
+		return true
+	}
+	if r.Method == http.MethodPost && (r.URL.Path == "/openai/v1/chat/completions" || r.URL.Path == "/anthropic/v1/messages" || r.URL.Path == "/openai/v1/realtime/client_secrets") {
+		return true
+	}
+	_, _, ok := geminiModelOperation(r.URL.Path)
+	return r.Method == http.MethodPost && ok
+}
+
+func geminiModelOperation(path string) (string, bool, bool) {
+	operation, ok := strings.CutPrefix(path, "/genai/v1beta/models/")
+	if !ok || operation == "" || strings.Contains(operation, "/") {
+		return "", false, false
+	}
+	for _, candidate := range []struct {
+		suffix string
+		stream bool
+	}{{":generateContent", false}, {":streamGenerateContent", true}} {
+		if model, matched := strings.CutSuffix(operation, candidate.suffix); matched && model != "" {
+			return model, candidate.stream, true
+		}
+	}
+	return "", false, false
 }
 
 func protocolSubscriptionKey(r *http.Request) (string, error) {
@@ -599,9 +630,7 @@ func (call resolvedCall) selected(keyID string) (resolvedCall, error) {
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request, keyHMAC string, admission creditAdmission, protocol string) {
 	var body chatRequest
 	if protocol == "gemini" {
-		modelOperation := strings.TrimPrefix(r.URL.Path, "/genai/v1beta/models/")
-		body.Stream = strings.HasSuffix(modelOperation, ":streamGenerateContent")
-		body.Model = strings.TrimSuffix(strings.TrimSuffix(modelOperation, ":generateContent"), ":streamGenerateContent")
+		body.Model, body.Stream, _ = geminiModelOperation(r.URL.Path)
 		var gemini struct {
 			Contents []struct {
 				Role  string `json:"role,omitempty"`

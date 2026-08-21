@@ -16,4 +16,6 @@ That is seven released images and thirteen long-running instances. Node is permi
 
 Fixed product routing and profile configuration lives in the wrapper images. Hostnames, upstream URLs, database connections, master keys, credentials, TLS certificates, and private keys are runtime inputs. Entry images never request certificates; a deployment mounts externally managed certificate files read-only.
 
+For the disposable Compose E2E environment, the caller supplies a currently valid certificate/key pair whose SANs cover the Global, CN, Identity, and Pay test hosts. CI creates a one-day fixture outside every image; local callers provide an equivalent fixture. The E2E runner verifies expiry, SAN coverage, and the key pair before startup, trusts only that certificate's SPKI for browser tests, and proves that an unknown SNI is rejected. These fixtures are test inputs, not product resources or production deployment configuration.
+
 The public AI surface is intentionally protocol-specific: `/openai/v1/...`, `/anthropic/v1/...`, and `/genai/v1beta/...`. Root `/v1`, root `/v1beta`, and Bifrost aggregate APIs are not exposed.

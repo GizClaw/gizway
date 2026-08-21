@@ -12,6 +12,8 @@ The only integration lifecycle entry is:
 
 Every mode creates one disposable Compose project. `all` creates it once and runs every gate. The lifecycle is `empty databases -> three business init jobs -> ZITADEL standard init -> services -> API resource jobs -> tests`; it replays all init/resource jobs to prove idempotence and removes volumes and runtime outputs on exit.
 
+The E2E caller owns its TLS fixture. Before Compose starts, the runner requires a currently valid certificate/key pair with SANs for all four E2E hosts, verifies the pair, and later checks both browser trust scoped to that certificate and rejection of an unknown SNI. CI generates this disposable fixture outside the release images.
+
 Acceptance requires:
 
 1. exactly seven release images and thirteen long-running instances in `release/images.json`;
