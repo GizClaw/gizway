@@ -16,7 +16,7 @@ func TestOpenAIOfficialSDKModelsAndChat(t *testing.T) {
 	if env.GlobalDSN == "" || env.PayDSN == "" || env.ProviderURL == "" || env.ProviderKeyID == "" {
 		t.Skip("billing assertion environment is not configured")
 	}
-	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.GlobalURL+"/v1"))
+	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.GlobalURL+"/openai/v1"))
 	models, err := client.Models.List(t.Context())
 	if err != nil {
 		t.Fatalf("Models.List: %v", err)
@@ -56,7 +56,7 @@ func TestOpenAIOfficialSDKStreaming(t *testing.T) {
 	if env.GlobalDSN == "" || env.PayDSN == "" || env.ProviderURL == "" || env.ProviderKeyID == "" {
 		t.Skip("billing assertion environment is not configured")
 	}
-	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.GlobalURL+"/v1"))
+	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.GlobalURL+"/openai/v1"))
 	before := assertions.CaptureBillingSnapshot(t, env.GlobalDSN, env.PayDSN, env.ProviderURL)
 	stream := client.Chat.Completions.NewStreaming(t.Context(), openai.ChatCompletionNewParams{
 		Model:    env.GlobalModel,
@@ -90,7 +90,7 @@ func TestOpenAIOfficialSDKStreaming(t *testing.T) {
 func TestOpenAIOfficialSDKRejectsInvalidKeyAndModel(t *testing.T) {
 	env := fixture.Load(t)
 	request := func(key, model string) error {
-		client := openai.NewClient(option.WithAPIKey(key), option.WithBaseURL(env.GlobalURL+"/v1"))
+		client := openai.NewClient(option.WithAPIKey(key), option.WithBaseURL(env.GlobalURL+"/openai/v1"))
 		_, err := client.Chat.Completions.New(t.Context(), openai.ChatCompletionNewParams{
 			Model:    model,
 			Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("must not reach provider")},
@@ -114,7 +114,7 @@ func TestOpenAIOfficialSDKCNRegionSmoke(t *testing.T) {
 	if env.CNURL == "" || env.CNModel == "" {
 		t.Skip("CN SDK E2E environment is not configured")
 	}
-	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.CNURL+"/v1"))
+	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.CNURL+"/openai/v1"))
 	response, err := client.Chat.Completions.New(t.Context(), openai.ChatCompletionNewParams{
 		Model:    env.CNModel,
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("return the m03-cn marker")},

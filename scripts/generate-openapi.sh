@@ -16,6 +16,7 @@ go run "${generator}" -generate types,client,std-http,spec -package gizpaywebhoo
 go run "${generator}" -generate types,client,std-http,spec -package gizwayadmin -o internal/generated/gizwayadmin/api.gen.go "${bundle_dir}/gizway-admin.json"
 go run "${generator}" -generate types,client,std-http,spec -package gizwayuser -o internal/generated/gizwayuser/api.gen.go "${bundle_dir}/gizway-user.json"
 go run "${generator}" -generate types,client,std-http,spec -package gizwaypublic -o internal/generated/gizwaypublic/api.gen.go "${bundle_dir}/gizway-public.json"
+./scripts/postprocess-generated-openapi.sh internal/generated/gizwaypublic/api.gen.go
 go run "${generator}" -generate types,client,std-http,spec -package internalgizpay -o internal/generated/internalgizpay/api.gen.go "${bundle_dir}/internal-gizpay.json"
 
 # oapi-codegen emits capitalized wire-validation errors for required headers.

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info: {title: GizPay Account API, version: 4.0.0}
-servers: [{url: https://pay.gizway.com/account/v1}]
+servers: [{url: https://pay.gizclaw.com/account/v1}]
 security: [{humanBearer: []}]
 paths:
   /accounts:

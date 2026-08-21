@@ -26,6 +26,7 @@ generator='github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0'
 "${GO:-go}" run "${generator}" -generate types,client,std-http,spec -package gizwayadmin -o "${generated_dir}/gizwayadmin/api.gen.go" "${bundle_dir}/gizway-admin.json"
 "${GO:-go}" run "${generator}" -generate types,client,std-http,spec -package gizwayuser -o "${generated_dir}/gizwayuser/api.gen.go" "${bundle_dir}/gizway-user.json"
 "${GO:-go}" run "${generator}" -generate types,client,std-http,spec -package gizwaypublic -o "${generated_dir}/gizwaypublic/api.gen.go" "${bundle_dir}/gizway-public.json"
+./scripts/postprocess-generated-openapi.sh "${generated_dir}/gizwaypublic/api.gen.go"
 "${GO:-go}" run "${generator}" -generate types,client,std-http,spec -package internalgizpay -o "${generated_dir}/internalgizpay/api.gen.go" "${bundle_dir}/internal-gizpay.json"
 for package in account gizpayadmin gizpaywebhooks gizwayadmin gizwayuser gizwaypublic internalgizpay; do
     perl -0pi -e 's|(// Code generated .* DO NOT EDIT\.\n)|$1//lint:file-ignore ST1005 generated OpenAPI validation text\n|' "${generated_dir}/${package}/api.gen.go"

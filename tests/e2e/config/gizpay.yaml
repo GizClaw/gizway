@@ -1,15 +1,15 @@
 version: 1
 server:
-  name: credit.e2e.gizway.test
+  name: pay.e2e.gizclaw.test
   listen_address: 0.0.0.0:8081
 admin:
   initial_key_file: /fixtures/admin-key
 database:
-  dsn: postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable
+  dsn: postgres://gizpay_app:gizpay_app@postgres-gizpay:5432/gizpay?sslmode=disable
   schema: public
 authentication:
   zitadel:
-    issuer: http://identity.e2e.gizway.test:18080
+    issuer: https://identity.e2e.gizclaw.test:18080
     jwks_url: http://oauth-spy:19500/oauth/v2/keys
     human_audience: "386000000000000001"
     service_audience: "386000000000000002"

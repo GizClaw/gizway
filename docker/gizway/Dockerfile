@@ -19,8 +19,10 @@ ARG RELEASE_BUILD_TIME
 LABEL org.opencontainers.image.source="https://github.com/idy/gizway" \
       org.opencontainers.image.version="${RELEASE_VERSION}" \
       org.opencontainers.image.revision="${RELEASE_REVISION}" \
-      org.opencontainers.image.created="${RELEASE_BUILD_TIME}"
+      org.opencontainers.image.created="${RELEASE_BUILD_TIME}" \
+      org.opencontainers.image.base.name="debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241"
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/gizway /usr/local/bin/gizway
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/gizway"]
+CMD ["serve"]

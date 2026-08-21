@@ -27,7 +27,7 @@ Authorization: Bearer {{human_token}}
 HTTP 204
 
 
-POST {{pay_url}}/service/v1/subscription-credit-checks
+POST {{pay_internal_url}}/service/v1/subscription-credit-checks
 Authorization: Bearer {{service_token}}
 Content-Type: application/json
 {"subscription_key_hmac":"{{active_subscription_hmac}}"}
@@ -47,7 +47,7 @@ jsonpath "$.recheck_after_seconds" == 300
 body not contains "recheck_at"
 
 
-POST {{pay_url}}/service/v1/payg-charges
+POST {{pay_internal_url}}/service/v1/payg-charges
 Authorization: Bearer {{service_token_charger}}
 Content-Type: application/json
 {
@@ -67,7 +67,7 @@ external_order_id: jsonpath "$.external_order_id"
 jsonpath "$.gross_microcredits" == 10
 
 
-GET {{pay_url}}/service/v1/payg-charges/{{external_order_id}}
+GET {{pay_internal_url}}/service/v1/payg-charges/{{external_order_id}}
 Authorization: Bearer {{service_token_charger}}
 
 HTTP 200
@@ -75,7 +75,7 @@ HTTP 200
 jsonpath "$.external_order_id" == "{{external_order_id}}"
 
 
-POST {{pay_url}}/service/v1/payg-charges
+POST {{pay_internal_url}}/service/v1/payg-charges
 Authorization: Bearer {{service_token_charger}}
 Content-Type: application/json
 {
@@ -92,7 +92,7 @@ HTTP 409
 
 
 # A completed call may overdraw the Account. Admission is denied only afterwards.
-POST {{pay_url}}/service/v1/payg-charges
+POST {{pay_internal_url}}/service/v1/payg-charges
 Authorization: Bearer {{service_token_charger}}
 Content-Type: application/json
 {
@@ -116,7 +116,7 @@ HTTP 200
 jsonpath "$.balance_microcredits" == -5
 
 
-POST {{pay_url}}/service/v1/subscription-credit-checks
+POST {{pay_internal_url}}/service/v1/subscription-credit-checks
 Authorization: Bearer {{service_token}}
 Content-Type: application/json
 {"subscription_key_hmac":"{{negative_balance_hmac}}"}
@@ -128,7 +128,7 @@ jsonpath "$.available_microcredits" == 0
 
 
 # Revocation does not erase an invocation that started at the revocation boundary.
-POST {{pay_url}}/service/v1/payg-charges
+POST {{pay_internal_url}}/service/v1/payg-charges
 Authorization: Bearer {{service_token_charger}}
 Content-Type: application/json
 {
@@ -145,7 +145,7 @@ HTTP 201
 
 
 # A call that starts after revocation is not chargeable through that Key.
-POST {{pay_url}}/service/v1/payg-charges
+POST {{pay_internal_url}}/service/v1/payg-charges
 Authorization: Bearer {{service_token_charger}}
 Content-Type: application/json
 {

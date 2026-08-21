@@ -7,54 +7,54 @@ import (
 	"testing"
 )
 
-func TestMigrateOnlyRejectsConflictingModesBeforeLoadingConfig(t *testing.T) {
-	for name, args := range map[string][]string{
-		"initialize":       {"--config=/does/not/exist", "--migrate-only", "--initialize"},
-		"initialize false": {"--config=/does/not/exist", "--migrate-only", "--initialize=false"},
-		"check config":     {"--config=/does/not/exist", "--migrate-only", "--check-config"},
-		"effective config": {"--config=/does/not/exist", "--migrate-only", "--print-effective-config=json"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			err := run(args)
-			if err == nil || err.Error() != "--migrate-only cannot be combined with --initialize, --check-config, or --print-effective-config" {
-				t.Fatalf("run() error = %v", err)
-			}
-		})
-	}
-}
-
-func TestMigrateOnlyRequiresConfig(t *testing.T) {
-	err := run([]string{"--migrate-only"})
-	if err == nil || err.Error() != "--config is required" {
+func TestCommandIsRequired(t *testing.T) {
+	if err := run(nil); err == nil || err.Error() != "command is required: serve or init" {
 		t.Fatalf("run() error = %v", err)
 	}
 }
 
-func TestMigrateOnlyUsesMigrationConfigWithoutRuntimeSecrets(t *testing.T) {
+func TestUnknownCommandFailsClosed(t *testing.T) {
+	if err := run([]string{"migrate"}); err == nil || !strings.Contains(err.Error(), "unsupported command") {
+		t.Fatalf("run() error = %v", err)
+	}
+}
+
+func TestInitRequiresConfig(t *testing.T) {
+	if err := run([]string{"init"}); err == nil || err.Error() != "--config is required" {
+		t.Fatalf("run() error = %v", err)
+	}
+}
+
+func TestInitUsesDatabaseOnlyConfig(t *testing.T) {
 	directory := t.TempDir()
 	configPath := filepath.Join(directory, "gizpay.yaml")
 	config := `version: 1
-server:
-  name: not-a-runtime-domain
-admin:
-  initial_key_file: /missing/admin-key
+process: gizpay
 database:
-  dsn: invalid
+  admin_dsn: postgres://migration:admin-password@127.0.0.1:1/gizpay
+  service_dsn: postgres://gizpay_app:database-password@127.0.0.1:1/gizpay
   schema: public
-subscription_keys:
-  hmac:
-    secret_file: /missing/hmac
+powersync:
+  publication: powersync
+  source_dsn: postgres://powersync_source:source-password@127.0.0.1:1/gizpay
+  storage_admin_dsn: postgres://migration:storage-admin-password@127.0.0.1:1/postgres
+  storage_dsn: postgres://powersync_storage:storage-password@127.0.0.1:1/gizpay_sync
 `
 	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := run([]string{"--config=" + configPath, "--migrate-only"})
+	err := run([]string{"init", "--config=" + configPath})
 	if err == nil {
-		t.Fatal("migration unexpectedly connected to an invalid DSN")
+		t.Fatal("init unexpectedly connected to an invalid DSN")
 	}
 	for _, runtimeValidation := range []string{"server.name", "admin.initial_key_file", "subscription_keys.hmac.secret_file", "Secret file"} {
 		if strings.Contains(err.Error(), runtimeValidation) {
-			t.Fatalf("migration used runtime validation: %v", err)
+			t.Fatalf("init used runtime validation: %v", err)
+		}
+	}
+	for _, secret := range []string{"database-password", "admin-password", "source-password", "storage-admin-password", "storage-password"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("init leaked database credential %q: %v", secret, err)
 		}
 	}
 }

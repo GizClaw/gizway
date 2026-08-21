@@ -26,7 +26,7 @@ func TestAuthenticationModelAndProviderFailuresDoNotCharge(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			before := assertions.CaptureBillingSnapshot(t, env.GlobalDSN, env.PayDSN, env.ProviderURL)
-			client := openai.NewClient(option.WithAPIKey(test.key), option.WithBaseURL(env.GlobalURL+"/v1"), option.WithMaxRetries(0))
+			client := openai.NewClient(option.WithAPIKey(test.key), option.WithBaseURL(env.GlobalURL+"/openai/v1"), option.WithMaxRetries(0))
 			_, err := client.Chat.Completions.New(t.Context(), openai.ChatCompletionNewParams{
 				Model:    test.model,
 				Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage(test.prompt)},
@@ -48,7 +48,7 @@ func TestZeroPriceSDKCallCreatesNoFinancialRows(t *testing.T) {
 		t.Skip("zero-price assertion environment is not configured")
 	}
 	before := assertions.CaptureBillingSnapshot(t, env.GlobalDSN, env.PayDSN, env.ProviderURL)
-	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.GlobalURL+"/v1"))
+	client := openai.NewClient(option.WithAPIKey(env.SubscriptionKey), option.WithBaseURL(env.GlobalURL+"/openai/v1"))
 	response, err := client.Chat.Completions.New(t.Context(), openai.ChatCompletionNewParams{
 		Model:    env.ZeroPriceModel,
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("return the m03-zero-price marker")},

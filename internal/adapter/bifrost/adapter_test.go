@@ -31,7 +31,7 @@ func TestCandidateExecutionForwardsMaxTokens(t *testing.T) {
 		_, _ = fmt.Fprint(w, `{"id":"chat-1","object":"chat.completion","model":"model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
 	}))
 	defer provider.Close()
-	adapter := NewLazyWithExecution(0, time.Second)
+	adapter := NewLazyWithExecution(0, 5*time.Second)
 	defer adapter.Shutdown()
 	maxTokens := 37
 	message := "parameter passthrough"

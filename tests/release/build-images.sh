@@ -28,8 +28,8 @@ PATH="$temporary/bin:$PATH" \
 RELEASE_OUTPUT_DIR="$temporary/output" \
   "$root/scripts/release/build-images.sh" v1.2.3 >/dev/null
 
-[[ "$(wc -l <"$temporary/docker.log" | tr -d ' ')" == 3 ]]
-for key in gizpay gizway web; do
+[[ "$(wc -l <"$temporary/docker.log" | tr -d ' ')" == 7 ]]
+for key in gizpay gizway web entry zitadel zitadel-login powersync; do
   grep -Fx "type=oci,dest=$temporary/output/$key.oci.tar,rewrite-timestamp=true" \
     "$temporary/docker.log" >/dev/null
 done

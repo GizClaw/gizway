@@ -25,7 +25,6 @@ func TestPostgreSQLMigrateGizPayFirstRunAndReplay(t *testing.T) {
 	if err := database.GetContext(t.Context(), &appliedAt, `SELECT applied_at FROM schema_migrations WHERE service='gizpay' AND version=1`); err != nil {
 		t.Fatal(err)
 	}
-	assertGizPaySystemRows(t, database)
 	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -36,9 +35,8 @@ func TestPostgreSQLMigrateGizPayFirstRunAndReplay(t *testing.T) {
 	if !replayedAt.Equal(appliedAt) {
 		t.Fatalf("migration timestamp changed from %s to %s", appliedAt, replayedAt)
 	}
-	assertGizPaySystemRows(t, database)
 	var businessRows int
-	if err := database.GetContext(t.Context(), &businessRows, `SELECT count(*) FROM products`); err != nil {
+	if err := database.GetContext(t.Context(), &businessRows, `SELECT (SELECT count(*) FROM products) + (SELECT count(*) FROM users) + (SELECT count(*) FROM accounts)`); err != nil {
 		t.Fatal(err)
 	}
 	if businessRows != 0 {
@@ -110,7 +108,6 @@ func TestPostgreSQLMigrateRollsBackAndRetries(t *testing.T) {
 	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	assertGizPaySystemRows(t, database)
 }
 
 func TestPostgreSQLMigrateRejectsWrongOwnerAndInvalidHistory(t *testing.T) {
@@ -151,43 +148,6 @@ func TestPostgreSQLMigrateRejectsWrongOwnerAndInvalidHistory(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestPostgreSQLMigrateRejectsConflictingGizPaySystemRows(t *testing.T) {
-	dsn := testdb.NewDatabase(t)
-	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
-		t.Fatal(err)
-	}
-	database := openMigrationDatabase(t, dsn)
-	if _, err := database.ExecContext(t.Context(), `UPDATE users SET display_name='Conflicting Platform' WHERE id=$1`, storage.PlatformUserID); err != nil {
-		t.Fatal(err)
-	}
-	err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn)
-	if err == nil || !strings.Contains(err.Error(), "conflicting GizPay system row") {
-		t.Fatalf("system row error = %v", err)
-	}
-	var displayName string
-	if err := database.GetContext(t.Context(), &displayName, `SELECT display_name FROM users WHERE id=$1`, storage.PlatformUserID); err != nil {
-		t.Fatal(err)
-	}
-	if displayName != "Conflicting Platform" {
-		t.Fatalf("migration overwrote conflicting display name with %q", displayName)
-	}
-}
-
-func TestPostgreSQLMigrateRestoresMissingGizPaySystemRow(t *testing.T) {
-	dsn := testdb.NewDatabase(t)
-	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
-		t.Fatal(err)
-	}
-	database := openMigrationDatabase(t, dsn)
-	if _, err := database.ExecContext(t.Context(), `DELETE FROM ledger_accounts WHERE id=$1`, storage.PlatformClearingID); err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.MigrateGizPayPostgreSQL(t.Context(), dsn); err != nil {
-		t.Fatalf("restore missing system row: %v", err)
-	}
-	assertGizPaySystemRows(t, database)
 }
 
 func TestPostgreSQLMigrationClosesConnectionsOnFailure(t *testing.T) {
@@ -232,47 +192,4 @@ func openMigrationDatabase(t *testing.T, dsn string) *sqlx.DB {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	return database
-}
-
-func assertGizPaySystemRows(t *testing.T, database *sqlx.DB) {
-	t.Helper()
-	var user struct {
-		Issuer      string `db:"issuer"`
-		Subject     string `db:"subject"`
-		Email       string `db:"email"`
-		DisplayName string `db:"display_name"`
-		Status      string `db:"status"`
-	}
-	if err := database.GetContext(t.Context(), &user, `SELECT identity_issuer AS issuer,identity_subject AS subject,email,display_name,status FROM users WHERE id=$1`, storage.PlatformUserID); err != nil {
-		t.Fatal(err)
-	}
-	if user.Issuer != "urn:gizpay:system" || user.Subject != "platform" || user.Email != "" || user.DisplayName != "GizPay Platform" || user.Status != "active" {
-		t.Fatalf("platform user = %+v", user)
-	}
-	var owner, accountStatus string
-	if err := database.QueryRowxContext(t.Context(), `SELECT owner_user_id,status FROM accounts WHERE id=$1`, storage.PlatformAccountID).Scan(&owner, &accountStatus); err != nil {
-		t.Fatal(err)
-	}
-	if owner != storage.PlatformUserID || accountStatus != "active" {
-		t.Fatalf("platform account = owner %q status %q", owner, accountStatus)
-	}
-	for id, expected := range map[string]struct {
-		Owner, Asset, Status string
-	}{
-		storage.PlatformCreditID:   {Owner: storage.PlatformAccountID, Asset: "credit", Status: "active"},
-		storage.PlatformClearingID: {Owner: "", Asset: "clearing", Status: "active"},
-	} {
-		var owner *string
-		var asset, status string
-		if err := database.QueryRowxContext(t.Context(), `SELECT owner_account_id,asset_code,status FROM ledger_accounts WHERE id=$1`, id).Scan(&owner, &asset, &status); err != nil {
-			t.Fatal(err)
-		}
-		ownerValue := ""
-		if owner != nil {
-			ownerValue = *owner
-		}
-		if ownerValue != expected.Owner || asset != expected.Asset || status != expected.Status {
-			t.Fatalf("ledger account %s = owner %q asset %q status %q", id, ownerValue, asset, status)
-		}
-	}
 }

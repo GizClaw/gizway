@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info: {title: GizPay ZITADEL Webhooks, version: 4.0.0}
-servers: [{url: https://pay.gizway.com/webhooks/v1}]
+servers: [{url: https://pay.gizclaw.com/webhooks/v1}]
 paths:
   /zitadel/user-authenticated:
     post:

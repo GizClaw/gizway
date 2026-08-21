@@ -1,9 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = Number(process.env.M04_WEB_PORT ?? 3000);
+const port = Number(process.env.M04_WEB_PORT ?? 44173);
+const cnPort = Number(process.env.M04_WEB_CN_PORT ?? port);
 const external = process.env.M04_WEB_EXTERNAL === "1";
-const globalBaseURL = `http://global.localhost:${port}`;
-const cnBaseURL = `http://cn.localhost:${port}`;
+const tlsSPKI = process.env.M04_TLS_SPKI ?? "";
+if (external && tlsSPKI === "") throw new Error("M04_TLS_SPKI is required for scoped external E2E certificate trust");
+const globalBaseURL = external ? `https://global.e2e.gizclaw.test:${port}` : `http://global.localhost:${port}`;
+const cnBaseURL = external ? `https://cn.e2e.gizclaw.test:${cnPort}` : `http://cn.localhost:${port}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -17,14 +20,17 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     launchOptions: {
-      args: ["--host-resolver-rules=MAP *.e2e.gizway.test 127.0.0.1"],
+      args: [
+        "--host-resolver-rules=MAP *.e2e.gizclaw.test 127.0.0.1",
+        ...(external ? [`--ignore-certificate-errors-spki-list=${tlsSPKI}`] : []),
+      ],
     },
   },
   expect: { toHaveScreenshot: { animations: "disabled" } },
   webServer: external ? undefined : {
-    command: `GIZWAY_WEB_MODE=fake npm run build && GIZWAY_WEB_MODE=fake npm start -- --host 0.0.0.0 --port ${port}`,
+    command: `VITE_GIZWAY_WEB_MODE=fake npm run build && npm run preview -- --host 0.0.0.0 --port ${port}`,
     url: globalBaseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [

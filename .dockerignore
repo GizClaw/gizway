@@ -8,7 +8,6 @@
 .coverage
 tmp
 docs
-docker
 scripts
 Makefile
 web/apps/gizway/node_modules
@@ -21,3 +20,9 @@ web/apps/gizway/test-results
 web/apps/gizway/tests
 web/apps/gizway/e2e
 tests/powersync/node_modules
+tests/api
+tests/sdk
+tests/release
+tests/e2e/compose.yaml
+tests/e2e/.env.example
+tests/e2e/run.sh

@@ -1,0 +1,13 @@
+version: 1
+process: gizway
+region: global
+database:
+  admin_dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+  service_dsn: postgres://gizway_global_app:gizway_global_app@postgres-global:5432/gizway?sslmode=disable
+  schema: gizway
+powersync:
+  publication: powersync
+  source_schemas: [gizway, client_sync]
+  source_dsn: postgres://powersync_global_source:powersync_global_source@postgres-global:5432/gizway?sslmode=disable
+  storage_admin_dsn: postgres://postgres:postgres@postgres-powersync:5432/postgres?sslmode=disable
+  storage_dsn: postgres://powersync_global_storage:powersync_global_storage@postgres-powersync:5432/global_sync?sslmode=disable

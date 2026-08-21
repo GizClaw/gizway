@@ -36,7 +36,7 @@ func TestMalformedOpenAPIContractsFailClosed(t *testing.T) {
 	}
 	validRoute := `openapi: 3.1.0
 info: {title: Test, version: 1.0.0}
-servers: [{url: https://api.gizway.com/test/v1}]
+servers: [{url: https://gateway.gizclaw.com/test/v1}]
 paths:
   /things:
     get: {operationId: listThings, responses: {'200': {description: ok}}}
@@ -46,7 +46,7 @@ paths:
 	}{
 		{name: "invalid yaml", document: `openapi: [`},
 		{name: "wrong version", document: strings.Replace(validRoute, "3.1.0", "3.0.0", 1), source: `mux.Handle("GET /test/v1/things", handler)`},
-		{name: "invalid server", document: strings.Replace(validRoute, "https://api.gizway.com/test/v1", "http://elsewhere.test", 1), source: `mux.Handle("GET /test/v1/things", handler)`},
+		{name: "invalid server", document: strings.Replace(validRoute, "https://gateway.gizclaw.com/test/v1", "http://elsewhere.test", 1), source: `mux.Handle("GET /test/v1/things", handler)`},
 		{name: "missing route", document: validRoute},
 		{name: "missing operation id", document: strings.Replace(validRoute, "operationId: listThings, ", "", 1), source: `mux.Handle("GET /test/v1/things", handler)`},
 		{name: "missing reference document", document: strings.Replace(validRoute, "responses: {'200': {description: ok}}", "responses: {'200': {$ref: './absent.yaml#/response'}}", 1), source: `mux.Handle("GET /test/v1/things", handler)`},
@@ -77,7 +77,7 @@ func TestHurlCoverageDeclarationRequiresMatchingRequest(t *testing.T) {
 	hurl := t.TempDir()
 	document := `openapi: 3.1.0
 info: {title: Test, version: 1.0.0}
-servers: [{url: https://api.gizway.com/test/v1}]
+servers: [{url: https://gateway.gizclaw.com/test/v1}]
 paths:
   /things/{thing_id}:
     get:
@@ -109,7 +109,7 @@ func TestHurlCoverageRequiresEveryDocumentOperation(t *testing.T) {
 	hurl := t.TempDir()
 	document := `openapi: 3.1.0
 info: {title: Test, version: 1.0.0}
-servers: [{url: https://api.gizway.com/test/v1}]
+servers: [{url: https://gateway.gizclaw.com/test/v1}]
 paths:
   /things:
     get: {operationId: listThings, responses: {'200': {description: ok}}}
@@ -134,13 +134,13 @@ func TestHurlCoverageSeparatesDocuments(t *testing.T) {
 	hurl := t.TempDir()
 	central := `openapi: 3.1.0
 info: {title: Central, version: 1.0.0}
-servers: [{url: https://credit.gizway.com/account/v1}]
+servers: [{url: https://pay.gizclaw.com/account/v1}]
 paths:
   /me:
     get: {operationId: getCurrentIdentity, responses: {'200': {description: ok}}}
 `
 	regional := strings.ReplaceAll(central, "title: Central", "title: Regional")
-	regional = strings.ReplaceAll(regional, "credit.gizway.com", "global.gizway.com")
+	regional = strings.ReplaceAll(regional, "pay.gizclaw.com", "gateway.gizclaw.com")
 	if err := os.WriteFile(filepath.Join(openapi, "account.yaml"), []byte(central), 0o600); err != nil {
 		t.Fatal(err)
 	}

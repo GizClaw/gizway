@@ -61,6 +61,13 @@ function timestamp(value?: string) {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
 }
 
+function currentPAYG(pay: GizPaySnapshot) {
+  const subscription = pay.subscriptions.find((candidate) => candidate.status === "active" && pay.products.some((product) => product.id === candidate.productId && product.billing === "pay_as_you_go" && product.active));
+  const product = pay.products.find((candidate) => candidate.id === subscription?.productId)
+    ?? pay.products.find((candidate) => candidate.billing === "pay_as_you_go" && candidate.active);
+  return { product, subscription };
+}
+
 const dialogFocusable = [
   "button:not([disabled])",
   "input:not([disabled])",
@@ -238,8 +245,8 @@ export function GizWayDashboard({ siteRegion, dataProvider, showScenarioSelector
   const baseWay = way ?? unavailableGizWaySnapshot(siteRegion);
   const keyNames = new Map(displayPay.keys.map((key) => [key.id, key.name]));
   const displayWay = { ...baseWay, orders: baseWay.orders.map((order) => ({ ...order, keyName: keyNames.get(order.keyName) ?? order.keyName })) };
-  const paygProduct = displayPay.products.find((product) => product.billing === "pay_as_you_go" && product.active);
-  const activePAYGSubscription = displayPay.subscriptions.some((subscription) => subscription.productId === paygProduct?.id && subscription.status === "active");
+  const { subscription: paygSubscription } = currentPAYG(displayPay);
+  const activePAYGSubscription = paygSubscription != null;
 
   return (
     <div className="min-h-screen bg-app text-foreground">
@@ -247,6 +254,8 @@ export function GizWayDashboard({ siteRegion, dataProvider, showScenarioSelector
       <span className="sr-only" data-testid="gizway-sync-state" data-state={syncStates.gizway} />
       <span className="sr-only" data-testid="regional-model-count">{displayWay.models.length}</span>
       <span className="sr-only" data-testid="regional-price-count">{displayWay.models.reduce((count, model) => count + model.rates.length, 0)}</span>
+      <span className="sr-only" data-testid="payg-product-count">{displayPay.products.filter((product) => product.billing === "pay_as_you_go" && product.active).length}</span>
+      <span className="sr-only" data-testid="active-payg-subscription-count">{activePAYGSubscription ? 1 : 0}</span>
       <Sidebar section={section} setSection={setSection} user={displayPay.user} onLogout={onLogout} className="hidden lg:flex" />
 
       {mobileNav && (
@@ -384,8 +393,7 @@ function Overview({ pay, way, syncStates, setSection, onTopUp }: { pay: GizPaySn
   const used = way.usage.reduce((sum, point) => sum + point.credits, 0);
   const max = Math.max(1, ...way.usage.map((point) => point.credits));
   const providerEarnings = way.providerKeys.reduce((sum, key) => sum + key.earnedCredits, 0);
-  const paygProduct = pay.products.find((product) => product.billing === "pay_as_you_go" && product.active);
-  const paygSubscription = pay.subscriptions.find((subscription) => subscription.productId === paygProduct?.id);
+  const { product: paygProduct, subscription: paygSubscription } = currentPAYG(pay);
 
   return (
     <>

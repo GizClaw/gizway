@@ -1,0 +1,12 @@
+{
+  "platform": "linux/amd64",
+  "images": [
+    {"key":"gizpay","image":"ghcr.io/idy/gizway-gizpay","dockerfile":"docker/gizpay/Dockerfile","command":"/usr/local/bin/gizpay","base":"debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241","instances":["pay"]},
+    {"key":"gizway","image":"ghcr.io/idy/gizway-gateway","dockerfile":"docker/gizway/Dockerfile","command":"/usr/local/bin/gizway","base":"debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241","instances":["global","cn"]},
+    {"key":"web","image":"ghcr.io/idy/gizway-web","dockerfile":"docker/gizway-web/Dockerfile","command":"caddy","base":"caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648","instances":["global","cn"]},
+    {"key":"entry","image":"ghcr.io/idy/gizway-entry","dockerfile":"docker/gizway-entry/Dockerfile","command":"gizway-entry","base":"traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144","instances":["global","cn","central"]},
+    {"key":"zitadel","image":"ghcr.io/idy/gizway-zitadel","dockerfile":"docker/gizway-zitadel/Dockerfile","command":"zitadel","base":"ghcr.io/zitadel/zitadel:v4.17.1@sha256:3ac6910685d48f32481f01f45e3e6215efe5a9df2c069591b481e9a101712db5","instances":["identity-api"]},
+    {"key":"zitadel-login","image":"ghcr.io/idy/gizway-zitadel-login","dockerfile":"docker/gizway-zitadel-login/Dockerfile","command":"node","base":"ghcr.io/zitadel/zitadel-login:v4.17.1@sha256:8035df2409afb35a3999482ee98e453261715f98d47e4b62e948e4a1ddf4345f","instances":["login-ui"]},
+    {"key":"powersync","image":"ghcr.io/idy/gizway-powersync","dockerfile":"docker/gizway-powersync/Dockerfile","command":"service/lib/entry.js","base":"journeyapps/powersync-service:1.24.0@sha256:0fc9f65e693c07f1206007acddb87141402c09ef20589e29a0dfe20d57ce80b6","instances":["pay","global","cn"]}
+  ]
+}

@@ -6,7 +6,7 @@
 # covers: gizpay-admin.yaml#createAdminServicePrincipal gizpay-admin.yaml#listAdminServicePrincipals gizpay-admin.yaml#getAdminServicePrincipal
 # covers: gizpay-admin.yaml#updateAdminServicePrincipal gizpay-admin.yaml#deleteAdminServicePrincipal
 
-POST {{pay_url}}/admin/v1/products
+POST {{pay_internal_url}}/admin/v1/products
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -25,7 +25,7 @@ jsonpath "$.id" == "product_admin_hurl"
 jsonpath "$.merchant_id" == "{{default_merchant_id}}"
 
 
-GET {{pay_url}}/admin/v1/products
+GET {{pay_internal_url}}/admin/v1/products
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -33,7 +33,7 @@ HTTP 200
 jsonpath "$.data[?(@.id == 'product_admin_hurl')].name" contains "Admin Hurl PAYG"
 
 
-GET {{pay_url}}/admin/v1/products/product_admin_hurl
+GET {{pay_internal_url}}/admin/v1/products/product_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -41,7 +41,7 @@ HTTP 200
 jsonpath "$.status" == "active"
 
 
-PATCH {{pay_url}}/admin/v1/products/product_admin_hurl
+PATCH {{pay_internal_url}}/admin/v1/products/product_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -55,7 +55,7 @@ jsonpath "$.name" == "Admin Hurl PAYG Updated"
 jsonpath "$.terms_version" == "admin-v2"
 
 
-POST {{pay_url}}/admin/v1/product-listings
+POST {{pay_internal_url}}/admin/v1/product-listings
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -75,7 +75,7 @@ HTTP 201
 jsonpath "$.id" == "product_listing_admin_hurl"
 
 
-GET {{pay_url}}/admin/v1/product-listings
+GET {{pay_internal_url}}/admin/v1/product-listings
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -83,7 +83,7 @@ HTTP 200
 jsonpath "$.data[?(@.id == 'product_listing_admin_hurl')].site" contains "admin.localhost"
 
 
-GET {{pay_url}}/admin/v1/product-listings/product_listing_admin_hurl
+GET {{pay_internal_url}}/admin/v1/product-listings/product_listing_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -91,7 +91,7 @@ HTTP 200
 jsonpath "$.product_id" == "product_admin_hurl"
 
 
-PATCH {{pay_url}}/admin/v1/product-listings/product_listing_admin_hurl
+PATCH {{pay_internal_url}}/admin/v1/product-listings/product_listing_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -105,14 +105,14 @@ jsonpath "$.title" == "Admin Product Updated"
 jsonpath "$.display_order" == 11
 
 
-POST {{pay_url}}/admin/v1/service-principals
+POST {{pay_internal_url}}/admin/v1/service-principals
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
   "id": "service_principal_admin_hurl",
-  "owner_identity_issuer": "http://identity.e2e.gizway.test:18080",
+  "owner_identity_issuer": "https://identity.e2e.gizclaw.test:18080",
   "owner_identity_subject": "{{human_subject}}",
-  "identity_issuer": "http://identity.e2e.gizway.test:18080",
+  "identity_issuer": "https://identity.e2e.gizclaw.test:18080",
   "identity_subject": "{{service_reader_subject}}",
   "name": "Admin Hurl Service",
   "roles": ["charge"],
@@ -124,7 +124,7 @@ HTTP 201
 jsonpath "$.id" == "service_principal_admin_hurl"
 
 
-GET {{pay_url}}/admin/v1/service-principals
+GET {{pay_internal_url}}/admin/v1/service-principals
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -132,7 +132,7 @@ HTTP 200
 jsonpath "$.data[?(@.id == 'service_principal_admin_hurl')].name" contains "Admin Hurl Service"
 
 
-GET {{pay_url}}/admin/v1/service-principals/service_principal_admin_hurl
+GET {{pay_internal_url}}/admin/v1/service-principals/service_principal_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 200
@@ -140,7 +140,7 @@ HTTP 200
 jsonpath "$.identity_subject" == "{{service_reader_subject}}"
 
 
-PATCH {{pay_url}}/admin/v1/service-principals/service_principal_admin_hurl
+PATCH {{pay_internal_url}}/admin/v1/service-principals/service_principal_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 Content-Type: application/json
 {
@@ -153,19 +153,19 @@ HTTP 200
 jsonpath "$.name" == "Admin Hurl Service Updated"
 
 
-DELETE {{pay_url}}/admin/v1/service-principals/service_principal_admin_hurl
+DELETE {{pay_internal_url}}/admin/v1/service-principals/service_principal_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
 
 
-DELETE {{pay_url}}/admin/v1/product-listings/product_listing_admin_hurl
+DELETE {{pay_internal_url}}/admin/v1/product-listings/product_listing_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
 
 
-DELETE {{pay_url}}/admin/v1/products/product_admin_hurl
+DELETE {{pay_internal_url}}/admin/v1/products/product_admin_hurl
 X-GizWay-Admin-Key: {{admin_key}}
 
 HTTP 204
