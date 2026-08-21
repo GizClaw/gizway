@@ -62,6 +62,10 @@ Content-Type: application/json
 {"contents":[{"role":"user","parts":[{"text":"m03 marker"}]}]}
 
 HTTP 200
+[Asserts]
+header "Content-Type" startsWith "text/event-stream"
+body contains "data:"
+body contains "deterministic"
 
 
 POST {{way_url}}/v1/chat/completions
