@@ -9,7 +9,7 @@ trap cleanup EXIT
 
 digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 printf 'version=v1.2.3\nrevision=0123456789abcdef0123456789abcdef01234567\nbuild_time=2026-08-18T00:00:00Z\nsource_date_epoch=1787011200\n' >"$output_dir/metadata.env"
-for key in gizpay gizway web; do
+for key in gizpay gizway web entry zitadel zitadel-login powersync; do
   printf '%s\n' "$digest" >"$output_dir/$key.digest"
   : >"$output_dir/$key.oci.tar"
 done
@@ -23,7 +23,7 @@ run_publish() {
 : >"$output_dir/oras.log"
 rm -f "$output_dir/oras.state"
 run_publish publish >/dev/null
-[[ "$(wc -l <"$output_dir/oras.log" | tr -d ' ')" == 3 ]]
+[[ "$(wc -l <"$output_dir/oras.log" | tr -d ' ')" == 7 ]]
 
 : >"$output_dir/oras.log"
 run_publish same >/dev/null

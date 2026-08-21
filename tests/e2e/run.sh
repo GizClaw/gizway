@@ -1,31 +1,164 @@
 #!/bin/sh
 set -u
 
-root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-results="$(mktemp "${TMPDIR:-/tmp}/gizway-m03-e2e.XXXXXX")"
+root="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+compose="$root/tests/e2e/compose.yaml"
+mode="${1:-}"
+case "$mode" in all|api|sdk|powersync|web) ;; *) echo "usage: $0 all|api|sdk|powersync|web" >&2; exit 2;; esac
+for tls_input in TLS_CERT_FILE TLS_KEY_FILE; do
+  eval "tls_path=\${$tls_input:-}"
+  if [ -z "$tls_path" ] || [ ! -r "$tls_path" ]; then
+    echo "$tls_input must point to a readable external E2E TLS file" >&2
+    exit 2
+  fi
+done
+for command in docker openssl curl; do
+  command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 2; }
+done
+openssl x509 -in "$TLS_CERT_FILE" -noout -checkend 60 >/dev/null || { echo "TLS certificate must remain valid for the E2E run" >&2; exit 2; }
+certificate_sans="$(openssl x509 -in "$TLS_CERT_FILE" -noout -text)"
+for host in global.e2e.gizclaw.test cn.e2e.gizclaw.test identity.e2e.gizclaw.test pay.e2e.gizclaw.test; do
+  printf '%s\n' "$certificate_sans" | grep -F "DNS:$host" >/dev/null || { echo "TLS certificate lacks SAN $host" >&2; exit 2; }
+done
+certificate_key="$(openssl x509 -in "$TLS_CERT_FILE" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256)"
+private_key="$(openssl pkey -in "$TLS_KEY_FILE" -pubout -outform DER | openssl dgst -sha256)"
+[ "$certificate_key" = "$private_key" ] || { echo "TLS private key does not match certificate" >&2; exit 2; }
+tls_spki="$(openssl x509 -in "$TLS_CERT_FILE" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | openssl base64 -A)"
+project="gizway-e2e-${mode}-$$"
+fixture="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e.XXXXXX")"
+results="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e-results.XXXXXX")"
+
 cleanup() {
-    status=$?
-    rm -f "${results}" || true
-    return "${status}"
+  status=$?
+  if [ "${GIZWAY_KEEP_E2E_STACK:-0}" = 1 ]; then
+    echo "E2E stack retained as $project" >&2
+  else
+    docker compose --project-name "$project" -f "$compose" --profile '*' down --volumes --remove-orphans >/dev/null 2>&1 || true
+  fi
+  rm -f "$fixture" "$results"
+  return "$status"
 }
 trap cleanup EXIT INT TERM
 
-run_case() {
-    name="$1"
-    shift
-    if "$@"; then
-        printf '%s\tPASS\n' "${name}" >>"${results}"
-    else
-        status=$?
-        printf '%s\tFAIL(%s)\n' "${name}" "${status}" >>"${results}"
-    fi
+fail_with_logs() {
+  docker compose --project-name "$project" -f "$compose" --profile '*' logs --tail 250 --no-log-prefix >&2 || true
+  exit 1
 }
 
-run_case api "${root}/scripts/test-unit/test-unit-api.sh"
-run_case official-sdk "${root}/tests/e2e/run-sdk.sh"
-run_case powersync "${root}/tests/e2e/run-powersync.sh"
+wait_job() {
+  service="$1"
+  container="$(docker compose --project-name "$project" -f "$compose" ps --all --quiet "$service")"
+  [ -n "$container" ] || return 1
+  docker wait "$container" >/dev/null
+  [ "$(docker inspect --format '{{.State.ExitCode}}' "$container")" -eq 0 ]
+}
 
-cat "${results}"
-if grep -q 'FAIL' "${results}"; then
-    exit 1
+wait_healthy() {
+  service="$1"
+  container="$(docker compose --project-name "$project" -f "$compose" ps --quiet "$service")"
+  [ -n "$container" ] || return 1
+  attempt=0
+  while [ "$attempt" -lt 120 ]; do
+    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")"
+    [ "$health" = healthy ] && return 0
+    [ "$health" = unhealthy ] && return 1
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  return 1
+}
+
+run_case() {
+  name="$1"; shift
+  if "$@"; then printf '%s\tPASS\n' "$name" >>"$results"; else status=$?; printf '%s\tFAIL(%s)\n' "$name" "$status" >>"$results"; fi
+}
+
+docker compose --project-name "$project" -f "$compose" up --build --detach || fail_with_logs
+wait_job business-resources || fail_with_logs
+for job in gizpay-init gizway-global-init gizway-cn-init business-resources; do
+  docker compose --project-name "$project" -f "$compose" run --rm --no-deps "$job" || fail_with_logs
+done
+for entry in entry-central entry-global entry-cn; do
+	wait_healthy "$entry" || fail_with_logs
+done
+if curl --noproxy '*' --fail --silent --show-error --cacert "$TLS_CERT_FILE" \
+  --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
+  echo "Entry accepted a certificate/SNI mismatch" >&2
+  fail_with_logs
 fi
+if curl --noproxy '*' --insecure --fail --silent --show-error \
+  --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
+  echo "Entry routed an unknown host" >&2
+  fail_with_logs
+fi
+
+docker run --rm -v "${project}_fixtures:/fixtures:ro" busybox:1.37.0 cat /fixtures/m03.vars >"$fixture"
+# shellcheck disable=SC1090
+. "$fixture"
+
+run_api() {
+  "$root/scripts/test-unit/test-unit-api-openapi.sh" && "$root/scripts/test-unit/test-unit-api-contracts.sh" && "$root/scripts/test-unit/check-e2e-api-seed.sh" || return
+  admin_key="$(docker run --rm -v "${project}_fixtures:/fixtures:ro" busybox:1.37.0 cat /fixtures/admin-key)"
+  stories="$(find "$root/tests/api/stories/24-milestone-03" "$root/tests/api/stories/25-milestone-04" "$root/tests/api/stories/26-admin" -type f -name '*.hurl' -print | sort)"
+  for story in $stories; do
+    docker compose --project-name "$project" -f "$compose" --profile test run --rm --no-deps hurl-api \
+      --cacert /tls/tls.crt \
+      --test --variables-file /fixtures/m03.vars --secret "admin_key=$admin_key" \
+      --variable pay_url=https://global.e2e.gizclaw.test:8443 \
+      --variable way_url=https://cn.e2e.gizclaw.test:8443 \
+      --variable pay_internal_url=http://gizpay:8081 \
+      --variable way_internal_url=http://gizway-cn:8080 \
+      --variable global_url=https://global.e2e.gizclaw.test:8443 \
+      --variable cn_url=https://cn.e2e.gizclaw.test:8443 "/workspace/${story#"$root"/}" || return
+  done
+}
+
+# Variables below are loaded from the generated fixture file.
+# shellcheck disable=SC2154
+run_sdk() {
+  docker compose --project-name "$project" -f "$compose" --profile test run --rm --no-deps \
+    -e M03_PAY_URL=https://global.e2e.gizclaw.test:8443 \
+    -e M03_CN_URL=https://cn.e2e.gizclaw.test:8443 \
+    -e M03_GLOBAL_URL=https://global.e2e.gizclaw.test:8443 \
+    -e 'M03_GLOBAL_DSN=postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable&search_path=gizway' \
+    -e 'M03_PAY_DSN=postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable' \
+    -e M03_PROVIDER_URL=http://fake-provider-global:19000 \
+    -e M03_SUBSCRIPTION_KEY="$raw_subscription_key" -e M03_REVOKED_SUBSCRIPTION_KEY="$revoked_subscription_key" \
+    -e M03_GLOBAL_MODEL="$seeded_model_name" -e M03_CN_MODEL="$seeded_model_name" -e M03_ACCOUNT_ID="$account_id" \
+    -e M03_HUMAN_TOKEN="$human_token" -e M03_ZERO_PRICE_MODEL="$zero_price_model" -e M03_INACTIVE_MODEL=story-text-inactive \
+    -e M03_PROVIDER_KEY_ID="$global_provider_key_id" sdk-test
+}
+
+# shellcheck disable=SC2154
+run_powersync() {
+  docker compose --project-name "$project" -f "$compose" --profile test run --rm --no-deps \
+    -e M03_POWERSYNC_GIZPAY_ENDPOINT=https://global.e2e.gizclaw.test:8443/_sync/gizpay \
+    -e M03_POWERSYNC_CN_ENDPOINT=https://cn.e2e.gizclaw.test:8443/_sync/gizway \
+    -e M03_POWERSYNC_GLOBAL_ENDPOINT=https://global.e2e.gizclaw.test:8443/_sync/gizway \
+    -e M03_POWERSYNC_TOKEN="$human_token" -e M03_POWERSYNC_TOKEN_TWO="$human_token_two" \
+    -e M03_POWERSYNC_INVALID_AUDIENCE_TOKEN="$wrong_audience_admin_token" \
+    -e M04_POWERSYNC_CN_CATALOG_TOKEN="$cn_catalog_token" -e M04_POWERSYNC_GLOBAL_CATALOG_TOKEN="$global_catalog_token" \
+    -e M03_HUMAN_TOKEN="$human_token" -e M03_PAY_URL=https://global.e2e.gizclaw.test:8443 \
+    -e M03_SUBSCRIPTION_KEY="$raw_subscription_key" \
+    -e M03_GLOBAL_URL=https://global.e2e.gizclaw.test:8443 -e M03_CN_URL=https://cn.e2e.gizclaw.test:8443 powersync-test
+}
+
+# shellcheck disable=SC2154
+run_web() {
+  (cd "$root/web/apps/gizway" && M04_REAL_E2E=1 M04_E2E_COMPOSE_PROJECT="$project" M04_WEB_EXTERNAL=1 \
+    M04_TLS_SPKI="$tls_spki" \
+    M04_WEB_PORT=3000 M04_WEB_CN_PORT=3001 M04_E2E_USERNAME="$human_username" M04_E2E_PASSWORD="$human_password" \
+    M04_E2E_NEW_USERNAME="$web_first_login_username" M04_E2E_NEW_PASSWORD="$web_first_login_password" \
+    npm run test:e2e -- e2e/real-auth-and-sync.spec.ts)
+}
+
+case "$mode" in
+  all) run_case api run_api; run_case sdk run_sdk; run_case powersync run_powersync; run_case web run_web ;;
+  api) run_case api run_api ;;
+  sdk) run_case sdk run_sdk ;;
+  powersync) run_case powersync run_powersync ;;
+  web) run_case web run_web ;;
+esac
+cat "$results"
+grep -q 'FAIL' "$results" && exit 1
+exit 0

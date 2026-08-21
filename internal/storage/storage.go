@@ -178,9 +178,10 @@ func applyServiceMigrationsWithSystem(ctx context.Context, database *sqlx.DB, se
 	return nil
 }
 
-// MigrateGizPayPostgreSQL applies only GizPay-owned schema and fixed system rows.
+// MigrateGizPayPostgreSQL applies only GizPay-owned schema. Product and account
+// resources are created later through the public and admin APIs.
 func MigrateGizPayPostgreSQL(ctx context.Context, dsn string) error {
-	return migrateServicePostgreSQL(ctx, dsn, "gizpay", gizpaysql.Migrations, true)
+	return migrateServicePostgreSQL(ctx, dsn, "gizpay", gizpaysql.Migrations, false)
 }
 
 // MigrateGizWayPostgreSQL applies only GizWay-owned schema migrations.

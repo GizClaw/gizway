@@ -1,6 +1,7 @@
 # Runner-owned values. Every story starts with fresh Milestone 03 databases.
 variables:
   pay_url: GizPay base URL
+  pay_internal_url: GizPay Compose-internal service URL
   way_url: GizWay base URL for the selected region
   human_token: primary ZITADEL human JWT
   human_token_two: second ZITADEL human JWT
@@ -22,4 +23,3 @@ variables:
   provider_id: seeded regional Bifrost Provider ID
   provider_key_secret: raw Provider Key contributed by human_token
   provider_key_secret_two: replacement raw Provider Key
-  gemini_operation: story-text:generateContent

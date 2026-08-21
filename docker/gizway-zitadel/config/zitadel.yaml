@@ -1,0 +1,22 @@
+ExternalDomain: auth.gizclaw.com
+ExternalPort: 443
+ExternalSecure: true
+TLS:
+  Enabled: false
+Database:
+  postgres:
+    Host: postgres-zitadel
+    Port: 5432
+    Database: zitadel
+    User:
+      Username: postgres
+      SSL:
+        Mode: disable
+    Admin:
+      Username: postgres
+      SSL:
+        Mode: disable
+Login:
+  DefaultPaths:
+    LoginV2: /ui/v2/login/login
+    Logout: /ui/v2/login/logout

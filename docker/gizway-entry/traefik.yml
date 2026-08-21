@@ -1,0 +1,24 @@
+api:
+  dashboard: false
+  insecure: false
+ping:
+  entryPoint: health
+entryPoints:
+  web:
+    address: :8080
+  websecure:
+    address: :8443
+  central:
+    address: :18080
+  health:
+    address: :8082
+providers:
+  file:
+    filename: /tmp/gizway-entry/routes.yml
+    watch: false
+log:
+  level: INFO
+accessLog: {}
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false

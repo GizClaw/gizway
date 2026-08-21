@@ -1,0 +1,47 @@
+tls:
+  options:
+    default:
+      sniStrict: true
+  certificates:
+    - certFile: "@@TLS_CERT_FILE@@"
+      keyFile: "@@TLS_KEY_FILE@@"
+http:
+  routers:
+    login:
+      rule: Host(`@@AUTH_HOST@@`) && PathPrefix(`/ui/v2/login`)
+      priority: 200
+      entryPoints: [websecure, central]
+      tls: {}
+      service: zitadel-login
+    identity:
+      rule: Host(`@@AUTH_HOST@@`)
+      priority: 100
+      entryPoints: [websecure, central]
+      tls: {}
+      service: zitadel
+    account:
+      rule: Host(`@@PAY_HOST@@`) && PathPrefix(`/account/v1/`)
+      priority: 200
+      entryPoints: [websecure, central]
+      tls: {}
+      service: gizpay
+    gizpay-sync:
+      rule: Host(`@@PAY_HOST@@`) && PathPrefix(`/_sync/gizpay/`)
+      priority: 190
+      entryPoints: [websecure, central]
+      tls: {}
+      middlewares: [strip-gizpay-sync]
+      service: powersync-pay
+    zitadel-hook:
+      rule: Host(`@@PAY_HOST@@`) && Method(`POST`) && Path(`/webhooks/v1/zitadel/user-authenticated`)
+      priority: 200
+      entryPoints: [websecure, central]
+      tls: {}
+      service: gizpay
+  middlewares:
+    strip-gizpay-sync: {stripPrefix: {prefixes: [/_sync/gizpay]}}
+  services:
+    gizpay: {loadBalancer: {servers: [{url: "@@GIZPAY_UPSTREAM@@"}]}}
+    zitadel: {loadBalancer: {servers: [{url: "@@ZITADEL_UPSTREAM@@"}]}}
+    zitadel-login: {loadBalancer: {servers: [{url: "@@ZITADEL_LOGIN_UPSTREAM@@"}]}}
+    powersync-pay: {loadBalancer: {servers: [{url: "@@POWERSYNC_PAY_UPSTREAM@@"}]}}

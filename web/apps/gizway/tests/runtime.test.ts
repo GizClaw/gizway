@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { clearSession, humanToken, logoutURL } from "@/data/runtime/auth";
-import { connectPowerSyncService, createDatabaseCloser, ensurePAYGSubscription, maintainPAYGSubscription, maintainPowerSyncService, MutationCoordinator, openDatabasePair, ReadOnlyCatalogConnector, waitForInitialSync, watchCatalogDatabases, watchDatabases } from "@/data/runtime/real-provider";
+import { connectPowerSyncService, createDatabaseCloser, ensurePAYGSubscription, maintainPAYGSubscription, maintainPowerSyncService, MutationCoordinator, openDatabasePair, ReadOnlyCatalogConnector, serviceSyncState, waitForInitialSync, watchCatalogDatabases, watchDatabases } from "@/data/runtime/real-provider";
 import { validateCatalogJWT } from "@/data/runtime/config";
 import { PowerSyncGizPayRepository } from "@/data/powersync/gizpay/repository";
 import { PowerSyncGizWayRepository } from "@/data/powersync/gizway/repository";
@@ -250,6 +250,13 @@ describe("M04 synchronized billing read models", () => {
 });
 
 describe("M04 live PowerSync behavior", () => {
+  test("keeps cached data offline when a previously synced service reports a download error", async () => {
+    const database = {
+      currentStatus: { connected: false, hasSynced: true, downloadError: new Error("WebSocket connection failed") },
+    };
+    expect(serviceSyncState(database as never)).toBe("offline");
+  });
+
   test("retries a temporary Public Catalog token failure and connects without a reload", async () => {
     vi.useFakeTimers();
     let attempts = 0;
@@ -350,9 +357,9 @@ describe("M04 live PowerSync behavior", () => {
   });
 
   test("uses real mode unless Fake mode is explicitly configured", async () => {
-    const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-    expect(source).toContain('process.env.GIZWAY_WEB_MODE !== "fake"');
-    expect(source).not.toContain('process.env.GIZWAY_WEB_MODE === "real"');
+    const source = await readFile(new URL("../src/main.tsx", import.meta.url), "utf8");
+    expect(source).toContain('import.meta.env.VITE_GIZWAY_WEB_MODE !== "fake"');
+    expect(source).not.toContain('import.meta.env.VITE_GIZWAY_WEB_MODE === "real"');
   });
 
   test("settles GizPay and GizWay connections independently", async () => {

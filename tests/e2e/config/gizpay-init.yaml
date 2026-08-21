@@ -1,0 +1,12 @@
+version: 1
+process: gizpay
+database:
+  admin_dsn: postgres://postgres:postgres@postgres-gizpay:5432/gizpay?sslmode=disable
+  service_dsn: postgres://gizpay_app:gizpay_app@postgres-gizpay:5432/gizpay?sslmode=disable
+  schema: public
+powersync:
+  publication: powersync
+  source_schemas: [public, client_sync]
+  source_dsn: postgres://powersync_pay_source:powersync_pay_source@postgres-gizpay:5432/gizpay?sslmode=disable
+  storage_admin_dsn: postgres://postgres:postgres@postgres-powersync:5432/postgres?sslmode=disable
+  storage_dsn: postgres://powersync_pay_storage:powersync_pay_storage@postgres-powersync:5432/gizpay_sync?sslmode=disable

@@ -1,0 +1,17 @@
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_SOURCE_URI
+      sslmode: disable
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: disable
+port: 8080
+sync_config:
+  path: /etc/gizway/powersync/cn/sync-config.yaml
+client_auth:
+  jwks_uri: !env PS_JWKS_URI
+  audience: [!env PS_AUDIENCE]
+telemetry:
+  disable_telemetry_sharing: true

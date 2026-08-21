@@ -9,7 +9,7 @@ Authorization: Bearer {{human_token}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data[?(@.id == '{{default_merchant_id}}')]" count == 1
+jsonpath "$.data[?(@.id == '{{default_merchant_id}}')].id" == "{{default_merchant_id}}"
 
 
 GET {{pay_url}}/account/v1/merchants/{{default_merchant_id}}
@@ -67,7 +67,7 @@ Authorization: Bearer {{human_token}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data[?(@.id == '{{product_id}}')]" count == 1
+jsonpath "$.data[?(@.id == '{{product_id}}')].id" == "{{product_id}}"
 
 
 GET {{pay_url}}/account/v1/products
@@ -75,7 +75,7 @@ Authorization: Bearer {{human_token}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data[?(@.id == '{{product_id}}')]" count == 1
+jsonpath "$.data[?(@.id == '{{product_id}}')].id" == "{{product_id}}"
 
 
 GET {{pay_url}}/account/v1/products/{{product_id}}
@@ -156,7 +156,7 @@ Authorization: Bearer {{human_token}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.data[?(@.id == '{{subscription_id}}')]" count == 1
+jsonpath "$.data[?(@.id == '{{subscription_id}}')].id" == "{{subscription_id}}"
 
 
 GET {{pay_url}}/account/v1/subscriptions/{{subscription_id}}
@@ -175,6 +175,17 @@ Content-Type: application/json
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "inactive"
+
+
+# Restore the shared fixture so later E2E profiles start from the declared resource state.
+PATCH {{pay_url}}/account/v1/subscriptions/{{subscription_id}}
+Authorization: Bearer {{human_token}}
+Content-Type: application/json
+{"status":"active"}
+
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "active"
 
 
 # A non-default Merchant can be soft-disabled.

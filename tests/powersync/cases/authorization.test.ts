@@ -3,7 +3,7 @@ import { GizPayConnector } from '../connectors/gizpay.js';
 import { GizWayConnector } from '../connectors/gizway.js';
 import { GizPaySchema } from '../schemas/gizpay.js';
 import { GizWaySchema } from '../schemas/gizway.js';
-import { loadEnvironment, temporaryDatabase, waitForFirstSync } from './helpers.js';
+import { createAIUsage, loadEnvironment, temporaryDatabase, waitForFirstSync } from './helpers.js';
 
 describe('PowerSync JWT isolation', () => {
 	test('rejects a Global Public Catalog token from the CN regional Catalog', async (context) => {
@@ -45,6 +45,7 @@ describe('PowerSync JWT isolation', () => {
   test('another user receives no owner Provider Keys, AI Orders, or AI Usage', async (context) => {
     const env = loadEnvironment();
     if (env == null || env.tokenTwo === '') return context.skip();
+    await createAIUsage(env.wayURL, env.subscriptionKey);
     const owner = await temporaryDatabase(GizWaySchema, 'gizway-owner');
     const other = await temporaryDatabase(GizWaySchema, 'gizway-other');
     try {

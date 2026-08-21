@@ -31,8 +31,8 @@ describe('Milestone 03 client schema', () => {
   });
 
   test('Sync Streams authorize private rows from signed issuer and subject claims', async () => {
-    for (const name of ['gizpay-sync-config', 'gizway-cn-sync-config', 'gizway-global-sync-config']) {
-      const text = await readFile(new URL(`../config/${name}.yaml`, import.meta.url), 'utf8');
+    for (const profile of ['pay', 'cn', 'global']) {
+      const text = await readFile(new URL(`../../../docker/gizway-powersync/config/${profile}/sync-config.yaml`, import.meta.url), 'utf8');
       expect(text).toContain('edition: 3');
       expect(text).toContain("auth.user_id()");
       expect(text).toContain("auth.parameter('iss')");
@@ -41,7 +41,7 @@ describe('Milestone 03 client schema', () => {
       expect(text).not.toContain('charge_outbox');
       expect(text).not.toContain('subscription_key_hmac');
     }
-    const gizway = await readFile(new URL('../config/gizway-global-sync-config.yaml', import.meta.url), 'utf8');
+    const gizway = await readFile(new URL('../../../docker/gizway-powersync/config/global/sync-config.yaml', import.meta.url), 'utf8');
     expect(gizway).toContain('FROM gizway.ai_orders AS "my_ai_orders"');
     expect(gizway).toContain('FROM gizway.model_customer_prices');
   });

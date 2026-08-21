@@ -93,8 +93,11 @@ jobs:
       - name: Run Go race tests
         run: make test-unit-go-race
 
-      - name: Run fake-provider API tests
-        run: make test-unit-api
+      - name: Validate API contracts
+        run: |
+          scripts/test-unit/test-unit-api-openapi.sh
+          scripts/test-unit/test-unit-api-contracts.sh
+          scripts/test-unit/check-e2e-api-seed.sh
 
       - name: Run PostgreSQL unit tests
         run: make test-unit-postgresql
@@ -134,11 +137,32 @@ jobs:
         with:
           node-version: 22.22.1
           cache: npm
-          cache-dependency-path: tests/powersync/package-lock.json
+          cache-dependency-path: |
+            tests/powersync/package-lock.json
+            web/apps/gizway/package-lock.json
 
       - name: Install PowerSync test dependencies
         working-directory: tests/powersync
         run: npm ci
+
+      - name: Install Web test dependencies and Chromium
+        working-directory: web/apps/gizway
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Prepare external E2E TLS fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -subj '/CN=global.e2e.gizclaw.test' \
+            -addext 'subjectAltName=DNS:global.e2e.gizclaw.test,DNS:cn.e2e.gizclaw.test,DNS:identity.e2e.gizclaw.test,DNS:pay.e2e.gizclaw.test' \
+            -keyout "$RUNNER_TEMP/gizway-e2e-tls.key" \
+            -out "$RUNNER_TEMP/gizway-e2e-tls.crt"
+          chmod 0644 "$RUNNER_TEMP/gizway-e2e-tls.key"
+          echo "TLS_CERT_FILE=$RUNNER_TEMP/gizway-e2e-tls.crt" >> "$GITHUB_ENV"
+          echo "TLS_KEY_FILE=$RUNNER_TEMP/gizway-e2e-tls.key" >> "$GITHUB_ENV"
 
       - name: Run quota, product, and failure profiles
         run: make test-e2e

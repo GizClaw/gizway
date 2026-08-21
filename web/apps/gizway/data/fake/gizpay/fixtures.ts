@@ -5,7 +5,7 @@ const active: GizPaySnapshot = {
   user: {
     id: "usr_idy_demo",
     name: "Idy",
-    email: "idy@gizway.com",
+    email: "idy@gizclaw.com",
     merchantId: "mrc_idy_default",
     merchantName: "Idy",
     merchantStatus: "active",

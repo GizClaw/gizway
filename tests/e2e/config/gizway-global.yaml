@@ -1,15 +1,15 @@
 version: 1
 server:
-  name: global.e2e.gizway.test
+  name: global.e2e.gizclaw.test
   listen_address: 0.0.0.0:8080
 admin:
   initial_key_file: /fixtures/admin-key
 database:
-  dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+  dsn: postgres://gizway_global_app:gizway_global_app@postgres-global:5432/gizway?sslmode=disable
   schema: gizway
 authentication:
   zitadel:
-    issuer: http://identity.e2e.gizway.test:18080
+    issuer: https://identity.e2e.gizclaw.test:18080
     jwks_url: http://oauth-spy:19500/oauth/v2/keys
     human_audience: "386000000000000001"
   service_account:
@@ -28,9 +28,9 @@ credit_cache:
 bifrost:
   config_store:
     type: postgresql
-    dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+    dsn: postgres://gizway_global_app:gizway_global_app@postgres-global:5432/gizway?sslmode=disable
     schema: bifrost_config
   log_store:
     type: postgresql
-    dsn: postgres://postgres:postgres@postgres-global:5432/gizway?sslmode=disable
+    dsn: postgres://gizway_global_app:gizway_global_app@postgres-global:5432/gizway?sslmode=disable
     schema: bifrost_logs

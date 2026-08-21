@@ -566,7 +566,7 @@ func HandlerWithCredential(providerCredential string, callbackSecrets ...string)
 			http.Error(w, "invalid realtime driver request", http.StatusBadRequest)
 			return
 		}
-		wsURL := "ws" + strings.TrimPrefix(request.APIURL, "http") + "/v1/realtime?session_id=" + request.SessionID
+		wsURL := "ws" + strings.TrimPrefix(request.APIURL, "http") + "/openai/v1/realtime?session_id=" + request.SessionID
 		dialCtx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 		defer cancel()
 		conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + request.Secret}}})

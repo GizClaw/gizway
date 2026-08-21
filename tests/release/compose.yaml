@@ -1,67 +1,9 @@
 name: gizway-release-smoke
-
-x-postgres: &postgres
-  image: postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
-  environment:
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: postgres
-  healthcheck:
-    test: [CMD-SHELL, 'test "$$(cat /proc/1/comm)" = postgres && pg_isready -U postgres -d "$${POSTGRES_DB}"']
-    interval: 1s
-    timeout: 3s
-    retries: 60
-
 services:
-  postgres-gizpay:
-    <<: *postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: gizpay
-    volumes: [postgres-gizpay:/var/lib/postgresql/data]
-
-  postgres-gizway:
-    <<: *postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: gizway
-    volumes: [postgres-gizway:/var/lib/postgresql/data]
-
-  gizpay-migrate:
-    image: ${GIZPAY_IMAGE:?set GIZPAY_IMAGE}
-    depends_on:
-      postgres-gizpay: {condition: service_healthy}
-    volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
-    command: ["--config=${GIZPAY_MIGRATION_CONFIG:-/release-fixtures/gizpay-migrate.yaml}", --migrate-only]
-
-  gizway-migrate:
-    image: ${GIZWAY_IMAGE:?set GIZWAY_IMAGE}
-    depends_on:
-      postgres-gizway: {condition: service_healthy}
-    volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
-    command: [--config=/release-fixtures/gizway-migrate.yaml, --migrate-only]
-
-  gizpay:
-    image: ${GIZPAY_IMAGE:?set GIZPAY_IMAGE}
-    depends_on:
-      gizpay-migrate: {condition: service_completed_successfully}
-    volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
-    command: [--config=/release-fixtures/gizpay.yaml]
-    ports: [127.0.0.1::8081]
-
-  gizway:
-    image: ${GIZWAY_IMAGE:?set GIZWAY_IMAGE}
-    depends_on:
-      gizway-migrate: {condition: service_completed_successfully}
-    volumes: ["${RELEASE_FIXTURES_DIR:?set RELEASE_FIXTURES_DIR}:/release-fixtures:ro"]
-    command: [--config=/release-fixtures/gizway.yaml]
-    ports: [127.0.0.1::8080]
-
-  web:
-    image: ${WEB_IMAGE:?set WEB_IMAGE}
-    ports: [127.0.0.1::3000]
-
-volumes:
-  postgres-gizpay:
-  postgres-gizway:
+  gizpay: {image: "${GIZPAY_IMAGE:?set GIZPAY_IMAGE}"}
+  gizway: {image: "${GIZWAY_IMAGE:?set GIZWAY_IMAGE}"}
+  web: {image: "${WEB_IMAGE:?set WEB_IMAGE}"}
+  entry: {image: "${ENTRY_IMAGE:?set ENTRY_IMAGE}"}
+  zitadel: {image: "${ZITADEL_IMAGE:?set ZITADEL_IMAGE}"}
+  zitadel-login: {image: "${ZITADEL_LOGIN_IMAGE:?set ZITADEL_LOGIN_IMAGE}"}
+  powersync: {image: "${POWERSYNC_IMAGE:?set POWERSYNC_IMAGE}"}

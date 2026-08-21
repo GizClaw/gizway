@@ -898,7 +898,7 @@ var swaggerSpec = []string{
 	"+AuLQehjHg/TFPFwEL2zcUT8T36in5piFdjLeAcGgyZ8a9g6cSGxzk72gZV12rBP4STPX8A6SzTxWMsQ",
 	"XHhmTeXqQT6PIhSUyrcFTrb55P/L8u+/ID2Wv6UYcUXPdc0w6K66fGo/I5nHF/RQ+7ldo+E62V/OUeTZ",
 	"q8gvKvLp3S+bnU2WyGb083+vfn5xPytyNEmksOaKkrFUEyNVXWDZQLEo+/EgrA9PYBeMvoEiPhZZ5nEz",
-	"XfH2BjfTyrXZzf7lztYz6Mv+ZwAAAP//",
+	"XfG2MngzrVyb3eyf7mw9g77sfwYAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
