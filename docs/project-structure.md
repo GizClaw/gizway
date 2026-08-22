@@ -15,4 +15,4 @@ Central entry -> ZITADEL API / ZITADEL Login
 
 `tests/e2e/compose.yaml` is the executable local/integration reference for image, network, configuration, dependency, and initialization boundaries. `tests/e2e/config/resources.yaml` declares fixed test resources; `tests/e2e/resources` creates them only through ZITADEL, GizPay, and GizWay APIs. SQL under `tests/e2e/sql` asserts schema contracts and does not seed product data.
 
-The default production-facing names are `gateway.gizclaw.com` and `auth.gizclaw.com`; CN and Pay hosts are runtime inputs under `*.gizclaw.com`. Production infrastructure, secrets, certificates, deployment manifests, rollout, and rollback are outside this repository.
+The default production-facing names remain `gateway.gizclaw.com` and `auth.gizclaw.com`; CN and Pay hosts may remain runtime inputs under `*.gizclaw.com`. Entry also accepts only the fixed GizWay deployment aliases `global.gizway.com`, `cn.gizway.com`, and `pay.gizway.com`, not an arbitrary `*.gizway.com` wildcard. Production infrastructure, secrets, certificates, deployment manifests, rollout, and rollback are outside this repository.

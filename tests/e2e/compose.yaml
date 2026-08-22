@@ -10,6 +10,17 @@ x-postgres: &postgres
     retries: 60
   command: [postgres, -c, wal_level=logical, -c, max_replication_slots=10, -c, max_wal_senders=10]
 
+x-postgres-tls: &postgres-tls
+  <<: *postgres
+  command:
+    - sh
+    - -ec
+    - |
+      install -m 0644 /run/postgres-tls-input/server.crt /var/lib/postgresql/server.crt
+      install -m 0600 /run/postgres-tls-input/server.key /var/lib/postgresql/server.key
+      chown postgres:postgres /var/lib/postgresql/server.crt /var/lib/postgresql/server.key
+      exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/var/lib/postgresql/server.crt -c ssl_key_file=/var/lib/postgresql/server.key -c wal_level=logical -c max_replication_slots=10 -c max_wal_senders=10
+
 x-test: &test
   image: gizway-e2e-helper:dev
 
@@ -21,7 +32,7 @@ x-entry-environment: &entry-environment
   TLS_CERT_FILE: /run/secrets/tls.crt
   TLS_KEY_FILE: /run/secrets/tls.key
   GIZPAY_UPSTREAM: http://gizpay:8081
-  ZITADEL_UPSTREAM: http://zitadel:8080
+  ZITADEL_UPSTREAM: h2c://zitadel:8080
   ZITADEL_LOGIN_UPSTREAM: http://zitadel-login:3000
   POWERSYNC_PAY_UPSTREAM: http://powersync-pay:8080
 
@@ -35,23 +46,23 @@ services:
     environment: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: zitadel}
     volumes: [postgres-zitadel:/var/lib/postgresql/data]
   postgres-gizpay:
-    <<: *postgres
+    <<: *postgres-tls
     environment: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: gizpay}
-    volumes: [postgres-gizpay:/var/lib/postgresql/data]
+    volumes: [postgres-gizpay:/var/lib/postgresql/data, '${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.crt:ro', '${POSTGRES_TLS_KEY_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.key:ro']
     ports: ["127.0.0.1::5432"]
   postgres-global:
-    <<: *postgres
+    <<: *postgres-tls
     environment: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: gizway}
-    volumes: [postgres-global:/var/lib/postgresql/data]
+    volumes: [postgres-global:/var/lib/postgresql/data, '${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.crt:ro', '${POSTGRES_TLS_KEY_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.key:ro']
     ports: ["127.0.0.1::5432"]
   postgres-cn:
-    <<: *postgres
+    <<: *postgres-tls
     environment: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: gizway}
-    volumes: [postgres-cn:/var/lib/postgresql/data]
+    volumes: [postgres-cn:/var/lib/postgresql/data, '${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.crt:ro', '${POSTGRES_TLS_KEY_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.key:ro']
   postgres-powersync:
-    <<: *postgres
+    <<: *postgres-tls
     environment: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: postgres}
-    volumes: [postgres-powersync:/var/lib/postgresql/data]
+    volumes: [postgres-powersync:/var/lib/postgresql/data, '${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.crt:ro', '${POSTGRES_TLS_KEY_FILE:?set by tests/e2e/run.sh}:/run/postgres-tls-input/server.key:ro']
 
   fixtures-init:
     image: busybox:1.37.0
@@ -245,9 +256,14 @@ services:
     environment:
       POWERSYNC_CONFIG_PATH: /etc/gizway/powersync/pay/service.yaml
       PS_SOURCE_URI: postgres://powersync_pay_source:powersync_pay_source@postgres-gizpay:5432/gizpay
+      PS_SOURCE_SSL_MODE: verify-full
+      PS_SOURCE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_STORAGE_URI: postgres://powersync_pay_storage:powersync_pay_storage@postgres-powersync:5432/gizpay_sync
+      PS_STORAGE_SSL_MODE: verify-full
+      PS_STORAGE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_JWKS_URI: http://oauth-spy:19500/oauth/v2/keys
       PS_AUDIENCE: "386000000000000001"
+    volumes: ['${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/secrets/postgres-ca.crt:ro']
     ports: ["127.0.0.1::8080"]
   powersync-global:
     image: gizway-e2e-powersync:dev
@@ -255,9 +271,14 @@ services:
     environment:
       POWERSYNC_CONFIG_PATH: /etc/gizway/powersync/global/service.yaml
       PS_SOURCE_URI: postgres://powersync_global_source:powersync_global_source@postgres-global:5432/gizway
+      PS_SOURCE_SSL_MODE: verify-full
+      PS_SOURCE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_STORAGE_URI: postgres://powersync_global_storage:powersync_global_storage@postgres-powersync:5432/global_sync
+      PS_STORAGE_SSL_MODE: verify-full
+      PS_STORAGE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_JWKS_URI: http://oauth-spy:19500/oauth/v2/keys
       PS_AUDIENCE: "386000000000000001"
+    volumes: ['${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/secrets/postgres-ca.crt:ro']
     ports: ["127.0.0.1::8080"]
   powersync-cn:
     image: gizway-e2e-powersync:dev
@@ -265,9 +286,14 @@ services:
     environment:
       POWERSYNC_CONFIG_PATH: /etc/gizway/powersync/cn/service.yaml
       PS_SOURCE_URI: postgres://powersync_cn_source:powersync_cn_source@postgres-cn:5432/gizway
+      PS_SOURCE_SSL_MODE: verify-full
+      PS_SOURCE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_STORAGE_URI: postgres://powersync_cn_storage:powersync_cn_storage@postgres-powersync:5432/cn_sync
+      PS_STORAGE_SSL_MODE: verify-full
+      PS_STORAGE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_JWKS_URI: http://oauth-spy:19500/oauth/v2/keys
       PS_AUDIENCE: "386000000000000001"
+    volumes: ['${POSTGRES_TLS_CERT_FILE:?set by tests/e2e/run.sh}:/run/secrets/postgres-ca.crt:ro']
     ports: ["127.0.0.1::8080"]
 
   web-global:

@@ -26,14 +26,14 @@ http:
       tls: {}
       service: gizpay
     gizway-sync:
-      rule: Host(`@@CN_HOST@@`) && PathPrefix(`/_sync/gizway/`)
+      rule: Host(`@@CN_HOST@@`) && (Path(`/_sync/gizway`) || PathPrefix(`/_sync/gizway/`))
       priority: 180
       entryPoints: [websecure]
       tls: {}
       middlewares: [strip-gizway-sync]
       service: powersync-gizway
     gizpay-sync:
-      rule: Host(`@@CN_HOST@@`) && PathPrefix(`/_sync/gizpay/`)
+      rule: Host(`@@CN_HOST@@`) && (Path(`/_sync/gizpay`) || PathPrefix(`/_sync/gizpay/`))
       priority: 180
       entryPoints: [websecure]
       tls: {}

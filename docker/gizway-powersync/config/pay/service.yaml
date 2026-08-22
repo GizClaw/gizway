@@ -2,11 +2,13 @@ replication:
   connections:
     - type: postgresql
       uri: !env PS_SOURCE_URI
-      sslmode: disable
+      sslmode: !env PS_SOURCE_SSL_MODE
+      cacert: !env PS_SOURCE_CA_CERT
 storage:
   type: postgresql
   uri: !env PS_STORAGE_URI
-  sslmode: disable
+  sslmode: !env PS_STORAGE_SSL_MODE
+  cacert: !env PS_STORAGE_CA_CERT
 port: 8080
 sync_config:
   path: /etc/gizway/powersync/pay/sync-config.yaml
