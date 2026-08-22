@@ -292,7 +292,12 @@ func TestProviderRealtimeAudioAndDisconnectScenarios(t *testing.T) {
 				t.Fatal(err)
 			}
 			if scenario != "disconnect" {
-				_ = connection.Write(t.Context(), websocket.MessageText, []byte(`{"type":"test.provider_disconnect"}`))
+				if err := connection.Write(t.Context(), websocket.MessageText, []byte(`{"type":"test.provider_disconnect"}`)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, _, err := connection.Read(t.Context()); websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+				t.Fatalf("wait for provider close: %v", err)
 			}
 		})
 	}
