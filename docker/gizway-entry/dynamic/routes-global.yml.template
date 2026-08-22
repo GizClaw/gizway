@@ -12,45 +12,51 @@ http:
       priority: 200
       entryPoints: [websecure]
       tls: {}
+      middlewares: [browser-vary, browser-cors]
       service: gizway
     auth-user:
       rule: Host(`@@GLOBAL_HOST@@`) && (Path(`/auth/runtime-config`) || Path(`/auth/catalog-token`) || PathPrefix(`/user/v1/`))
       priority: 190
       entryPoints: [websecure]
       tls: {}
+      middlewares: [browser-vary, browser-cors]
       service: gizway
     account:
       rule: Host(`@@GLOBAL_HOST@@`) && PathPrefix(`/account/v1/`)
       priority: 190
       entryPoints: [websecure]
       tls: {}
+      middlewares: [browser-vary, browser-cors]
       service: gizpay
     gizway-sync:
       rule: Host(`@@GLOBAL_HOST@@`) && (Path(`/_sync/gizway`) || PathPrefix(`/_sync/gizway/`))
       priority: 180
       entryPoints: [websecure]
       tls: {}
-      middlewares: [strip-gizway-sync]
+      middlewares: [browser-vary, browser-cors, strip-gizway-sync]
       service: powersync-gizway
     gizpay-sync:
       rule: Host(`@@GLOBAL_HOST@@`) && (Path(`/_sync/gizpay`) || PathPrefix(`/_sync/gizpay/`))
       priority: 180
       entryPoints: [websecure]
       tls: {}
-      middlewares: [strip-gizpay-sync]
+      middlewares: [browser-vary, browser-cors, strip-gizpay-sync]
       service: powersync-pay
-    web:
-      rule: Host(`@@GLOBAL_HOST@@`)
-      priority: 1
-      entryPoints: [websecure]
-      tls: {}
-      service: web
   middlewares:
+    browser-vary:
+      headers:
+        customResponseHeaders: {Vary: Origin}
+    browser-cors:
+      headers:
+        accessControlAllowOriginList: [@@BROWSER_ALLOWED_ORIGINS@@]
+        accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+        accessControlAllowHeaders: [Authorization, Content-Type, X-User-Agent]
+        accessControlExposeHeaders: [Retry-After]
+        addVaryHeader: true
     strip-gizway-sync: {stripPrefix: {prefixes: [/_sync/gizway]}}
     strip-gizpay-sync: {stripPrefix: {prefixes: [/_sync/gizpay]}}
   services:
     gizpay: {loadBalancer: {servers: [{url: "@@GIZPAY_UPSTREAM@@"}]}}
     gizway: {loadBalancer: {servers: [{url: "@@GIZWAY_UPSTREAM@@"}]}}
-    web: {loadBalancer: {servers: [{url: "@@WEB_UPSTREAM@@"}]}}
     powersync-pay: {loadBalancer: {servers: [{url: "@@POWERSYNC_PAY_UPSTREAM@@"}]}}
     powersync-gizway: {loadBalancer: {servers: [{url: "@@POWERSYNC_GIZWAY_UPSTREAM@@"}]}}

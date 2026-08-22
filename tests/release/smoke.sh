@@ -27,7 +27,7 @@ while IFS=$'\t' read -r key _image; do
 done < <(jq -r '.images[] | [.key,.image] | @tsv' "$catalog")
 
 docker compose --project-name "$project" --file "$compose" create >/dev/null
-[[ "$(docker compose --project-name "$project" --file "$compose" ps --all --quiet | wc -l | tr -d ' ')" == 7 ]]
+[[ "$(docker compose --project-name "$project" --file "$compose" ps --all --quiet | wc -l | tr -d ' ')" == 6 ]]
 while IFS=$'\t' read -r key _ expected; do
   container="$(docker compose --project-name "$project" --file "$compose" ps --all --quiet "$key")"
   [[ -n "$container" ]]
@@ -37,7 +37,7 @@ done < <(jq -r '.images[] | [.key,.image,.command] | @tsv' "$catalog")
 entry_env=(
   -e PROFILE=global -e TLS_CERT_FILE=/etc/hosts -e TLS_KEY_FILE=/etc/hosts
   -e GLOBAL_HOST=global.e2e.gizclaw.test -e GIZPAY_UPSTREAM=http://gizpay:8081
-  -e GIZWAY_UPSTREAM=http://gizway:8080 -e WEB_UPSTREAM=http://web:8080
+  -e GIZWAY_UPSTREAM=http://gizway:8080 -e BROWSER_ALLOWED_ORIGINS=https://www.example.test
   -e POWERSYNC_PAY_UPSTREAM=http://powersync-pay:8080 -e POWERSYNC_GIZWAY_UPSTREAM=http://powersync-global:8080
 )
 powersync_common_env=(
@@ -82,10 +82,8 @@ while IFS=$'\t' read -r key _image; do
   assert_native_entrypoint_executes "$key" "${!variable}"
 done < <(jq -r '.images[] | [.key,.image] | @tsv' "$catalog")
 
-docker cp "$(docker compose --project-name "$project" --file "$compose" ps --all --quiet web):/etc/caddy/Caddyfile" "$temporary/Caddyfile"
 docker cp "$(docker compose --project-name "$project" --file "$compose" ps --all --quiet entry):/etc/gizway" "$temporary/entry"
 docker cp "$(docker compose --project-name "$project" --file "$compose" ps --all --quiet powersync):/etc/gizway/powersync" "$temporary/powersync"
-grep -F 'try_files {path} /index.html' "$temporary/Caddyfile" >/dev/null
 # shellcheck disable=SC2016
 grep -F 'PathPrefix(`/openai/`)' "$temporary/entry/routes-global.yml.template" >/dev/null
 # shellcheck disable=SC2016
@@ -97,6 +95,8 @@ for routes in "$temporary/entry/routes-global.yml.template" "$temporary/entry/ro
   grep -F 'Path(`/_sync/gizpay`) || PathPrefix(`/_sync/gizpay/`)' "$routes" >/dev/null
   # shellcheck disable=SC2016
   grep -F 'Path(`/_sync/gizway`) || PathPrefix(`/_sync/gizway/`)' "$routes" >/dev/null
+  grep -F 'accessControlAllowOriginList: [@@BROWSER_ALLOWED_ORIGINS@@]' "$routes" >/dev/null
+  if grep -Eq 'service: web|@@WEB_UPSTREAM@@' "$routes"; then echo 'Entry image retained Web routing' >&2; exit 1; fi
 done
 test -f "$temporary/powersync/pay/service.yaml" -a -f "$temporary/powersync/global/service.yaml" -a -f "$temporary/powersync/cn/service.yaml"
 
@@ -106,14 +106,16 @@ if docker run --rm "$ENTRY_IMAGE" >/dev/null 2>&1; then echo 'entry accepted mis
 if docker run --rm "${entry_env[@]}" -e 'GLOBAL_HOST=global.e2e.gizclaw.test|inject' "$ENTRY_IMAGE" >/dev/null 2>&1; then
   echo 'entry accepted template metacharacters in a host' >&2; exit 1
 fi
-if docker run --rm "${entry_env[@]}" -e 'WEB_UPSTREAM=http://web:8080|inject' "$ENTRY_IMAGE" >/dev/null 2>&1; then
-  echo 'entry accepted template metacharacters in an upstream' >&2; exit 1
-fi
+for origins in '' '*' 'https://.' 'https://-bad.example.test' 'https://www.example.test:65536' 'https://www.example.test/' 'http://www.example.test' 'https://www.example.test,https://www.example.test' 'https://www.example.test, https://two.example.test' 'https://www.example.test|inject'; do
+  if docker run --rm "${entry_env[@]}" -e "BROWSER_ALLOWED_ORIGINS=$origins" "$ENTRY_IMAGE" --help >/dev/null 2>&1; then
+    echo "entry accepted invalid browser origin list: $origins" >&2; exit 1
+  fi
+done
 
 entry_cn_env=(
   -e PROFILE=cn -e TLS_CERT_FILE=/etc/hosts -e TLS_KEY_FILE=/etc/hosts
   -e CN_HOST=cn.gizway.com -e GIZPAY_UPSTREAM=http://gizpay:8081
-  -e GIZWAY_UPSTREAM=http://gizway:8080 -e WEB_UPSTREAM=http://web:8080
+  -e GIZWAY_UPSTREAM=http://gizway:8080 -e BROWSER_ALLOWED_ORIGINS=http://localhost:4173
   -e POWERSYNC_PAY_UPSTREAM=http://powersync-pay:8080 -e POWERSYNC_GIZWAY_UPSTREAM=http://powersync-cn:8080
 )
 entry_central_env=(
@@ -182,11 +184,4 @@ if grep -F 'BEGIN CERTIFICATE' "$temporary"/*.log >/dev/null; then
   echo 'powersync leaked CA PEM content' >&2; exit 1
 fi
 
-web_container="$(docker run --detach --publish 127.0.0.1::8080 "$WEB_IMAGE")"
-trap 'docker rm --force "$web_container" >/dev/null 2>&1 || true; cleanup' EXIT
-web_port="$(docker port "$web_container" 8080/tcp | awk -F: '{print $NF}')"
-for _ in {1..30}; do curl --fail --silent "http://127.0.0.1:$web_port/healthz" >/dev/null 2>&1 && break; sleep 1; done
-curl --fail --silent "http://127.0.0.1:$web_port/healthz" >/dev/null
-docker rm --force "$web_container" >/dev/null
-trap cleanup EXIT
-printf 'release image smoke passed for all seven images at %s (%s)\n' "$version" "$revision"
+printf 'release image smoke passed for all six images at %s (%s)\n' "$version" "$revision"

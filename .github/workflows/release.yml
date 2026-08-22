@@ -1,4 +1,4 @@
-name: Release OCI images
+name: Release OCI images and browser SDK
 
 on:
   push:
@@ -44,8 +44,8 @@ jobs:
     permissions:
       contents: read
 
-  web-and-powersync:
-    name: Web and offline PowerSync gates
+  browser-sdk-and-powersync:
+    name: Browser SDK and offline PowerSync gates
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -60,15 +60,17 @@ jobs:
           node-version: 22.22.1
           cache: npm
           cache-dependency-path: |
-            web/apps/gizway/package-lock.json
+            sdk/web/package-lock.json
             tests/powersync/package-lock.json
-      - name: Run Web release gates
-        working-directory: web/apps/gizway
+      - name: Run browser SDK release gates
+        working-directory: sdk/web
         run: |
           npm ci
           npm run typecheck
           npm run lint
           npm test
+          npm run build
+          npm run test:package
       - name: Run offline PowerSync contracts
         working-directory: tests/powersync
         run: |
@@ -78,7 +80,7 @@ jobs:
 
   publish:
     name: Build, verify, publish, and sign
-    needs: [validate, ci, web-and-powersync]
+    needs: [validate, ci, browser-sdk-and-powersync]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -124,6 +126,8 @@ jobs:
           cosign version
       - name: Build each candidate once
         run: make build-images
+      - name: Build browser SDK artifact once
+        run: make build-web-sdk
       - name: Verify and smoke candidate layouts
         run: make test-release-images
       - name: Log in to GHCR
@@ -139,7 +143,7 @@ jobs:
           while IFS=$'\t' read -r key image; do
             digest="$(<"tmp/release/images/$key.digest")"
             if ! oras manifest fetch --registry-config "$anonymous_config/config.json" "$image@$digest" >/dev/null; then
-              printf '::error::%s is not public. Set all seven GHCR packages to Public, then rerun this same tag. No signature or GitHub Release was created.\n' "$image"
+              printf '::error::%s is not public. Set all six GHCR packages to Public, then rerun this same tag. No signature or GitHub Release was created.\n' "$image"
               exit 1
             fi
           done < <(jq -r '.images[] | [.key,.image] | @tsv' release/images.json)
@@ -167,23 +171,28 @@ jobs:
         run: |
           set -euo pipefail
           manifest=tmp/release/release-manifest.json
+          sdk_asset="tmp/release/sdk/gizway-web-sdk-$RELEASE_VERSION.tgz"
+          sdk_checksum="$sdk_asset.sha256"
           identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
           notes="$RUNNER_TEMP/release-notes.md"
           {
             # shellcheck disable=SC2016
-            printf 'Public OCI images for `%s`. Pull by the digests in `release-manifest.json`.\n\n' "$RELEASE_VERSION"
+            printf 'Public OCI images and the private browser SDK artifact for `%s`. Pull images by the digests and verify the SDK checksum recorded in `release-manifest.json`.\n\n' "$RELEASE_VERSION"
             printf 'Verify each digest with:\n\n```sh\n'
             printf "cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity '%s' IMAGE@DIGEST\n" "$identity"
             printf '```\n'
           } >"$notes"
           if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
-            existing="$RUNNER_TEMP/existing-release-manifest.json"
-            gh release download "$RELEASE_VERSION" --pattern release-manifest.json --output "$existing" --clobber
-            cmp --silent "$manifest" "$existing"
+            existing="$RUNNER_TEMP/existing-release-assets"
+            mkdir -p "$existing"
+            gh release download "$RELEASE_VERSION" --dir "$existing" --pattern release-manifest.json --pattern "$(basename "$sdk_asset")" --pattern "$(basename "$sdk_checksum")"
+            cmp --silent "$manifest" "$existing/release-manifest.json"
+            cmp --silent "$sdk_asset" "$existing/$(basename "$sdk_asset")"
+            cmp --silent "$sdk_checksum" "$existing/$(basename "$sdk_checksum")"
             actual_prerelease="$(gh release view "$RELEASE_VERSION" --json isPrerelease --jq .isPrerelease)"
             [[ "$actual_prerelease" == "$PRERELEASE" ]]
             exit 0
           fi
-          args=(release create "$RELEASE_VERSION" "$manifest#release-manifest.json" --verify-tag --title "$RELEASE_VERSION" --notes-file "$notes")
+          args=(release create "$RELEASE_VERSION" "$manifest#release-manifest.json" "$sdk_asset#$(basename "$sdk_asset")" "$sdk_checksum#$(basename "$sdk_checksum")" --verify-tag --title "$RELEASE_VERSION" --notes-file "$notes")
           [[ "$PRERELEASE" == true ]] && args+=(--prerelease)
           gh "${args[@]}"

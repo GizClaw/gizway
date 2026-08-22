@@ -149,7 +149,7 @@ func bootstrapZITADEL(options options) error {
 	identities := []identityFixture{
 		{ID: "human-primary", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "human-two", Human: true, Audiences: []string{projects[0].ID}},
-		{ID: "web-first-login", Human: true, Audiences: []string{projects[0].ID}},
+		{ID: "browser-client-first-login", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "provider-merchant-human", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "provider-merchant-human-two", Human: true, Audiences: []string{projects[0].ID}},
 		{ID: "gizpay-service-account-manager", File: "gizpay-service-account-manager.json", Audiences: []string{projects[1].ID}, Roles: []string{"credit_check", "charge"}},
@@ -234,7 +234,7 @@ func reusableZITADELFixtures(outputDirectory string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read existing ZITADEL fixture output: %w", err)
 	}
-	for _, name := range []string{"human_subject", "human_token", "human_username", "human_password", "web_first_login_username", "web_first_login_password", "service_token", "cn_catalog_token", "global_catalog_token"} {
+	for _, name := range []string{"human_subject", "human_token", "human_username", "human_password", "browser_client_first_login_username", "browser_client_first_login_password", "service_token", "cn_catalog_token", "global_catalog_token"} {
 		if variables[name] == "" {
 			return false, fmt.Errorf("existing ZITADEL fixture output is incomplete: %s is missing", name)
 		}
@@ -311,17 +311,18 @@ func (c *zitadelClient) configureUserInitializationAction(outputDirectory string
 	return os.WriteFile(filepath.Join(outputDirectory, "zitadel-action-signing-key"), []byte(target.SigningKey), 0600)
 }
 
-func writeGizWayE2EConfigs(outputDirectory string, values map[string]string, webClientID string) error {
+func writeGizWayE2EConfigs(outputDirectory string, values map[string]string, browserClientID string) error {
 	for _, region := range []string{"cn", "global"} {
 		clientID, clientSecret := values["gizway-"+region+"-catalog@client_id"], values["gizway-"+region+"-catalog@client_secret"]
 		if clientID == "" || clientSecret == "" {
 			return fmt.Errorf("%s Public Catalog credentials are missing", region)
 		}
-		webPort := 3000
+		entryPort := 3000
 		if region == "cn" {
-			webPort = 3001
+			entryPort = 3001
 		}
-		webBaseURL := fmt.Sprintf("https://%s.e2e.gizclaw.test:%d", region, webPort)
+		entryBaseURL := fmt.Sprintf("https://%s.e2e.gizclaw.test:%d", region, entryPort)
+		browserBaseURL := "http://127.0.0.1:4173"
 		contents := fmt.Sprintf(`version: 1
 server:
   name: %s.e2e.gizclaw.test
@@ -333,8 +334,8 @@ site:
 identity:
   issuer: https://identity.e2e.gizclaw.test:18080
   client_id: %s
-  redirect_uri: %s/auth/callback
-  post_logout_redirect_uri: %s/
+  redirect_uri: %s/harness.html
+  post_logout_redirect_uri: %s/harness.html
   public_catalog_service_account:
     client_id: %s
     client_secret: %s
@@ -378,7 +379,7 @@ bifrost:
     type: postgresql
     dsn: postgres://gizway_%s_app:gizway_%s_app@postgres-%s:5432/gizway?sslmode=disable
     schema: bifrost_logs
-`, region, region, webClientID, webBaseURL, webBaseURL, clientID, clientSecret, webBaseURL, webBaseURL, webBaseURL, webBaseURL, webBaseURL, region, region, region, region, region, region, region, region, region, region)
+`, region, region, browserClientID, browserBaseURL, browserBaseURL, clientID, clientSecret, entryBaseURL, entryBaseURL, entryBaseURL, entryBaseURL, entryBaseURL, region, region, region, region, region, region, region, region, region, region)
 		if err := os.WriteFile(filepath.Join(outputDirectory, "gizway-"+region+".yaml"), []byte(contents), 0600); err != nil {
 			return err
 		}
@@ -403,12 +404,10 @@ func (c *zitadelClient) createOIDCApplication(projectID, name string) (string, e
 	payload := map[string]any{
 		"name": name, "redirectUris": []string{
 			"http://127.0.0.1:18999/callback",
-			"https://global.e2e.gizclaw.test:3000/auth/callback",
-			"https://cn.e2e.gizclaw.test:3001/auth/callback",
+			"http://127.0.0.1:4173/harness.html",
 		},
 		"postLogoutRedirectUris": []string{
-			"https://global.e2e.gizclaw.test:3000/",
-			"https://cn.e2e.gizclaw.test:3001/",
+			"http://127.0.0.1:4173/harness.html",
 		},
 		"responseTypes": []string{"OIDC_RESPONSE_TYPE_CODE"}, "grantTypes": []string{"OIDC_GRANT_TYPE_AUTHORIZATION_CODE"},
 		"appType": "OIDC_APP_TYPE_NATIVE", "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
@@ -758,9 +757,9 @@ func mapIdentityVariables(values map[string]string, projects []projectFixture, k
 	values["human_username"] = values["human-primary@username"]
 	values["human_password"] = values["human-primary@password"]
 	values["human_two_subject"] = values["human-two@subject"]
-	values["web_first_login_subject"] = values["web-first-login@subject"]
-	values["web_first_login_username"] = values["web-first-login@username"]
-	values["web_first_login_password"] = values["web-first-login@password"]
+	values["browser_client_first_login_subject"] = values["browser-client-first-login@subject"]
+	values["browser_client_first_login_username"] = values["browser-client-first-login@username"]
+	values["browser_client_first_login_password"] = values["browser-client-first-login@password"]
 	values["provider_merchant_human_subject"] = values["provider-merchant-human@subject"]
 	values["provider_merchant_human_two_subject"] = values["provider-merchant-human-two@subject"]
 	values["cn_admin_subject"] = values["cn-administrator@subject"]

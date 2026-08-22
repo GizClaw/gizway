@@ -10,5 +10,5 @@ trap stop_test_postgresql EXIT INT TERM
 "${script_dir}/test-unit-go-race.sh"
 "${script_dir}/test-unit-api.sh"
 "${script_dir}/test-unit-postgresql.sh"
-"${script_dir}/test-unit-web.sh"
+"${script_dir}/test-unit-browser-sdk.sh"
 (cd "${script_dir}/../../tests/powersync" && npm run typecheck && npm test)

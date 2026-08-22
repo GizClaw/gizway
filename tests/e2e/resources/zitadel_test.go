@@ -12,7 +12,7 @@ func TestReusableZITADELFixtures(t *testing.T) {
 	if err != nil || reusable {
 		t.Fatalf("empty directory: reusable=%v err=%v", reusable, err)
 	}
-	variables := "human_subject=human\nhuman_token=token\nhuman_username=user\nhuman_password=password\nweb_first_login_username=new-user\nweb_first_login_password=new-password\nservice_token=service\ncn_catalog_token=cn\nglobal_catalog_token=global\n"
+	variables := "human_subject=human\nhuman_token=token\nhuman_username=user\nhuman_password=password\nbrowser_client_first_login_username=new-user\nbrowser_client_first_login_password=new-password\nservice_token=service\ncn_catalog_token=cn\nglobal_catalog_token=global\n"
 	if err := os.WriteFile(filepath.Join(directory, "identity.vars"), []byte(variables), 0o600); err != nil {
 		t.Fatal(err)
 	}

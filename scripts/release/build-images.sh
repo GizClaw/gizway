@@ -9,7 +9,8 @@ build_command=(docker buildx build)
 [[ -n "${BUILDX_BUILDER:-}" ]] && build_command+=(--builder "$BUILDX_BUILDER")
 [[ -n "$version" ]] || { printf 'RELEASE_VERSION or a tag argument is required\n' >&2; exit 2; }
 "$root/scripts/release/validate-tag.sh" "$version" --syntax-only
-[[ "$(jq '.images | length' "$catalog")" == 7 ]] || { printf 'release catalog must contain exactly 7 images\n' >&2; exit 2; }
+[[ "$(jq '.images | length' "$catalog")" == 6 ]] || { printf 'release catalog must contain exactly 6 images\n' >&2; exit 2; }
+[[ "$(jq '[.images[].instances[]] | length' "$catalog")" == 11 ]] || { printf 'release catalog must contain exactly 11 instances\n' >&2; exit 2; }
 
 revision="${RELEASE_REVISION:-$(git rev-parse HEAD)}"
 [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { printf 'RELEASE_REVISION must be a full lowercase commit SHA\n' >&2; exit 2; }

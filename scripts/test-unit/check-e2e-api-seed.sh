@@ -3,15 +3,15 @@ set -eu
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 business="${root}/tests/e2e/resources/business.go"
-web_test="${root}/web/apps/gizway/e2e/real-auth-and-sync.spec.ts"
+browser_test="${root}/sdk/web/e2e/browser-client.spec.ts"
 
 if rg -n 'jmoiron/sqlx|lib/pq|gorm\.io|internal/adapter/bifrost|gizpay-dsn|cn-dsn|global-dsn|\b(psql|INSERT|UPDATE|DELETE|CREATE TABLE|ALTER TABLE)\b' "${business}"; then
     echo "E2E Business Seed must use HTTP APIs only" >&2
     exit 1
 fi
 
-if rg -n '\bpsql\b' "${web_test}"; then
-    echo "real Web E2E must mutate Model Listings through Admin API" >&2
+if rg -n '\bpsql\b' "${browser_test}"; then
+    echo "real browser SDK E2E must mutate Model Listings through Admin API" >&2
     exit 1
 fi
 

@@ -10,15 +10,7 @@ tmp
 docs
 scripts
 Makefile
-web/apps/gizway/node_modules
-web/apps/gizway/.next
-web/apps/gizway/.vinext
-web/apps/gizway/.wrangler
-web/apps/gizway/dist
-web/apps/gizway/playwright-report
-web/apps/gizway/test-results
-web/apps/gizway/tests
-web/apps/gizway/e2e
+sdk/web
 tests/powersync/node_modules
 tests/api
 tests/sdk

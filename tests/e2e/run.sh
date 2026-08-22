@@ -4,7 +4,7 @@ set -u
 root="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 compose="$root/tests/e2e/compose.yaml"
 mode="${1:-}"
-case "$mode" in all|api|sdk|powersync|web) ;; *) echo "usage: $0 all|api|sdk|powersync|web" >&2; exit 2;; esac
+case "$mode" in all|api|sdk|powersync|browser-sdk) ;; *) echo "usage: $0 all|api|sdk|powersync|browser-sdk" >&2; exit 2;; esac
 for tls_input in TLS_CERT_FILE TLS_KEY_FILE; do
   eval "tls_path=\${$tls_input:-}"
   if [ -z "$tls_path" ] || [ ! -r "$tls_path" ]; then
@@ -163,8 +163,19 @@ assert_same_route_fingerprint login-lookalike http://zitadel:8080/ui/v2/loginx i
 assert_same_route_fingerprint pay-sync-exact http://powersync-pay:8080/ global.e2e.gizclaw.test 3000 /_sync/gizpay || fail_with_logs
 assert_same_route_fingerprint pay-sync-descendant 'http://powersync-pay:8080/sync/stream?probe=route' global.e2e.gizclaw.test 3000 '/_sync/gizpay/sync/stream?probe=route' || fail_with_logs
 assert_same_route_fingerprint way-sync-exact http://powersync-global:8080/ global.e2e.gizclaw.test 3000 /_sync/gizway || fail_with_logs
-assert_same_route_fingerprint pay-sync-lookalike http://web-global:8080/_sync/gizpayx global.e2e.gizclaw.test 3000 /_sync/gizpayx || fail_with_logs
-assert_same_route_fingerprint way-sync-lookalike http://web-global:8080/_sync/gizwayx global.e2e.gizclaw.test 3000 /_sync/gizwayx || fail_with_logs
+for path in / /marketplace /_sync/gizpayx /_sync/gizwayx; do
+  [ "$(routed_fingerprint global.e2e.gizclaw.test 3000 "$path" | cut -f1)" = 404 ] || { echo "API-only Entry routed unexpected path $path" >&2; fail_with_logs; }
+done
+cors_headers="$(mktemp "${TMPDIR:-/tmp}/gizway-cors.XXXXXX")"
+curl --noproxy '*' --silent --show-error --cacert "$TLS_CERT_FILE" --resolve global.e2e.gizclaw.test:3000:127.0.0.1 \
+  --request OPTIONS --header 'Origin: http://127.0.0.1:4173' --header 'Access-Control-Request-Method: POST' \
+  --header 'Access-Control-Request-Headers: authorization,content-type,x-user-agent' --dump-header "$cors_headers" --output /dev/null \
+  https://global.e2e.gizclaw.test:3000/auth/runtime-config || fail_with_logs
+grep -Eiq '^Access-Control-Allow-Origin: http://127\.0\.0\.1:4173\r?$' "$cors_headers" || fail_with_logs
+grep -Eiq '^Access-Control-Allow-Headers: .*X-User-Agent' "$cors_headers" || fail_with_logs
+grep -Eiq '^Access-Control-Expose-Headers: Retry-After\r?$' "$cors_headers" || fail_with_logs
+grep -Eiq '^Vary: Origin\r?$' "$cors_headers" || fail_with_logs
+rm -f "$cors_headers"
 if curl --noproxy '*' --fail --silent --show-error --cacert "$TLS_CERT_FILE" \
   --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
   echo "Entry accepted a certificate/SNI mismatch" >&2
@@ -228,20 +239,19 @@ run_powersync() {
 }
 
 # shellcheck disable=SC2154
-run_web() {
-  (cd "$root/web/apps/gizway" && M04_REAL_E2E=1 M04_E2E_COMPOSE_PROJECT="$project" M04_WEB_EXTERNAL=1 \
+run_browser_sdk() {
+  (cd "$root/sdk/web" && M04_REAL_E2E=1 M04_E2E_COMPOSE_PROJECT="$project" \
     M04_TLS_SPKI="$tls_spki" \
-    M04_WEB_PORT=3000 M04_WEB_CN_PORT=3001 M04_E2E_USERNAME="$human_username" M04_E2E_PASSWORD="$human_password" \
-    M04_E2E_NEW_USERNAME="$web_first_login_username" M04_E2E_NEW_PASSWORD="$web_first_login_password" \
-    npm run test:e2e -- e2e/real-auth-and-sync.spec.ts)
+    M04_ENTRY_PORT=3000 M04_ENTRY_CN_PORT=3001 M04_E2E_USERNAME="$human_username" M04_E2E_PASSWORD="$human_password" \
+    npm run test:e2e -- e2e/browser-client.spec.ts)
 }
 
 case "$mode" in
-  all) run_case api run_api; run_case sdk run_sdk; run_case powersync run_powersync; run_case web run_web ;;
+  all) run_case api run_api; run_case sdk run_sdk; run_case powersync run_powersync; run_case browser-sdk run_browser_sdk ;;
   api) run_case api run_api ;;
   sdk) run_case sdk run_sdk ;;
   powersync) run_case powersync run_powersync ;;
-  web) run_case web run_web ;;
+  browser-sdk) run_case browser-sdk run_browser_sdk ;;
 esac
 cat "$results"
 grep -q 'FAIL' "$results" && exit 1
