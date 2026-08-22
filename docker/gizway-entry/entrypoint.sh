@@ -29,8 +29,8 @@ for name in GLOBAL_HOST CN_HOST AUTH_HOST PAY_HOST; do
   case "$value" in
     '') ;;
     *[!a-z0-9.-]*) echo "$name contains invalid host characters" >&2; exit 2 ;;
-    *.gizclaw.com|*.gizclaw.test) ;;
-    *) echo "$name must be a gizclaw.com or gizclaw.test host" >&2; exit 2 ;;
+    *.gizclaw.com|*.gizclaw.test|pay.gizway.com|global.gizway.com|cn.gizway.com) ;;
+    *) echo "$name must be an allowed GizClaw subdomain or fixed GizWay host" >&2; exit 2 ;;
   esac
 done
 
@@ -44,7 +44,13 @@ for name in GIZPAY_UPSTREAM GIZWAY_UPSTREAM WEB_UPSTREAM ZITADEL_UPSTREAM ZITADE
         exit 2
       fi
       ;;
-    *) echo "$name must use http:// or https://" >&2; exit 2 ;;
+    h2c://*)
+      if [ "$name" != ZITADEL_UPSTREAM ] || ! printf '%s\n' "$value" | grep -Eq '^h2c://[A-Za-z0-9._-]+(:[0-9]+)?$'; then
+        echo "$name may use h2c:// only for an authority-only ZITADEL upstream" >&2
+        exit 2
+      fi
+      ;;
+    *) echo "$name must use an allowed origin scheme" >&2; exit 2 ;;
   esac
 done
 
