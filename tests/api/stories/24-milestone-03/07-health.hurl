@@ -1,14 +1,10 @@
-# Entry delegates the public health contract to the static Caddy image. The
-# private Go process health endpoints are used by Compose health checks only.
+# Regional Entry is API-only. The removed Caddy image no longer owns a public
+# health route; private process health remains internal to Compose.
 
 GET {{pay_url}}/healthz
 
-HTTP 200
-[Asserts]
-body == ""
+HTTP 404
 
 GET {{way_url}}/healthz
 
-HTTP 200
-[Asserts]
-body == ""
+HTTP 404
