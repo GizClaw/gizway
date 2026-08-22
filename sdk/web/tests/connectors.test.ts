@@ -32,6 +32,20 @@ describe("upload failure rules", () => {
     await expect(connector.uploadData(database(complete))).rejects.toThrow("observer failed");
     expect(complete).toHaveBeenCalledOnce();
   });
+  it("reports earlier successes before a later deterministic rejection", async () => {
+    const complete = vi.fn(), succeeded = vi.fn(), rejected = vi.fn();
+    const responses = [new Response(null, { status: 204 }), Response.json({ error: { code: "invalid_item", message: "bad" } }, { status: 422 })];
+    const connector = new Connector({ endpoint: "https://sync", apiBaseURL: "https://api", token: async () => "t", onMutationSuccess: succeeded, onMutationError: rejected, fetcher: async () => responses.shift()! });
+    const db = { getCrudBatch: async () => ({ crud: [
+      { table: "items", id: "1", op: "PUT", opData: {} },
+      { table: "items", id: "2", op: "PUT", opData: {} },
+    ], complete }) } as unknown as CommonPowerSyncDatabase;
+    await connector.uploadData(db);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(succeeded).toHaveBeenCalledWith(expect.objectContaining({ id: "1", status: 204 }));
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ id: "2", code: "invalid_item", status: 422 }));
+    expect(succeeded.mock.invocationCallOrder[0]).toBeLessThan(rejected.mock.invocationCallOrder[0]!);
+  });
   it("completes a successful upload before notifying a throwing observer", async () => {
     const complete = vi.fn();
     const connector = new Connector({ endpoint: "https://sync", apiBaseURL: "https://api", token: async () => "t", onMutationSuccess: () => { throw new Error("observer failed"); }, fetcher: async () => new Response(null, { status: 204 }) });

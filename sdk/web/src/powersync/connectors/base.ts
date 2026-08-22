@@ -51,6 +51,7 @@ export abstract class APIConnector implements PowerSyncBackendConnector {
         try { value = await response.json(); } catch { throw new Error(`invalid ErrorResponse from upload API: ${response.status}`); }
         if (!isErrorResponse(value)) throw new Error(`invalid ErrorResponse from upload API: ${response.status}`);
         await batch.complete();
+        for (const success of successes) this.config.onMutationSuccess?.(success);
         this.config.onMutationError?.({ table: entry.table, id: entry.id, status: response.status, ...value.error });
         return;
       }

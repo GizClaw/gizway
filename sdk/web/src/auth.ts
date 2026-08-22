@@ -36,6 +36,7 @@ export function createBrowserAuth(options: {
   const tokenKey = `${prefix}.tokens`;
   const transactionKey = `${prefix}.transaction`;
   let refreshPromise: Promise<string> | undefined;
+  let sessionGeneration = 0;
 
   const storedTokens = (): TokenSet | undefined => {
     const raw = storage.getItem(tokenKey);
@@ -46,10 +47,11 @@ export function createBrowserAuth(options: {
     } catch { return undefined; }
   };
   const clearSession = () => {
+    sessionGeneration++;
     storage.removeItem(tokenKey);
     storage.removeItem(transactionKey);
   };
-  const saveTokenResponse = async (response: Response, previous?: TokenSet): Promise<TokenSet> => {
+  const saveTokenResponse = async (response: Response, previous?: TokenSet, mayPersist: () => boolean = () => true): Promise<TokenSet> => {
     if (!response.ok) throw new AuthenticationRequiredError(`OIDC token exchange failed: ${response.status}`);
     const value = await response.json() as Record<string, unknown>;
     if (typeof value.access_token !== "string" || value.access_token === "") throw new AuthenticationRequiredError("OIDC response has no access token");
@@ -61,6 +63,7 @@ export function createBrowserAuth(options: {
       id_token: typeof value.id_token === "string" ? value.id_token : previous?.id_token,
       expires_at: clock() + expires * 1000,
     };
+    if (!mayPersist()) throw new AuthenticationRequiredError("OIDC session changed during token exchange");
     storage.setItem(tokenKey, JSON.stringify(tokens));
     return tokens;
   };
@@ -116,6 +119,7 @@ export function createBrowserAuth(options: {
         throw new AuthenticationRequiredError("access token expired and no refresh token is available");
       }
       refreshPromise ??= (async () => {
+        const generation = sessionGeneration;
         try {
           const activeRefresh = tokens.refresh_token!;
           const response = await fetcher(tokenEndpoint, {
@@ -124,10 +128,9 @@ export function createBrowserAuth(options: {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({ grant_type: "refresh_token", client_id: config.identity.client_id, refresh_token: activeRefresh }),
           });
-          if (storedTokens()?.refresh_token !== activeRefresh) throw new AuthenticationRequiredError("OIDC session changed during refresh");
-          return (await saveTokenResponse(response, tokens)).access_token;
+          return (await saveTokenResponse(response, tokens, () => sessionGeneration === generation && storedTokens()?.refresh_token === activeRefresh)).access_token;
         } catch (error) {
-          if (storedTokens()?.refresh_token === tokens.refresh_token) clearSession();
+          if (sessionGeneration === generation && storedTokens()?.refresh_token === tokens.refresh_token) clearSession();
           throw error instanceof AuthenticationRequiredError ? error : new AuthenticationRequiredError("OIDC token refresh failed", { cause: error });
         } finally { refreshPromise = undefined; }
       })();

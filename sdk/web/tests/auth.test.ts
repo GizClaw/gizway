@@ -48,6 +48,27 @@ describe("browser auth", () => {
     await expect(auth.getAccessToken()).rejects.toBeInstanceOf(AuthenticationRequiredError);
     await expect(auth.getAccessToken()).rejects.toBeInstanceOf(AuthenticationRequiredError);
   });
+  it("does not restore a cleared session from an in-flight refresh response", async () => {
+    const store = storage();
+    let now = 1_000;
+    let releaseRefresh!: (value: Record<string, unknown>) => void;
+    const refreshBody = new Promise<Record<string, unknown>>((resolve) => { releaseRefresh = resolve; });
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(init?.body).includes("authorization_code")) return Response.json({ access_token: "old", refresh_token: "refresh", expires_in: 1 });
+      return { ok: true, status: 200, json: () => refreshBody } as Response;
+    });
+    const auth = createBrowserAuth({ config, region: "global", storage: store, crypto, fetcher, clock: () => now });
+    await auth.beginLogin();
+    const transaction = JSON.parse([...store.values.values()][0]!) as { state: string };
+    await auth.completeLogin(`https://www.example.test/callback?code=c&state=${transaction.state}`);
+    now += 2_000;
+    const refresh = auth.getAccessToken();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    auth.clearSession();
+    releaseRefresh({ access_token: "resurrected", refresh_token: "next", expires_in: 300 });
+    await expect(refresh).rejects.toThrow("session changed");
+    expect(store.values.size).toBe(0);
+  });
   it("isolates region namespaces", async () => {
     const store = storage();
     const globalAuth = createBrowserAuth({ config, region: "global", storage: store, crypto });
