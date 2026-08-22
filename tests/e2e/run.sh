@@ -171,11 +171,12 @@ curl --noproxy '*' --silent --show-error --cacert "$TLS_CERT_FILE" --resolve glo
   --request OPTIONS --header 'Origin: http://127.0.0.1:4173' --header 'Access-Control-Request-Method: POST' \
   --header 'Access-Control-Request-Headers: authorization,content-type,x-user-agent' --dump-header "$cors_headers" --output /dev/null \
   https://global.e2e.gizclaw.test:3000/auth/runtime-config || fail_with_logs
-grep -Eiq '^Access-Control-Allow-Origin: http://127\.0\.0\.1:4173\r?$' "$cors_headers" || fail_with_logs
-grep -Eiq '^Access-Control-Allow-Headers: .*X-User-Agent' "$cors_headers" || fail_with_logs
-grep -Eiq '^Access-Control-Expose-Headers: Retry-After\r?$' "$cors_headers" || fail_with_logs
-grep -Eiq '^Vary: Origin\r?$' "$cors_headers" || fail_with_logs
-rm -f "$cors_headers"
+tr -d '\r' <"$cors_headers" >"$cors_headers.normalized"
+grep -Eiq '^Access-Control-Allow-Origin: http://127\.0\.0\.1:4173$' "$cors_headers.normalized" || { echo 'CORS preflight omitted the exact allowed origin' >&2; fail_with_logs; }
+grep -Eiq '^Access-Control-Allow-Headers: .*X-User-Agent' "$cors_headers.normalized" || { echo 'CORS preflight omitted X-User-Agent allowance' >&2; fail_with_logs; }
+grep -Eiq '^Access-Control-Expose-Headers: Retry-After$' "$cors_headers.normalized" || { echo 'CORS preflight omitted Retry-After exposure' >&2; fail_with_logs; }
+grep -Eiq '^Vary: Origin$' "$cors_headers.normalized" || { echo 'CORS preflight omitted Vary: Origin' >&2; fail_with_logs; }
+rm -f "$cors_headers" "$cors_headers.normalized"
 if curl --noproxy '*' --fail --silent --show-error --cacert "$TLS_CERT_FILE" \
   --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
   echo "Entry accepted a certificate/SNI mismatch" >&2
