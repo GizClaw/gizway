@@ -8,7 +8,7 @@ tls:
 http:
   routers:
     login:
-      rule: Host(`@@AUTH_HOST@@`) && PathPrefix(`/ui/v2/login`)
+      rule: Host(`@@AUTH_HOST@@`) && (Path(`/ui/v2/login`) || PathPrefix(`/ui/v2/login/`))
       priority: 200
       entryPoints: [websecure, central]
       tls: {}
@@ -26,7 +26,7 @@ http:
       tls: {}
       service: gizpay
     gizpay-sync:
-      rule: Host(`@@PAY_HOST@@`) && PathPrefix(`/_sync/gizpay/`)
+      rule: Host(`@@PAY_HOST@@`) && (Path(`/_sync/gizpay`) || PathPrefix(`/_sync/gizpay/`))
       priority: 190
       entryPoints: [websecure, central]
       tls: {}

@@ -27,6 +27,7 @@ tls_spki="$(openssl x509 -in "$TLS_CERT_FILE" -pubkey -noout | openssl pkey -pub
 project="gizway-e2e-${mode}-$$"
 fixture="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e.XXXXXX")"
 results="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e-results.XXXXXX")"
+postgres_tls_directory="$(mktemp -d "${TMPDIR:-/tmp}/gizway-postgres-tls.XXXXXX")"
 
 cleanup() {
   status=$?
@@ -36,9 +37,20 @@ cleanup() {
     docker compose --project-name "$project" -f "$compose" --profile '*' down --volumes --remove-orphans >/dev/null 2>&1 || true
   fi
   rm -f "$fixture" "$results"
+  rm -rf "$postgres_tls_directory"
   return "$status"
 }
 trap cleanup EXIT INT TERM
+
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+  -subj '/CN=postgres-gizway-e2e' \
+  -addext 'subjectAltName=DNS:postgres-gizpay,DNS:postgres-global,DNS:postgres-cn,DNS:postgres-powersync' \
+  -keyout "$postgres_tls_directory/server.key" -out "$postgres_tls_directory/server.crt" >/dev/null 2>&1
+chmod 0600 "$postgres_tls_directory/server.key"
+chmod 0644 "$postgres_tls_directory/server.crt"
+POSTGRES_TLS_CERT_FILE="$postgres_tls_directory/server.crt"
+POSTGRES_TLS_KEY_FILE="$postgres_tls_directory/server.key"
+export POSTGRES_TLS_CERT_FILE POSTGRES_TLS_KEY_FILE
 
 fail_with_logs() {
   docker compose --project-name "$project" -f "$compose" --profile '*' logs --tail 250 --no-log-prefix >&2 || true
@@ -68,6 +80,63 @@ wait_healthy() {
   return 1
 }
 
+wait_postgres_tls_role() {
+  service="$1"
+  database="$2"
+  role="$3"
+  case "$role" in
+    *[!a-z0-9_]*)
+      echo "invalid PostgreSQL role name for TLS assertion" >&2
+      return 1
+      ;;
+  esac
+  attempt=0
+  while [ "$attempt" -lt 60 ]; do
+    connected="$(docker compose --project-name "$project" -f "$compose" exec -T "$service" \
+      psql -U postgres -d "$database" -Atq \
+      -c "SELECT EXISTS (SELECT 1 FROM pg_stat_activity AS a JOIN pg_stat_ssl AS s USING (pid) WHERE a.usename = '$role' AND s.ssl);" 2>/dev/null || true)"
+    [ "$connected" = t ] && return 0
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  echo "$role did not establish a TLS connection through $service" >&2
+  return 1
+}
+
+routed_fingerprint() {
+  host="$1"
+  port="$2"
+  path="$3"
+  curl --noproxy '*' --silent --show-error --cacert "$TLS_CERT_FILE" \
+    --resolve "$host:$port:127.0.0.1" --output /dev/null \
+    --write-out '%{http_code}\t%{content_type}' "https://$host:$port$path"
+}
+
+direct_fingerprint() {
+  url="$1"
+  host="$2"
+  port="$3"
+  docker run --rm --network "${project}_default" curlimages/curl:8.15.0 \
+    --silent --show-error --header "Host: $host:$port" \
+    --header "X-Forwarded-Host: $host:$port" --header "X-Forwarded-Port: $port" \
+    --header 'X-Forwarded-Proto: https' \
+    --output /dev/null --write-out '%{http_code}\t%{content_type}' "$url"
+}
+
+assert_same_route_fingerprint() {
+  name="$1"
+  direct_url="$2"
+  host="$3"
+  port="$4"
+  path="$5"
+  expected="$(direct_fingerprint "$direct_url" "$host" "$port")"
+  actual="$(routed_fingerprint "$host" "$port" "$path")"
+  if [ "$actual" != "$expected" ]; then
+    echo "$name response fingerprint did not match the intended direct upstream: expected '$expected', got '$actual'" >&2
+    return 1
+  fi
+}
+
 run_case() {
   name="$1"; shift
   if "$@"; then printf '%s\tPASS\n' "$name" >>"$results"; else status=$?; printf '%s\tFAIL(%s)\n' "$name" "$status" >>"$results"; fi
@@ -81,6 +150,21 @@ done
 for entry in entry-central entry-global entry-cn; do
 	wait_healthy "$entry" || fail_with_logs
 done
+wait_postgres_tls_role postgres-gizpay gizpay powersync_pay_source || fail_with_logs
+wait_postgres_tls_role postgres-global gizway powersync_global_source || fail_with_logs
+wait_postgres_tls_role postgres-cn gizway powersync_cn_source || fail_with_logs
+wait_postgres_tls_role postgres-powersync postgres powersync_pay_storage || fail_with_logs
+wait_postgres_tls_role postgres-powersync postgres powersync_global_storage || fail_with_logs
+wait_postgres_tls_role postgres-powersync postgres powersync_cn_storage || fail_with_logs
+
+assert_same_route_fingerprint login-exact http://zitadel-login:3000/ui/v2/login identity.e2e.gizclaw.test 18080 /ui/v2/login || fail_with_logs
+assert_same_route_fingerprint login-descendant http://zitadel-login:3000/ui/v2/login/healthy identity.e2e.gizclaw.test 18080 /ui/v2/login/healthy || fail_with_logs
+assert_same_route_fingerprint login-lookalike http://zitadel:8080/ui/v2/loginx identity.e2e.gizclaw.test 18080 /ui/v2/loginx || fail_with_logs
+assert_same_route_fingerprint pay-sync-exact http://powersync-pay:8080/ global.e2e.gizclaw.test 3000 /_sync/gizpay || fail_with_logs
+assert_same_route_fingerprint pay-sync-descendant 'http://powersync-pay:8080/sync/stream?probe=route' global.e2e.gizclaw.test 3000 '/_sync/gizpay/sync/stream?probe=route' || fail_with_logs
+assert_same_route_fingerprint way-sync-exact http://powersync-global:8080/ global.e2e.gizclaw.test 3000 /_sync/gizway || fail_with_logs
+assert_same_route_fingerprint pay-sync-lookalike http://web-global:8080/_sync/gizpayx global.e2e.gizclaw.test 3000 /_sync/gizpayx || fail_with_logs
+assert_same_route_fingerprint way-sync-lookalike http://web-global:8080/_sync/gizwayx global.e2e.gizclaw.test 3000 /_sync/gizwayx || fail_with_logs
 if curl --noproxy '*' --fail --silent --show-error --cacert "$TLS_CERT_FILE" \
   --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
   echo "Entry accepted a certificate/SNI mismatch" >&2
