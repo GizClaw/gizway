@@ -90,10 +90,18 @@ contracts. OpenAPI documents own the public wire and schema contracts.
 ## Releases
 
 Strict SemVer tags on `main` publish six public `linux/amd64` OCI images under
-`ghcr.io/gizclaw`, plus the browser SDK in GitHub Packages. The release workflow
-builds each candidate once, verifies it, publishes immutable version and
-revision tags, checks anonymous OCI access, signs exact digests with GitHub
-Actions OIDC, and attaches a deterministic `release-manifest.json`.
+`ghcr.io/gizclaw`. The release workflow builds each candidate once, verifies it,
+publishes immutable version and revision tags, checks anonymous OCI access,
+signs exact digests with GitHub Actions OIDC, and attaches a deterministic
+`release-manifest.json`.
+
+The browser SDK has an independent npm lifecycle. Its version is owned by
+`sdk/web/package.json` and synchronized to `sdk/web/package-lock.json`. After a
+version change has merged and passed CI, an authenticated maintainer may make a
+separate publication decision and run `npm ci` followed by `npm publish` from
+`sdk/web`. Prereleases must use an explicit non-`latest` dist-tag such as
+`npm publish --tag next`. Repository tags and the OCI release workflow do not
+set or publish the SDK version.
 
 Consumers should deploy OCI images by digest and verify the Cosign certificate
 identity recorded in the manifest. A repository release does not authorize or

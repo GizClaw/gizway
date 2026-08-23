@@ -1,4 +1,4 @@
-name: Release OCI images and browser SDK package
+name: Release OCI images
 
 on:
   push:
@@ -44,43 +44,9 @@ jobs:
     permissions:
       contents: read
 
-  browser-sdk-and-powersync:
-    name: Browser SDK and offline PowerSync gates
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out exact tag
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Set up Node 22.22.1
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22.22.1
-          cache: npm
-          cache-dependency-path: |
-            sdk/web/package-lock.json
-            tests/powersync/package-lock.json
-      - name: Run browser SDK release gates
-        working-directory: sdk/web
-        run: |
-          npm ci
-          npm run typecheck
-          npm run lint
-          npm test
-          npm run build
-          npm run test:package
-      - name: Run offline PowerSync contracts
-        working-directory: tests/powersync
-        run: |
-          npm ci
-          npm run typecheck
-          npm test
-
   publish:
     name: Build, verify, publish, and sign
-    needs: [validate, ci, browser-sdk-and-powersync]
+    needs: [validate, ci]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -105,11 +71,6 @@ jobs:
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Set up Node 22.22.1 for GitHub Packages
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22.22.1
-          registry-url: https://npm.pkg.github.com
       - name: Install pinned ORAS and Cosign
         shell: bash
         run: |
@@ -131,8 +92,6 @@ jobs:
           cosign version
       - name: Build each candidate once
         run: make build-images
-      - name: Build browser SDK package once
-        run: make build-web-sdk
       - name: Verify and smoke candidate layouts
         run: make test-release-images
       - name: Log in to GHCR
@@ -167,10 +126,6 @@ jobs:
               --certificate-identity "$identity" \
               "$ref"
           done < <(jq -r '.images[] | [.key,.image] | @tsv' release/images.json)
-      - name: Publish browser SDK to GitHub Packages
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
-        run: ./scripts/release/publish-web-sdk.sh
       - name: Create deterministic release manifest
         run: ./scripts/release/create-manifest.sh
       - name: Create or verify GitHub Release
@@ -184,7 +139,7 @@ jobs:
           notes="$RUNNER_TEMP/release-notes.md"
           {
             # shellcheck disable=SC2016
-            printf 'Public OCI images for `%s`. Pull images by the digests recorded in `release-manifest.json`. The browser SDK is published separately as `@gizclaw/gizway-browser-sdk` in GitHub Packages.\n\n' "$RELEASE_VERSION"
+            printf 'Public OCI images for `%s`. Pull images by the digests recorded in `release-manifest.json`.\n\n' "$RELEASE_VERSION"
             printf 'Verify each digest with:\n\n```sh\n'
             printf "cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity '%s' IMAGE@DIGEST\n" "$identity"
             printf '```\n'

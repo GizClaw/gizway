@@ -1,6 +1,6 @@
 {
   "name": "@gizclaw/gizway-browser-sdk",
-  "version": "0.0.0-development",
+  "version": "0.3.0",
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
@@ -27,7 +27,8 @@
     "test": "vitest run",
     "test:package": "node --test tests/package.test.mjs",
     "test:e2e": "playwright test",
-    "pack": "npm run build && npm pack"
+    "test:publish": "npm run typecheck && npm run lint && npm test && npm run build && npm run test:package",
+    "prepublishOnly": "npm run test:publish"
   },
   "dependencies": {
     "@journeyapps/wa-sqlite": "2.0.3",
