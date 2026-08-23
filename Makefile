@@ -3,6 +3,8 @@
 GO ?= go
 HURLFMT ?= hurlfmt
 ACTIONLINT ?= actionlint
+NPM ?= npm
+NPM_PUBLISH_ARGS ?=
 
 .NOTPARALLEL: fmt lint test test-unit
 
@@ -10,7 +12,7 @@ ACTIONLINT ?= actionlint
 	fmt fmt-go fmt-hurl fmt-module \
 	lint lint-go lint-actions \
 	verify-modules build \
-	build-images test-release-images test-package-browser-sdk \
+	build-images publish-npm test-release-images test-package-browser-sdk \
 	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql \
 	test-unit-sdk test-unit-powersync test-unit-browser-sdk test-e2e test-e2e-sdk test-e2e-powersync test-e2e-browser-sdk
 
@@ -47,6 +49,7 @@ help:
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
 		'  test-e2e-browser-sdk run real Global/CN browser SDK acceptance' \
 		'  build-images        build six linux/amd64 production OCI layouts' \
+		'  publish-npm         publish the package.json version of the browser SDK' \
 		'  test-package-browser-sdk validate direct npm package and OCI release separation' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
@@ -121,6 +124,9 @@ test-e2e-browser-sdk:
 
 build-images:
 	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"
+
+publish-npm:
+	@cd sdk/web && $(NPM) publish $(NPM_PUBLISH_ARGS)
 
 test-release-images:
 	@./tests/release/tag-validation.sh

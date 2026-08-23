@@ -16,6 +16,20 @@ jq -e '
   .scripts["test:publish"] == "npm run typecheck && npm run lint && npm test && npm run build && npm run test:package"
 ' "$package_root/package.json" >/dev/null
 
+mock_npm="$first/npm"
+mock_npm_log="$first/npm.log"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'printf "%s\\n%s\\n" "$PWD" "$*" >"$MOCK_NPM_LOG"' >"$mock_npm"
+chmod +x "$mock_npm"
+MOCK_NPM_LOG="$mock_npm_log" make -C "$root" NPM="$mock_npm" publish-npm >/dev/null
+[[ "$(sed -n '1p' "$mock_npm_log")" == "$package_root" ]]
+[[ "$(sed -n '2p' "$mock_npm_log")" == publish ]]
+MOCK_NPM_LOG="$mock_npm_log" make -C "$root" NPM="$mock_npm" NPM_PUBLISH_ARGS='--tag next' publish-npm >/dev/null
+[[ "$(sed -n '1p' "$mock_npm_log")" == "$package_root" ]]
+[[ "$(sed -n '2p' "$mock_npm_log")" == 'publish --tag next' ]]
+
 (
   cd "$package_root"
   npm ci --ignore-scripts --no-audit --no-fund

@@ -98,10 +98,12 @@ signs exact digests with GitHub Actions OIDC, and attaches a deterministic
 The browser SDK has an independent npm lifecycle. Its version is owned by
 `sdk/web/package.json` and synchronized to `sdk/web/package-lock.json`. After a
 version change has merged and passed CI, an authenticated maintainer may make a
-separate publication decision and run `npm ci` followed by `npm publish` from
-`sdk/web`. Prereleases must use an explicit non-`latest` dist-tag such as
-`npm publish --tag next`. Repository tags and the OCI release workflow do not
-set or publish the SDK version.
+separate publication decision, run `npm ci` from `sdk/web`, and then run
+`make publish-npm` from the repository root. The Make target invokes the
+standard `npm publish` command in `sdk/web`; prereleases pass an explicit
+non-`latest` dist-tag with
+`make publish-npm NPM_PUBLISH_ARGS='--tag next'`. Repository tags and the OCI
+release workflow do not set or publish the SDK version.
 
 Consumers should deploy OCI images by digest and verify the Cosign certificate
 identity recorded in the manifest. A repository release does not authorize or
