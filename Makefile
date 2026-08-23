@@ -3,8 +3,8 @@
 GO ?= go
 HURLFMT ?= hurlfmt
 ACTIONLINT ?= actionlint
-NPM ?= npm
-NPM_PUBLISH_ARGS ?=
+NPM_DIST_TAG ?=
+export NPM_DIST_TAG
 
 .NOTPARALLEL: fmt lint test test-unit
 
@@ -126,7 +126,23 @@ build-images:
 	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"
 
 publish-npm:
-	@cd sdk/web && $(NPM) publish $(NPM_PUBLISH_ARGS)
+	@cd sdk/web && \
+		tag="$${NPM_DIST_TAG:-}"; \
+		version="$$(node -p "require('./package.json').version")"; \
+		case "$$tag" in \
+			'') \
+				case "$$version" in *-*) printf 'NPM_DIST_TAG must be a non-latest tag for prerelease version %s\n' "$$version" >&2; exit 2;; esac; \
+				exec npm publish \
+				;; \
+			[A-Za-z]*) \
+				case "$$tag" in *[!A-Za-z0-9._-]*) printf 'invalid NPM_DIST_TAG: %s\n' "$$tag" >&2; exit 2;; esac; \
+				if [ "$$tag" = latest ]; then \
+					case "$$version" in *-*) printf 'NPM_DIST_TAG must not be latest for prerelease version %s\n' "$$version" >&2; exit 2;; esac; \
+				fi; \
+				exec npm publish --tag "$$tag" \
+				;; \
+			*) printf 'invalid NPM_DIST_TAG: %s\n' "$$tag" >&2; exit 2;; \
+		esac
 
 test-release-images:
 	@./tests/release/tag-validation.sh
