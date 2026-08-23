@@ -1,4 +1,4 @@
-name: Release OCI images and browser SDK
+name: Release OCI images and browser SDK package
 
 on:
   push:
@@ -105,6 +105,11 @@ jobs:
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Set up Node 22.22.1 for GitHub Packages
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.1
+          registry-url: https://npm.pkg.github.com
       - name: Install pinned ORAS and Cosign
         shell: bash
         run: |
@@ -126,7 +131,7 @@ jobs:
           cosign version
       - name: Build each candidate once
         run: make build-images
-      - name: Build browser SDK artifact once
+      - name: Build browser SDK package once
         run: make build-web-sdk
       - name: Verify and smoke candidate layouts
         run: make test-release-images
@@ -162,6 +167,10 @@ jobs:
               --certificate-identity "$identity" \
               "$ref"
           done < <(jq -r '.images[] | [.key,.image] | @tsv' release/images.json)
+      - name: Publish browser SDK to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: ./scripts/release/publish-web-sdk.sh
       - name: Create deterministic release manifest
         run: ./scripts/release/create-manifest.sh
       - name: Create or verify GitHub Release
@@ -171,13 +180,11 @@ jobs:
         run: |
           set -euo pipefail
           manifest=tmp/release/release-manifest.json
-          sdk_asset="tmp/release/sdk/gizway-web-sdk-$RELEASE_VERSION.tgz"
-          sdk_checksum="$sdk_asset.sha256"
           identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
           notes="$RUNNER_TEMP/release-notes.md"
           {
             # shellcheck disable=SC2016
-            printf 'Public OCI images and the private browser SDK artifact for `%s`. Pull images by the digests and verify the SDK checksum recorded in `release-manifest.json`.\n\n' "$RELEASE_VERSION"
+            printf 'Public OCI images for `%s`. Pull images by the digests recorded in `release-manifest.json`. The browser SDK is published separately as `@idy/gizway-browser-sdk` in GitHub Packages.\n\n' "$RELEASE_VERSION"
             printf 'Verify each digest with:\n\n```sh\n'
             printf "cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity '%s' IMAGE@DIGEST\n" "$identity"
             printf '```\n'
@@ -185,14 +192,13 @@ jobs:
           if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
             existing="$RUNNER_TEMP/existing-release-assets"
             mkdir -p "$existing"
-            gh release download "$RELEASE_VERSION" --dir "$existing" --pattern release-manifest.json --pattern "$(basename "$sdk_asset")" --pattern "$(basename "$sdk_checksum")"
+            gh release download "$RELEASE_VERSION" --dir "$existing" --pattern release-manifest.json
             cmp --silent "$manifest" "$existing/release-manifest.json"
-            cmp --silent "$sdk_asset" "$existing/$(basename "$sdk_asset")"
-            cmp --silent "$sdk_checksum" "$existing/$(basename "$sdk_checksum")"
+            [[ "$(gh release view "$RELEASE_VERSION" --json assets --jq '[.assets[].name] | sort | join("\n")')" == release-manifest.json ]]
             actual_prerelease="$(gh release view "$RELEASE_VERSION" --json isPrerelease --jq .isPrerelease)"
             [[ "$actual_prerelease" == "$PRERELEASE" ]]
             exit 0
           fi
-          args=(release create "$RELEASE_VERSION" "$manifest#release-manifest.json" "$sdk_asset#$(basename "$sdk_asset")" "$sdk_checksum#$(basename "$sdk_checksum")" --verify-tag --title "$RELEASE_VERSION" --notes-file "$notes")
+          args=(release create "$RELEASE_VERSION" "$manifest#release-manifest.json" --verify-tag --title "$RELEASE_VERSION" --notes-file "$notes")
           [[ "$PRERELEASE" == true ]] && args+=(--prerelease)
           gh "${args[@]}"

@@ -1,8 +1,14 @@
 {
-  "name": "@gizway/browser-sdk",
+  "name": "@idy/gizway-browser-sdk",
   "version": "0.0.0-development",
-  "private": true,
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idy/gizway.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "files": ["dist", "package.json"],

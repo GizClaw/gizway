@@ -32,7 +32,9 @@ jobs:
           cache: npm
           cache-dependency-path: sdk/web/package-lock.json
       - name: Run browser SDK gates
-        run: make test-unit-browser-sdk
+        run: |
+          make test-unit-browser-sdk
+          make test-release-sdk
 
   full:
     name: Full Go and API gate

@@ -47,7 +47,7 @@ help:
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
 		'  test-e2e-browser-sdk run real Global/CN browser SDK acceptance' \
 		'  build-images        build six linux/amd64 production OCI layouts' \
-		'  build-web-sdk       build the deterministic browser SDK release artifact' \
+		'  build-web-sdk       build the deterministic browser SDK package for publication' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
 fmt: fmt-go fmt-hurl fmt-module

@@ -20,12 +20,18 @@ rm -rf "$stage/package/node_modules" "$stage/package/dist" "$stage/package/dist-
   npm ci --ignore-scripts --no-audit --no-fund
   npm pkg set "version=${version#v}"
   npm run build
-  npm pack --ignore-scripts --pack-destination "$stage"
+  npm pack --ignore-scripts --loglevel=error --pack-destination "$stage" >/dev/null
 )
-asset="$output_dir/gizway-web-sdk-$version.tgz"
+asset="$output_dir/browser-sdk-${version#v}.tgz"
 source_asset="$(find "$stage" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
 [[ -n "$source_asset" ]] || { printf 'npm pack did not produce an SDK tarball\n' >&2; exit 1; }
 cp "$source_asset" "$asset"
-checksum="$(shasum -a 256 "$asset" | awk '{print $1}')"
-printf '%s  %s\n' "$checksum" "$(basename "$asset")" >"$asset.sha256"
+package_json="$(tar -xOf "$asset" package/package.json)"
+jq -e --arg version "${version#v}" '
+  .name == "@idy/gizway-browser-sdk" and
+  .version == $version and
+  .publishConfig.registry == "https://npm.pkg.github.com" and
+  .repository.url == "git+https://github.com/idy/gizway.git" and
+  (.private | not)
+' <<<"$package_json" >/dev/null
 printf '%s\n' "$asset"
