@@ -27,6 +27,8 @@ storybook-static/
 playwright-report/
 test-results/
 *.tsbuildinfo
+/sdk/web/dist/
+/sdk/web/dist-harness/
 
 # Local configuration and secrets
 .env

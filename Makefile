@@ -10,9 +10,9 @@ ACTIONLINT ?= actionlint
 	fmt fmt-go fmt-hurl fmt-module \
 	lint lint-go lint-actions \
 	verify-modules build \
-	build-images test-release-images \
+	build-images build-web-sdk test-release-images test-release-sdk \
 	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql \
-	test-unit-sdk test-unit-powersync test-unit-web test-e2e test-e2e-sdk test-e2e-powersync test-e2e-web
+	test-unit-sdk test-unit-powersync test-unit-browser-sdk test-e2e test-e2e-sdk test-e2e-powersync test-e2e-browser-sdk
 
 help:
 	@printf '%s\n' \
@@ -41,12 +41,13 @@ help:
 		'  test-unit-postgresql run production-dialect tests on local PostgreSQL' \
 		'  test-unit-sdk       compile the pinned official SDK test module' \
 		'  test-unit-powersync typecheck and run offline PowerSync client contracts' \
-		'  test-unit-web       run Web unit, build, lint, and fake Playwright tests' \
+		'  test-unit-browser-sdk run browser SDK type, lint, unit, build, and package gates' \
 		'  test-e2e            run Milestone 03 Compose acceptance scenarios' \
 		'  test-e2e-sdk        run the official SDK compatibility matrix' \
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
-		'  test-e2e-web        run real Global/CN browser acceptance' \
-		'  build-images        build seven linux/amd64 production OCI layouts' \
+		'  test-e2e-browser-sdk run real Global/CN browser SDK acceptance' \
+		'  build-images        build six linux/amd64 production OCI layouts' \
+		'  build-web-sdk       build the deterministic browser SDK package for publication' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
 fmt: fmt-go fmt-hurl fmt-module
@@ -103,8 +104,8 @@ test-unit-sdk:
 test-unit-powersync:
 	@cd tests/powersync && npm run typecheck && npm test
 
-test-unit-web:
-	@./scripts/test-unit/test-unit-web.sh
+test-unit-browser-sdk:
+	@./scripts/test-unit/test-unit-browser-sdk.sh
 
 test-e2e:
 	@./tests/e2e/run.sh all
@@ -115,11 +116,14 @@ test-e2e-sdk:
 test-e2e-powersync:
 	@./tests/e2e/run.sh powersync
 
-test-e2e-web:
-	@./tests/e2e/run.sh web
+test-e2e-browser-sdk:
+	@./tests/e2e/run.sh browser-sdk
 
 build-images:
 	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"
+
+build-web-sdk:
+	@./scripts/release/build-web-sdk.sh "$(RELEASE_VERSION)"
 
 test-release-images:
 	@./tests/release/tag-validation.sh
@@ -127,3 +131,6 @@ test-release-images:
 	@./tests/release/publish-images.sh
 	@./scripts/release/verify-images.sh
 	@./tests/release/smoke.sh
+
+test-release-sdk:
+	@./tests/release/web-sdk.sh

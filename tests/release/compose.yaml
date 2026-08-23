@@ -2,7 +2,6 @@ name: gizway-release-smoke
 services:
   gizpay: {image: "${GIZPAY_IMAGE:?set GIZPAY_IMAGE}"}
   gizway: {image: "${GIZWAY_IMAGE:?set GIZWAY_IMAGE}"}
-  web: {image: "${WEB_IMAGE:?set WEB_IMAGE}"}
   entry: {image: "${ENTRY_IMAGE:?set ENTRY_IMAGE}"}
   zitadel: {image: "${ZITADEL_IMAGE:?set ZITADEL_IMAGE}"}
   zitadel-login: {image: "${ZITADEL_LOGIN_IMAGE:?set ZITADEL_LOGIN_IMAGE}"}

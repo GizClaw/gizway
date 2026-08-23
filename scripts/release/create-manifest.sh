@@ -14,5 +14,5 @@ identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/
 mkdir -p "$(dirname "$manifest")"
 jq -nS --arg version "$version" --arg revision "$revision" --arg build_time "$build_time" --argjson images "$images" --arg identity "$identity" \
   '{version:$version,revision:$revision,build_time:$build_time,platform:"linux/amd64",images:$images,signing:{scheme:"cosign-keyless",oidc_issuer:"https://token.actions.githubusercontent.com",certificate_identity:$identity}}' >"$manifest"
-jq -e '.images | length == 7' "$manifest" >/dev/null
+jq -e '(.images | length == 6) and ([.images[].instances[]] | length == 11) and (has("sdk") | not)' "$manifest" >/dev/null
 printf '%s\n' "$manifest"

@@ -16,6 +16,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  browser-sdk:
+    name: Browser SDK gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 22.22.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+          cache-dependency-path: sdk/web/package-lock.json
+      - name: Run browser SDK gates
+        run: |
+          make test-unit-browser-sdk
+          make test-release-sdk
+
   full:
     name: Full Go and API gate
     runs-on: ubuntu-latest
@@ -139,14 +159,14 @@ jobs:
           cache: npm
           cache-dependency-path: |
             tests/powersync/package-lock.json
-            web/apps/gizway/package-lock.json
+            sdk/web/package-lock.json
 
       - name: Install PowerSync test dependencies
         working-directory: tests/powersync
         run: npm ci
 
-      - name: Install Web test dependencies and Chromium
-        working-directory: web/apps/gizway
+      - name: Install browser SDK test dependencies and Chromium
+        working-directory: sdk/web
         run: |
           npm ci
           npx playwright install --with-deps chromium
