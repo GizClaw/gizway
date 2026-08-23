@@ -29,6 +29,25 @@ MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" publish-npm >/d
 MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" NPM_DIST_TAG=next publish-npm >/dev/null
 [[ "$(sed -n '1p' "$mock_npm_log")" == "$package_root" ]]
 [[ "$(sed -n '2p' "$mock_npm_log")" == 'publish --tag next' ]]
+
+mock_node="$first/node"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'printf "%s\\n" "0.4.0-next.1"' >"$mock_node"
+chmod +x "$mock_node"
+printf '' >"$mock_npm_log"
+if MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" publish-npm >/dev/null 2>&1; then
+  printf 'publish-npm accepted a prerelease without a dist-tag\n' >&2
+  exit 1
+fi
+[[ ! -s "$mock_npm_log" ]]
+if MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" NPM_DIST_TAG=latest publish-npm >/dev/null 2>&1; then
+  printf 'publish-npm accepted latest for a prerelease\n' >&2
+  exit 1
+fi
+[[ ! -s "$mock_npm_log" ]]
+
 printf '' >"$mock_npm_log"
 if MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" NPM_DIST_TAG=--ignore-scripts publish-npm >/dev/null 2>&1; then
   printf 'publish-npm accepted an unsupported npm option\n' >&2
