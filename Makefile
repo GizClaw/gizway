@@ -3,6 +3,8 @@
 GO ?= go
 HURLFMT ?= hurlfmt
 ACTIONLINT ?= actionlint
+NPM_DIST_TAG ?=
+export NPM_DIST_TAG
 
 .NOTPARALLEL: fmt lint test test-unit
 
@@ -10,7 +12,7 @@ ACTIONLINT ?= actionlint
 	fmt fmt-go fmt-hurl fmt-module \
 	lint lint-go lint-actions \
 	verify-modules build \
-	build-images build-web-sdk test-release-images test-release-sdk \
+	build-images publish-npm test-release-images test-package-browser-sdk \
 	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql \
 	test-unit-sdk test-unit-powersync test-unit-browser-sdk test-e2e test-e2e-sdk test-e2e-powersync test-e2e-browser-sdk
 
@@ -47,7 +49,8 @@ help:
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
 		'  test-e2e-browser-sdk run real Global/CN browser SDK acceptance' \
 		'  build-images        build six linux/amd64 production OCI layouts' \
-		'  build-web-sdk       build the deterministic browser SDK package for publication' \
+		'  publish-npm         publish the package.json version of the browser SDK' \
+		'  test-package-browser-sdk validate direct npm package and OCI release separation' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
 fmt: fmt-go fmt-hurl fmt-module
@@ -122,8 +125,24 @@ test-e2e-browser-sdk:
 build-images:
 	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"
 
-build-web-sdk:
-	@./scripts/release/build-web-sdk.sh "$(RELEASE_VERSION)"
+publish-npm:
+	@cd sdk/web && \
+		tag="$${NPM_DIST_TAG:-}"; \
+		version="$$(node -p "require('./package.json').version")"; \
+		case "$$tag" in \
+			'') \
+				case "$$version" in *-*) printf 'NPM_DIST_TAG must be a non-latest tag for prerelease version %s\n' "$$version" >&2; exit 2;; esac; \
+				exec npm publish \
+				;; \
+			[A-Za-z]*) \
+				case "$$tag" in *[!A-Za-z0-9._-]*) printf 'invalid NPM_DIST_TAG: %s\n' "$$tag" >&2; exit 2;; esac; \
+				if [ "$$tag" = latest ]; then \
+					case "$$version" in *-*) printf 'NPM_DIST_TAG must not be latest for prerelease version %s\n' "$$version" >&2; exit 2;; esac; \
+				fi; \
+				exec npm publish --tag "$$tag" \
+				;; \
+			*) printf 'invalid NPM_DIST_TAG: %s\n' "$$tag" >&2; exit 2;; \
+		esac
 
 test-release-images:
 	@./tests/release/tag-validation.sh
@@ -132,5 +151,5 @@ test-release-images:
 	@./scripts/release/verify-images.sh
 	@./tests/release/smoke.sh
 
-test-release-sdk:
+test-package-browser-sdk:
 	@./tests/release/web-sdk.sh

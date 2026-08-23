@@ -34,7 +34,7 @@ jobs:
       - name: Run browser SDK gates
         run: |
           make test-unit-browser-sdk
-          make test-release-sdk
+          make test-package-browser-sdk
 
   full:
     name: Full Go and API gate

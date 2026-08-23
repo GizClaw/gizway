@@ -52,3 +52,13 @@ change.
 Merging a pull request does not authorize a tag, package publication, GitHub
 Release, or deployment. These operations are performed separately by project
 maintainers after the corresponding release or deployment decision.
+
+The browser SDK version is committed in `sdk/web/package.json` and kept equal
+to the root version in `sdk/web/package-lock.json`. For an approved, merged
+version, a maintainer runs `npm ci` in `sdk/web`, then runs `make publish-npm`
+from the repository root; this invokes `npm publish` back in `sdk/web`.
+Prereleases require an explicit non-`latest` dist-tag, for example
+`make publish-npm NPM_DIST_TAG=next`; arbitrary npm publish options are not
+accepted. The
+tag-driven repository Release publishes only OCI images and never rewrites or
+publishes the SDK version.

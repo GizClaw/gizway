@@ -1,13 +1,69 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
-version="${RELEASE_VERSION:-v0.0.0-sdk.1}"
-first="$(mktemp -d)"; second="$(mktemp -d)"; images="$(mktemp -d)"; manifest="$(mktemp)"
-calls="$(mktemp)"
-trap 'rm -rf "$first" "$second" "$images"; rm -f "$manifest" "$calls"' EXIT
-artifact="browser-sdk-${version#v}.tgz"
-RELEASE_VERSION="$version" RELEASE_REVISION="$(git rev-parse HEAD)" RELEASE_SDK_OUTPUT_DIR="$first" "$root/scripts/release/build-web-sdk.sh" >/dev/null
-RELEASE_VERSION="$version" RELEASE_REVISION="$(git rev-parse HEAD)" RELEASE_SDK_OUTPUT_DIR="$second" "$root/scripts/release/build-web-sdk.sh" >/dev/null
+package_root="$root/sdk/web"
+first="$(mktemp -d)"
+second="$(mktemp -d)"
+trap 'rm -rf "$first" "$second"' EXIT
+
+package_version="$(jq -er '.version | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+([+-][0-9A-Za-z.-]+)?$"))' "$package_root/package.json")"
+[[ "$package_version" != 0.0.0-development ]]
+jq -e --arg version "$package_version" '
+  .version == $version and .packages[""].version == $version
+' "$package_root/package-lock.json" >/dev/null
+jq -e '
+  .scripts.prepublishOnly == "npm run test:publish" and
+  .scripts["test:publish"] == "npm run typecheck && npm run lint && npm test && npm run build && npm run test:package"
+' "$package_root/package.json" >/dev/null
+
+mock_npm="$first/npm"
+mock_npm_log="$first/npm.log"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'printf "%s\\n%s\\n" "$PWD" "$*" >"$MOCK_NPM_LOG"' >"$mock_npm"
+chmod +x "$mock_npm"
+MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" publish-npm >/dev/null
+[[ "$(sed -n '1p' "$mock_npm_log")" == "$package_root" ]]
+[[ "$(sed -n '2p' "$mock_npm_log")" == publish ]]
+MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" NPM_DIST_TAG=next publish-npm >/dev/null
+[[ "$(sed -n '1p' "$mock_npm_log")" == "$package_root" ]]
+[[ "$(sed -n '2p' "$mock_npm_log")" == 'publish --tag next' ]]
+
+mock_node="$first/node"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'printf "%s\\n" "0.4.0-next.1"' >"$mock_node"
+chmod +x "$mock_node"
+printf '' >"$mock_npm_log"
+if MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" publish-npm >/dev/null 2>&1; then
+  printf 'publish-npm accepted a prerelease without a dist-tag\n' >&2
+  exit 1
+fi
+[[ ! -s "$mock_npm_log" ]]
+if MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" NPM_DIST_TAG=latest publish-npm >/dev/null 2>&1; then
+  printf 'publish-npm accepted latest for a prerelease\n' >&2
+  exit 1
+fi
+[[ ! -s "$mock_npm_log" ]]
+
+printf '' >"$mock_npm_log"
+if MOCK_NPM_LOG="$mock_npm_log" PATH="$first:$PATH" make -C "$root" NPM_DIST_TAG=--ignore-scripts publish-npm >/dev/null 2>&1; then
+  printf 'publish-npm accepted an unsupported npm option\n' >&2
+  exit 1
+fi
+[[ ! -s "$mock_npm_log" ]]
+
+(
+  cd "$package_root"
+  npm ci --ignore-scripts --no-audit --no-fund
+  npm run build
+  npm pack --ignore-scripts --json --pack-destination "$first" >"$first/metadata.json"
+  npm pack --ignore-scripts --json --pack-destination "$second" >"$second/metadata.json"
+)
+artifact="$(jq -er '.[0].filename' "$first/metadata.json")"
+[[ "$(jq -er '.[0].version' "$first/metadata.json")" == "$package_version" ]]
 cmp "$first/$artifact" "$second/$artifact"
 tar -tzf "$first/$artifact" | sort >"$first/contents"
 if grep -Eq '(^|/)(src|tests|e2e|node_modules|test-results)/|\.(tsx|css|html|png|env)$' "$first/contents"; then
@@ -17,60 +73,26 @@ fi
 grep -qx 'package/dist/index.js' "$first/contents"
 grep -qx 'package/dist/index.d.ts' "$first/contents"
 grep -qx 'package/package.json' "$first/contents"
-revision="$(git rev-parse HEAD)"
-build_time="$(git show -s --format=%cI "$revision" | sed -E 's/\+00:00$/Z/')"
-printf 'version=%s\nrevision=%s\nbuild_time=%s\nsource_date_epoch=%s\n' "$version" "$revision" "$build_time" "$(git show -s --format=%ct "$revision")" >"$images/metadata.env"
-for key in gizpay gizway entry zitadel zitadel-login powersync; do printf 'sha256:%064d\n' 0 >"$images/$key.digest"; done
-RELEASE_OUTPUT_DIR="$images" RELEASE_MANIFEST="$manifest" "$root/scripts/release/create-manifest.sh" >/dev/null
-expected_identity="https://github.com/GizClaw/gizway/.github/workflows/release.yml@refs/tags/$version"
-jq -e --arg identity "$expected_identity" '
-  (.images | length == 6) and
-  ([.images[].instances[]] | length == 11) and
-  (all(.images[].ref; startswith("ghcr.io/gizclaw/gizway-"))) and
-  .signing.certificate_identity == $identity and
-  (has("sdk") | not)
-' "$manifest" >/dev/null
+
+packed_package_json="$(tar -xOf "$first/$artifact" package/package.json)"
+jq -e --arg version "$package_version" '
+  .name == "@gizclaw/gizway-browser-sdk" and
+  .version == $version and
+  .publishConfig.registry == "https://npm.pkg.github.com" and
+  .repository.url == "git+https://github.com/GizClaw/gizway.git" and
+  (.private | not)
+' <<<"$packed_package_json" >/dev/null
+
+(
+  cd "$package_root"
+  npm publish --dry-run --ignore-scripts --json >"$first/publish-dry-run.json"
+)
+[[ "$(jq -er '.version' "$first/publish-dry-run.json")" == "$package_version" ]]
+
 release_workflow="$root/.github/workflows/release.yml"
-grep -Fq 'run: ./scripts/release/publish-web-sdk.sh' "$release_workflow"
+grep -Fxq 'name: Release OCI images' "$release_workflow"
 grep -Fq "args=(release create \"\$RELEASE_VERSION\" \"\$manifest#release-manifest.json\" --verify-tag" "$release_workflow"
-if grep -Eq 'sdk_asset=|sdk_checksum=|gizway-web-sdk-|\.tgz#' "$release_workflow"; then
-  printf 'GitHub Release workflow must not upload or retain browser SDK tarballs\n' >&2
-  exit 1
-fi
-
-# JavaScript template literal, not shell expansion.
-# shellcheck disable=SC2016
-integrity="$(node -e '
-  const { createHash } = require("node:crypto");
-  const { readFileSync } = require("node:fs");
-  process.stdout.write(`sha512-${createHash("sha512").update(readFileSync(process.argv[1])).digest("base64")}`);
-' "$first/$artifact")"
-mock_npm="$root/tests/release/fixtures/mock-npm.sh"
-MOCK_NPM_CALLS="$calls" MOCK_NPM_VIEW=existing MOCK_NPM_INTEGRITY="$integrity" NPM_BIN="$mock_npm" \
-  RELEASE_VERSION="$version" RELEASE_SDK_OUTPUT_DIR="$first" "$root/scripts/release/publish-web-sdk.sh" >/dev/null
-[[ "$(wc -l <"$calls" | tr -d ' ')" == 1 ]]
-
-: >"$calls"
-MOCK_NPM_CALLS="$calls" MOCK_NPM_VIEW=missing NPM_BIN="$mock_npm" \
-  RELEASE_VERSION="$version" RELEASE_SDK_OUTPUT_DIR="$first" "$root/scripts/release/publish-web-sdk.sh" >/dev/null
-grep -Fxq "publish $first/$artifact --registry https://npm.pkg.github.com --tag next" "$calls"
-
-stable_version=v1.2.3
-stable_dir="$(mktemp -d)"
-trap 'rm -rf "$first" "$second" "$images" "$stable_dir"; rm -f "$manifest" "$calls"' EXIT
-RELEASE_VERSION="$stable_version" RELEASE_REVISION="$(git rev-parse HEAD)" RELEASE_SDK_OUTPUT_DIR="$stable_dir" "$root/scripts/release/build-web-sdk.sh" >/dev/null
-: >"$calls"
-MOCK_NPM_CALLS="$calls" MOCK_NPM_VIEW=missing NPM_BIN="$mock_npm" \
-  RELEASE_VERSION="$stable_version" RELEASE_SDK_OUTPUT_DIR="$stable_dir" "$root/scripts/release/publish-web-sdk.sh" >/dev/null
-grep -Fxq "publish $stable_dir/browser-sdk-1.2.3.tgz --registry https://npm.pkg.github.com --tag latest" "$calls"
-
-if MOCK_NPM_CALLS="$calls" MOCK_NPM_VIEW=existing MOCK_NPM_INTEGRITY=sha512-wrong NPM_BIN="$mock_npm" \
-  RELEASE_VERSION="$version" RELEASE_SDK_OUTPUT_DIR="$first" "$root/scripts/release/publish-web-sdk.sh" >/dev/null 2>&1; then
-  printf 'publish-web-sdk accepted mismatched existing package integrity\n' >&2
-  exit 1
-fi
-if MOCK_NPM_CALLS="$calls" MOCK_NPM_VIEW=error NPM_BIN="$mock_npm" \
-  RELEASE_VERSION="$version" RELEASE_SDK_OUTPUT_DIR="$first" "$root/scripts/release/publish-web-sdk.sh" >/dev/null 2>&1; then
-  printf 'publish-web-sdk treated a registry error as an absent package\n' >&2
+if grep -Eqi 'browser[- ]sdk|sdk/web|npm|NODE_AUTH_TOKEN|publish-web-sdk|build-web-sdk|\.tgz#' "$release_workflow"; then
+  printf 'OCI release workflow must not build, authenticate, publish, or describe the browser SDK\n' >&2
   exit 1
 fi
