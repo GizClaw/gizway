@@ -37,6 +37,7 @@ release_workflow="$root/.github/workflows/release.yml"
 review_workflow="$root/.github/workflows/codex-review.yml"
 grep -Fq 'https://github.com/GizClaw/gizway/.github/workflows/release.yml@refs/tags/' "$release_workflow"
 grep -Fq 'github.event.comment.author_association' "$review_workflow"
+grep -Fq "github.event.comment.body == '@codex'" "$review_workflow"
 grep -Fq 'github.event.pull_request.head.repo.full_name == github.repository' "$review_workflow"
 grep -Fq 'github.event.issue.author_association' "$review_workflow"
 

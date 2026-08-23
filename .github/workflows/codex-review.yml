@@ -44,6 +44,11 @@ jobs:
           fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
           github.event.comment.author_association
         )
+        && (
+          github.event.comment.body == '@codex'
+          || github.event.comment.body == '@codex review'
+          || startsWith(github.event.comment.body, '@codex review ')
+        )
       )
     uses: GizClaw/github-workflows/.github/workflows/codex-openai-review.yml@cff6ec446b57dff4cd682dd8539bc6de79f516c4
     with:
