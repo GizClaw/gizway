@@ -2,7 +2,7 @@ FROM ghcr.io/zitadel/zitadel:v4.17.1@sha256:3ac6910685d48f32481f01f45e3e6215efe5
 ARG RELEASE_VERSION
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_TIME
-LABEL org.opencontainers.image.source="https://github.com/idy/gizway" \
+LABEL org.opencontainers.image.source="https://github.com/GizClaw/gizway" \
       org.opencontainers.image.version="${RELEASE_VERSION}" \
       org.opencontainers.image.revision="${RELEASE_REVISION}" \
       org.opencontainers.image.created="${RELEASE_BUILD_TIME}" \

@@ -20,9 +20,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 
-	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
-	"github.com/idy/gizway/internal/store"
-	"github.com/idy/gizway/internal/subscriptionkey"
+	bifrostadapter "github.com/GizClaw/gizway/internal/adapter/bifrost"
+	"github.com/GizClaw/gizway/internal/store"
+	"github.com/GizClaw/gizway/internal/subscriptionkey"
 )
 
 type priceRow struct {

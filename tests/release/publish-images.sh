@@ -24,6 +24,7 @@ run_publish() {
 rm -f "$output_dir/oras.state"
 run_publish publish >/dev/null
 [[ "$(wc -l <"$output_dir/oras.log" | tr -d ' ')" == 6 ]]
+[[ "$(grep -c 'ghcr.io/gizclaw/gizway-' "$output_dir/oras.log")" == 6 ]]
 
 : >"$output_dir/oras.log"
 run_publish same >/dev/null

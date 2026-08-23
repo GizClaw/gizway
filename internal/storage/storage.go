@@ -9,8 +9,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
-	gizpaysql "github.com/idy/gizway/data/sql/gizpay"
-	gizwaysql "github.com/idy/gizway/data/sql/gizway"
+	gizpaysql "github.com/GizClaw/gizway/data/sql/gizpay"
+	gizwaysql "github.com/GizClaw/gizway/data/sql/gizway"
 )
 
 // Storage owns the PostgreSQL connection pool.

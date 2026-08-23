@@ -1,4 +1,4 @@
-module github.com/idy/gizway/tests/sdk
+module github.com/GizClaw/gizway/tests/sdk
 
 go 1.26.6
 

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/idy/gizway/tests/sdk/internal/assertions"
-	"github.com/idy/gizway/tests/sdk/internal/fixture"
+	"github.com/GizClaw/gizway/tests/sdk/internal/assertions"
+	"github.com/GizClaw/gizway/tests/sdk/internal/fixture"
 	"google.golang.org/genai"
 )
 

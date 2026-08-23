@@ -3,8 +3,8 @@ package sdk_test
 import (
 	"testing"
 
-	"github.com/idy/gizway/tests/sdk/internal/assertions"
-	"github.com/idy/gizway/tests/sdk/internal/fixture"
+	"github.com/GizClaw/gizway/tests/sdk/internal/assertions"
+	"github.com/GizClaw/gizway/tests/sdk/internal/fixture"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 )

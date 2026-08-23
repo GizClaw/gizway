@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/idy/gizway/internal/openapicheck"
+	"github.com/GizClaw/gizway/internal/openapicheck"
 )
 
 func main() {

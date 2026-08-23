@@ -22,13 +22,13 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.yaml.in/yaml/v3"
 
-	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
-	"github.com/idy/gizway/internal/api"
-	"github.com/idy/gizway/internal/catalogtoken"
-	payservice "github.com/idy/gizway/internal/gizpay"
-	wayservice "github.com/idy/gizway/internal/gizway"
-	"github.com/idy/gizway/internal/identity"
-	"github.com/idy/gizway/internal/storage"
+	bifrostadapter "github.com/GizClaw/gizway/internal/adapter/bifrost"
+	"github.com/GizClaw/gizway/internal/api"
+	"github.com/GizClaw/gizway/internal/catalogtoken"
+	payservice "github.com/GizClaw/gizway/internal/gizpay"
+	wayservice "github.com/GizClaw/gizway/internal/gizway"
+	"github.com/GizClaw/gizway/internal/identity"
+	"github.com/GizClaw/gizway/internal/storage"
 )
 
 type ProcessKind string

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/idy/gizway/internal/testdb"
+	"github.com/GizClaw/gizway/internal/testdb"
 )
 
 func TestPostgreSQLMilestone03GizPaySchemaContract(t *testing.T) {

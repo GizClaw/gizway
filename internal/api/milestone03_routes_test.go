@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/idy/gizway/internal/buildinfo"
+	"github.com/GizClaw/gizway/internal/buildinfo"
 )
 
 func TestMilestone03GizPayRouteBoundary(t *testing.T) {

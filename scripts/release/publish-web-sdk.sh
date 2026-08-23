@@ -6,7 +6,7 @@ version="${RELEASE_VERSION:-${1:-}}"
 output_dir="${RELEASE_SDK_OUTPUT_DIR:-$root/tmp/release/sdk}"
 registry="${NPM_REGISTRY_URL:-https://npm.pkg.github.com}"
 npm_bin="${NPM_BIN:-npm}"
-package='@idy/gizway-browser-sdk'
+package='@gizclaw/gizway-browser-sdk'
 
 [[ -n "$version" ]] || { printf 'RELEASE_VERSION or a tag argument is required\n' >&2; exit 2; }
 "$root/scripts/release/validate-tag.sh" "$version" --syntax-only
@@ -19,7 +19,7 @@ jq -e --arg package "$package" --arg version "$package_version" --arg registry "
   .name == $package and
   .version == $version and
   .publishConfig.registry == $registry and
-  .repository.url == "git+https://github.com/idy/gizway.git" and
+  .repository.url == "git+https://github.com/GizClaw/gizway.git" and
   (.private | not)
 ' <<<"$package_json" >/dev/null
 

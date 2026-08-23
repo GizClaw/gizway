@@ -15,7 +15,7 @@ import (
 
 	"github.com/maximhq/bifrost/core/schemas"
 
-	"github.com/idy/gizway/internal/store"
+	"github.com/GizClaw/gizway/internal/store"
 )
 
 func TestChatParametersAndAnthropicVersionArePreserved(t *testing.T) {

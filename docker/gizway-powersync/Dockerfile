@@ -2,7 +2,7 @@ FROM journeyapps/powersync-service:1.24.0@sha256:0fc9f65e693c07f1206007acddb8714
 ARG RELEASE_VERSION
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_TIME
-LABEL org.opencontainers.image.source="https://github.com/idy/gizway" \
+LABEL org.opencontainers.image.source="https://github.com/GizClaw/gizway" \
       org.opencontainers.image.version="${RELEASE_VERSION}" \
       org.opencontainers.image.revision="${RELEASE_REVISION}" \
       org.opencontainers.image.created="${RELEASE_BUILD_TIME}" \

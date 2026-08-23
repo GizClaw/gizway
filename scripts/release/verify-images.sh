@@ -19,7 +19,7 @@ while IFS=$'\t' read -r key image expected_command expected_base; do
   jq -e --arg version "$version" --arg revision "$revision" --arg build_time "$build_time" --arg base "$expected_base" \
     '.os == "linux" and .architecture == "amd64" and .created == $build_time
      and (.config.User | test("^[1-9][0-9]*(:[0-9]+)?$"))
-     and .config.Labels["org.opencontainers.image.source"] == "https://github.com/idy/gizway"
+     and .config.Labels["org.opencontainers.image.source"] == "https://github.com/GizClaw/gizway"
      and .config.Labels["org.opencontainers.image.version"] == $version
      and .config.Labels["org.opencontainers.image.revision"] == $revision
      and .config.Labels["org.opencontainers.image.created"] == $build_time

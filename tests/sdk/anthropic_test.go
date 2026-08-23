@@ -3,10 +3,10 @@ package sdk_test
 import (
 	"testing"
 
+	"github.com/GizClaw/gizway/tests/sdk/internal/assertions"
+	"github.com/GizClaw/gizway/tests/sdk/internal/fixture"
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/idy/gizway/tests/sdk/internal/assertions"
-	"github.com/idy/gizway/tests/sdk/internal/fixture"
 )
 
 func TestAnthropicOfficialSDKMessages(t *testing.T) {

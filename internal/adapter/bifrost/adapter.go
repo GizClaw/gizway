@@ -17,7 +17,7 @@ import (
 	bf "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 
-	"github.com/idy/gizway/internal/store"
+	"github.com/GizClaw/gizway/internal/store"
 )
 
 func bifrostContext(ctx context.Context, deadline time.Time) *schemas.BifrostContext {

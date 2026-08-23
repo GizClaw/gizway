@@ -1,3 +1,3 @@
-module github.com/idy/gizway/sdk/web
+module github.com/GizClaw/gizway/sdk/web
 
 go 1.26.6

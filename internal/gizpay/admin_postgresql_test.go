@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/idy/gizway/internal/testdb"
+	"github.com/GizClaw/gizway/internal/testdb"
 )
 
 func TestAdminProductPostgreSQLIdempotencyDependencyAndSoftDelete(t *testing.T) {

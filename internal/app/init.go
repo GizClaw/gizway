@@ -10,7 +10,7 @@ import (
 
 	"github.com/lib/pq"
 
-	"github.com/idy/gizway/internal/storage"
+	"github.com/GizClaw/gizway/internal/storage"
 )
 
 // RunMigrations creates the configured service schema and applies only the

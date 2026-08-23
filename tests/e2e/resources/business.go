@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/idy/gizway/internal/generated/gizpayadmin"
-	"github.com/idy/gizway/internal/generated/gizwayadmin"
-	"github.com/idy/gizway/internal/subscriptionkey"
+	"github.com/GizClaw/gizway/internal/generated/gizpayadmin"
+	"github.com/GizClaw/gizway/internal/generated/gizwayadmin"
+	"github.com/GizClaw/gizway/internal/subscriptionkey"
 )
 
 const fixtureIssuer = "https://identity.e2e.gizclaw.test:18080"
