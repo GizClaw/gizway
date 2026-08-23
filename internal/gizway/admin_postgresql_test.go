@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
-	"github.com/idy/gizway/internal/storage"
-	"github.com/idy/gizway/internal/testdb"
+	bifrostadapter "github.com/GizClaw/gizway/internal/adapter/bifrost"
+	"github.com/GizClaw/gizway/internal/storage"
+	"github.com/GizClaw/gizway/internal/testdb"
 	"gorm.io/gorm"
 )
 

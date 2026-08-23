@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 
-	"github.com/idy/gizway/internal/storage"
+	"github.com/GizClaw/gizway/internal/storage"
 )
 
 // OpenGizPayStory creates a seeded control-plane schema owned by the test.

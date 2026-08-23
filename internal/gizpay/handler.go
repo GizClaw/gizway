@@ -23,8 +23,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 
-	"github.com/idy/gizway/internal/identity"
-	"github.com/idy/gizway/internal/subscriptionkey"
+	"github.com/GizClaw/gizway/internal/identity"
+	"github.com/GizClaw/gizway/internal/subscriptionkey"
 )
 
 type Config struct {

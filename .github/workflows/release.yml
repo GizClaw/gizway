@@ -158,7 +158,7 @@ jobs:
           COSIGN_YES: "true"
         run: |
           set -euo pipefail
-          identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
+          identity="https://github.com/GizClaw/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
           while IFS=$'\t' read -r key image; do
             ref="$image@$(<"tmp/release/images/$key.digest")"
             cosign sign "$ref"
@@ -180,11 +180,11 @@ jobs:
         run: |
           set -euo pipefail
           manifest=tmp/release/release-manifest.json
-          identity="https://github.com/idy/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
+          identity="https://github.com/GizClaw/gizway/.github/workflows/release.yml@refs/tags/$RELEASE_VERSION"
           notes="$RUNNER_TEMP/release-notes.md"
           {
             # shellcheck disable=SC2016
-            printf 'Public OCI images for `%s`. Pull images by the digests recorded in `release-manifest.json`. The browser SDK is published separately as `@idy/gizway-browser-sdk` in GitHub Packages.\n\n' "$RELEASE_VERSION"
+            printf 'Public OCI images for `%s`. Pull images by the digests recorded in `release-manifest.json`. The browser SDK is published separately as `@gizclaw/gizway-browser-sdk` in GitHub Packages.\n\n' "$RELEASE_VERSION"
             printf 'Verify each digest with:\n\n```sh\n'
             printf "cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity '%s' IMAGE@DIGEST\n" "$identity"
             printf '```\n'

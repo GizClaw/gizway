@@ -11,7 +11,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"github.com/idy/gizway/internal/testdb"
+	"github.com/GizClaw/gizway/internal/testdb"
 )
 
 func TestReportOutboxDoesNotSendWhenSendingStateCannotBePersisted(t *testing.T) {

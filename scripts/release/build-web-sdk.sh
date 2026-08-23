@@ -28,10 +28,10 @@ source_asset="$(find "$stage" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
 cp "$source_asset" "$asset"
 package_json="$(tar -xOf "$asset" package/package.json)"
 jq -e --arg version "${version#v}" '
-  .name == "@idy/gizway-browser-sdk" and
+  .name == "@gizclaw/gizway-browser-sdk" and
   .version == $version and
   .publishConfig.registry == "https://npm.pkg.github.com" and
-  .repository.url == "git+https://github.com/idy/gizway.git" and
+  .repository.url == "git+https://github.com/GizClaw/gizway.git" and
   (.private | not)
 ' <<<"$package_json" >/dev/null
 printf '%s\n' "$asset"

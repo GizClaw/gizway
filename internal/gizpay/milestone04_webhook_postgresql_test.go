@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/idy/gizway/internal/testdb"
+	"github.com/GizClaw/gizway/internal/testdb"
 )
 
 func TestMilestone04ZITADELWebhookVerifiesAndInitializesOnlyHumans(t *testing.T) {

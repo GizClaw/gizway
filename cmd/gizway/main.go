@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/idy/gizway/internal/app"
+	"github.com/GizClaw/gizway/internal/app"
 )
 
 func main() {

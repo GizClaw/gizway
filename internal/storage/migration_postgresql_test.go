@@ -11,8 +11,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
-	"github.com/idy/gizway/internal/storage"
-	"github.com/idy/gizway/internal/testdb"
+	"github.com/GizClaw/gizway/internal/storage"
+	"github.com/GizClaw/gizway/internal/testdb"
 )
 
 func TestPostgreSQLMigrateGizPayFirstRunAndReplay(t *testing.T) {

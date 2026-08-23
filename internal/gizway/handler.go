@@ -18,9 +18,9 @@ import (
 	"github.com/jmoiron/sqlx"
 	"gorm.io/gorm"
 
-	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
-	"github.com/idy/gizway/internal/catalogtoken"
-	"github.com/idy/gizway/internal/identity"
+	bifrostadapter "github.com/GizClaw/gizway/internal/adapter/bifrost"
+	"github.com/GizClaw/gizway/internal/catalogtoken"
+	"github.com/GizClaw/gizway/internal/identity"
 )
 
 type Config struct {

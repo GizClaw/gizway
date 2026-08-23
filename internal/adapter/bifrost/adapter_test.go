@@ -12,8 +12,8 @@ import (
 
 	"github.com/maximhq/bifrost/core/schemas"
 
-	"github.com/idy/gizway/internal/store"
-	"github.com/idy/gizway/internal/testfake/aiprovider"
+	"github.com/GizClaw/gizway/internal/store"
+	"github.com/GizClaw/gizway/internal/testfake/aiprovider"
 )
 
 func TestCandidateExecutionForwardsMaxTokens(t *testing.T) {

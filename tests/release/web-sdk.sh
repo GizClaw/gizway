@@ -22,7 +22,14 @@ build_time="$(git show -s --format=%cI "$revision" | sed -E 's/\+00:00$/Z/')"
 printf 'version=%s\nrevision=%s\nbuild_time=%s\nsource_date_epoch=%s\n' "$version" "$revision" "$build_time" "$(git show -s --format=%ct "$revision")" >"$images/metadata.env"
 for key in gizpay gizway entry zitadel zitadel-login powersync; do printf 'sha256:%064d\n' 0 >"$images/$key.digest"; done
 RELEASE_OUTPUT_DIR="$images" RELEASE_MANIFEST="$manifest" "$root/scripts/release/create-manifest.sh" >/dev/null
-jq -e '(.images | length == 6) and ([.images[].instances[]] | length == 11) and (has("sdk") | not)' "$manifest" >/dev/null
+expected_identity="https://github.com/GizClaw/gizway/.github/workflows/release.yml@refs/tags/$version"
+jq -e --arg identity "$expected_identity" '
+  (.images | length == 6) and
+  ([.images[].instances[]] | length == 11) and
+  (all(.images[].ref; startswith("ghcr.io/gizclaw/gizway-"))) and
+  .signing.certificate_identity == $identity and
+  (has("sdk") | not)
+' "$manifest" >/dev/null
 release_workflow="$root/.github/workflows/release.yml"
 grep -Fq 'run: ./scripts/release/publish-web-sdk.sh' "$release_workflow"
 grep -Fq "args=(release create \"\$RELEASE_VERSION\" \"\$manifest#release-manifest.json\" --verify-tag" "$release_workflow"

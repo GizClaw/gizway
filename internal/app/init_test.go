@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 
-	"github.com/idy/gizway/internal/testdb"
+	"github.com/GizClaw/gizway/internal/testdb"
 )
 
 func TestRunInitializationIsIdempotentAndSeparatesDatabaseRoles(t *testing.T) {

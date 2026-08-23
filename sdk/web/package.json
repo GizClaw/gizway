@@ -1,10 +1,10 @@
 {
-  "name": "@idy/gizway-browser-sdk",
+  "name": "@gizclaw/gizway-browser-sdk",
   "version": "0.0.0-development",
-  "license": "UNLICENSED",
+  "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/idy/gizway.git"
+    "url": "git+https://github.com/GizClaw/gizway.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

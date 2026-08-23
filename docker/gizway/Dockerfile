@@ -8,7 +8,7 @@ ARG RELEASE_VERSION
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_TIME
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
-    -ldflags "-s -w -X github.com/idy/gizway/internal/buildinfo.Version=${RELEASE_VERSION} -X github.com/idy/gizway/internal/buildinfo.Revision=${RELEASE_REVISION} -X github.com/idy/gizway/internal/buildinfo.BuildTime=${RELEASE_BUILD_TIME}" \
+    -ldflags "-s -w -X github.com/GizClaw/gizway/internal/buildinfo.Version=${RELEASE_VERSION} -X github.com/GizClaw/gizway/internal/buildinfo.Revision=${RELEASE_REVISION} -X github.com/GizClaw/gizway/internal/buildinfo.BuildTime=${RELEASE_BUILD_TIME}" \
     -o /out/gizway ./cmd/gizway
 
 # debian:bookworm-slim
@@ -16,7 +16,7 @@ FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639
 ARG RELEASE_VERSION
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_TIME
-LABEL org.opencontainers.image.source="https://github.com/idy/gizway" \
+LABEL org.opencontainers.image.source="https://github.com/GizClaw/gizway" \
       org.opencontainers.image.version="${RELEASE_VERSION}" \
       org.opencontainers.image.revision="${RELEASE_REVISION}" \
       org.opencontainers.image.created="${RELEASE_BUILD_TIME}" \

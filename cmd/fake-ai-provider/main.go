@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/idy/gizway/internal/testfake/aiprovider"
+	"github.com/GizClaw/gizway/internal/testfake/aiprovider"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/idy/gizway/internal/testfake/creditspy"
+	"github.com/GizClaw/gizway/internal/testfake/creditspy"
 )
 
 func main() {

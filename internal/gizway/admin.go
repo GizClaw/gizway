@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	bifrostadapter "github.com/idy/gizway/internal/adapter/bifrost"
+	bifrostadapter "github.com/GizClaw/gizway/internal/adapter/bifrost"
 	"gorm.io/gorm"
 )
 

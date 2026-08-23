@@ -27,7 +27,24 @@ concurrency:
 
 jobs:
   review:
-    if: github.event_name != 'issues'
+    # Same-repository changes may be reviewed automatically. Forked pull
+    # requests require a trusted maintainer to request review in a comment, so
+    # untrusted contributors cannot spend the protected OpenAI credential by
+    # repeatedly synchronizing a branch.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (
+        github.event_name == 'pull_request_target'
+        && github.event.pull_request.head.repo.full_name == github.repository
+      )
+      || (
+        github.event_name == 'issue_comment'
+        && github.event.issue.pull_request != null
+        && contains(
+          fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+          github.event.comment.author_association
+        )
+      )
     uses: GizClaw/github-workflows/.github/workflows/codex-openai-review.yml@cff6ec446b57dff4cd682dd8539bc6de79f516c4
     with:
       model: gpt-5.6-terra
@@ -52,7 +69,15 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   resolve_linked_prs:
-    if: github.event_name == 'issues'
+    # Public contributors may edit their own Issues. Only trusted project
+    # participants may turn an Issue edit into a secret-backed linked-PR
+    # refresh.
+    if: >-
+      github.event_name == 'issues'
+      && contains(
+        fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+        github.event.issue.author_association
+      )
     runs-on: ubuntu-latest
     permissions:
       issues: read

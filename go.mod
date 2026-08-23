@@ -1,4 +1,4 @@
-module github.com/idy/gizway
+module github.com/GizClaw/gizway
 
 go 1.26.6
 

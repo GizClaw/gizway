@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/idy/gizway/internal/buildinfo"
+	"github.com/GizClaw/gizway/internal/buildinfo"
 )
 
 // Surface selects the service-owned route set.
