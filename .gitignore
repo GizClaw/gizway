@@ -30,6 +30,9 @@ test-results/
 /sdk/web/dist/
 /sdk/web/dist-harness/
 
+# Local-only project documentation
+/docs/
+
 # Local configuration and secrets
 .env
 .env.*
