@@ -1,24 +1,24 @@
-import { createGizWayBrowserClient, type GizWayBrowserClient, type PublicCatalogConnection, type Region } from "../src";
+import { createGizWayClient, type GizWayClient, type PublicCatalogConnection, type Region } from "../src";
 
-let client: GizWayBrowserClient | undefined;
+let client: GizWayClient | undefined;
 let connection: PublicCatalogConnection | undefined;
-let authenticated: Awaited<ReturnType<GizWayBrowserClient["connectAuthenticated"]>> | undefined;
+let authenticated: Awaited<ReturnType<GizWayClient["connectAuthenticated"]>> | undefined;
 
 globalThis.sdkTest = {
   async connectPublic(entryOrigin: string, region: Region) {
     connection = undefined;
-    client = await createGizWayBrowserClient({ entryOrigin, region });
+    client = await createGizWayClient({ entryOrigin, region });
     connection = await client.connectPublicCatalog();
     const catalog = await connection.getCatalog();
     return { states: connection.getStates(), products: catalog.products.length, models: catalog.models.length };
   },
   async state() { return connection?.getStates(); },
   async beginLogin(entryOrigin: string, region: Region) {
-    client = await createGizWayBrowserClient({ entryOrigin, region });
+    client = await createGizWayClient({ entryOrigin, region });
     return client.auth.beginLogin();
   },
   async completeLogin(entryOrigin: string, region: Region, callbackURL: string) {
-    client = await createGizWayBrowserClient({ entryOrigin, region });
+    client = await createGizWayClient({ entryOrigin, region });
     await client.auth.completeLogin(callbackURL);
     authenticated = await client.connectAuthenticated();
     const [pay, way] = await Promise.all([authenticated.gizpay.getSnapshot(), authenticated.gizway.getSnapshot()]);

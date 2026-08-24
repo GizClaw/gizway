@@ -9,7 +9,7 @@ GizWay is the AI gateway, realtime synchronization, identity, and credit
 payment platform used by GizClaw products. It runs one central GizPay service
 and independent regional GizWay gateways for Global and CN deployments.
 
-The repository owns application binaries, API contracts, browser SDK sources,
+The repository owns application binaries, API contracts, GizWay SDK sources,
 runtime image composition, and development/E2E validation. Production
 infrastructure, secrets, rollout, rollback, and deployment are owned by the
 separate `GizClaw/deploy` repository.
@@ -21,7 +21,7 @@ separate `GizClaw/deploy` repository.
 - `cmd/gizway`: regional AI gateway backed by an independent PostgreSQL
   database and embedded Bifrost provider runtime.
 - `api/openapi`: seven source OpenAPI 3.1 contracts and generated Go bindings.
-- `sdk/web`: browser SDK published as `@gizclaw/gizway-browser-sdk`.
+- `sdk/web`: GizWay JavaScript SDK published to npm as `gizway`.
 - `docker`: production image definitions for GizPay, GizWay, Entry, PowerSync,
   ZITADEL, and ZITADEL Login.
 - `tests`: executable Hurl, PostgreSQL, SDK, PowerSync, release, and Compose E2E
@@ -95,7 +95,7 @@ publishes immutable version and revision tags, checks anonymous OCI access,
 signs exact digests with GitHub Actions OIDC, and attaches a deterministic
 `release-manifest.json`.
 
-The browser SDK has an independent npm lifecycle. Its version is owned by
+The `gizway` SDK has an independent npm lifecycle. Its version is owned by
 `sdk/web/package.json` and synchronized to `sdk/web/package-lock.json`. After a
 version change has merged and passed CI, an authenticated maintainer may make a
 separate publication decision, run `npm ci` from `sdk/web`, and then run

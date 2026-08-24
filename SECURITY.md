@@ -23,7 +23,7 @@ severity and exploitability.
 In scope:
 
 - GizPay and GizWay application code and APIs;
-- browser SDK code maintained in this repository;
+- GizWay SDK code maintained in this repository;
 - Entry, PowerSync, and identity integration code owned here;
 - repository CI, packaging, signing, and release automation.
 

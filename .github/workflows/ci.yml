@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  browser-sdk:
-    name: Browser SDK gate
+  gizway-sdk:
+    name: GizWay SDK gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,10 +31,10 @@ jobs:
           node-version: 22.22.1
           cache: npm
           cache-dependency-path: sdk/web/package-lock.json
-      - name: Run browser SDK gates
+      - name: Run GizWay SDK gates
         run: |
-          make test-unit-browser-sdk
-          make test-package-browser-sdk
+          make test-unit-gizway-sdk
+          make test-package-gizway-sdk
 
   full:
     name: Full Go and API gate
@@ -165,7 +165,7 @@ jobs:
         working-directory: tests/powersync
         run: npm ci
 
-      - name: Install browser SDK test dependencies and Chromium
+      - name: Install GizWay SDK browser test dependencies and Chromium
         working-directory: sdk/web
         run: |
           npm ci

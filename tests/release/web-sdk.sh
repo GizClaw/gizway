@@ -76,9 +76,10 @@ grep -qx 'package/package.json' "$first/contents"
 
 packed_package_json="$(tar -xOf "$first/$artifact" package/package.json)"
 jq -e --arg version "$package_version" '
-  .name == "@gizclaw/gizway-browser-sdk" and
+  .name == "gizway" and
   .version == $version and
-  .publishConfig.registry == "https://npm.pkg.github.com" and
+  .publishConfig.access == "public" and
+  .publishConfig.registry == "https://registry.npmjs.org" and
   .repository.url == "git+https://github.com/GizClaw/gizway.git" and
   (.private | not)
 ' <<<"$packed_package_json" >/dev/null
@@ -92,7 +93,7 @@ jq -e --arg version "$package_version" '
 release_workflow="$root/.github/workflows/release.yml"
 grep -Fxq 'name: Release OCI images' "$release_workflow"
 grep -Fq "args=(release create \"\$RELEASE_VERSION\" \"\$manifest#release-manifest.json\" --verify-tag" "$release_workflow"
-if grep -Eqi 'browser[- ]sdk|sdk/web|npm|NODE_AUTH_TOKEN|publish-web-sdk|build-web-sdk|\.tgz#' "$release_workflow"; then
-  printf 'OCI release workflow must not build, authenticate, publish, or describe the browser SDK\n' >&2
+if grep -Eqi 'gizway[- ]sdk|browser[- ]sdk|sdk/web|npm|NODE_AUTH_TOKEN|publish-web-sdk|build-web-sdk|\.tgz#' "$release_workflow"; then
+  printf 'OCI release workflow must not build, authenticate, publish, or describe the GizWay SDK\n' >&2
   exit 1
 fi

@@ -12,7 +12,7 @@ export class AuthenticationRequiredError extends Error {
   }
 }
 
-export type BrowserAuth = {
+export type GizWayAuth = {
   beginLogin(): Promise<string>;
   completeLogin(callbackURL: string | URL): Promise<void>;
   getAccessToken(): Promise<string>;
@@ -27,7 +27,7 @@ export function createBrowserAuth(options: {
   fetcher?: Fetch;
   crypto?: CryptoLike;
   clock?: () => number;
-}): BrowserAuth {
+}): GizWayAuth {
   const { config, region, storage } = options;
   const fetcher = options.fetcher ?? globalThis.fetch;
   const crypto = options.crypto ?? globalThis.crypto;

@@ -27,11 +27,12 @@ jq -e '
 ' "$root/release/images.json" >/dev/null
 
 jq -e '
-  .name == "@gizclaw/gizway-browser-sdk" and
+  .name == "gizway" and
   .version != "0.0.0-development" and
   .license == "BSD-3-Clause" and
   .repository.url == "git+https://github.com/GizClaw/gizway.git" and
-  .publishConfig.registry == "https://npm.pkg.github.com"
+  .publishConfig.access == "public" and
+  .publishConfig.registry == "https://registry.npmjs.org"
 ' "$root/sdk/web/package.json" >/dev/null
 jq -e --slurpfile package "$root/sdk/web/package.json" '
   .version == $package[0].version and
@@ -41,8 +42,8 @@ jq -e --slurpfile package "$root/sdk/web/package.json" '
 release_workflow="$root/.github/workflows/release.yml"
 review_workflow="$root/.github/workflows/codex-review.yml"
 grep -Fq 'https://github.com/GizClaw/gizway/.github/workflows/release.yml@refs/tags/' "$release_workflow"
-if grep -Eqi 'browser[- ]sdk|sdk/web|npm|NODE_AUTH_TOKEN|publish-web-sdk|build-web-sdk' "$release_workflow"; then
-  printf 'OCI release workflow still owns browser SDK publication\n' >&2
+if grep -Eqi 'gizway[- ]sdk|browser[- ]sdk|sdk/web|npm|NODE_AUTH_TOKEN|publish-web-sdk|build-web-sdk' "$release_workflow"; then
+  printf 'OCI release workflow still owns GizWay SDK publication\n' >&2
   exit 1
 fi
 grep -Fq 'github.event.comment.author_association' "$review_workflow"

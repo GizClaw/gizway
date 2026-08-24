@@ -17,18 +17,19 @@ test("packed SDK installs, typechecks, and bundles from root exports", () => {
     assert.equal(packageMetadata.version, sourcePackageJSON.version);
     assert.equal(lockfile.version, sourcePackageJSON.version);
     assert.equal(lockfile.packages[""].version, sourcePackageJSON.version);
-    writeFileSync(join(temporary, "package.json"), JSON.stringify({ type: "module", scripts: { check: "tsc --noEmit && vite build" }, dependencies: { "@gizclaw/gizway-browser-sdk": `file:./${filename}`, typescript: "5.9.3", vite: "8.2.2" } }));
+    writeFileSync(join(temporary, "package.json"), JSON.stringify({ type: "module", scripts: { check: "tsc --noEmit && vite build" }, dependencies: { gizway: `file:./${filename}`, typescript: "5.9.3", vite: "8.2.2" } }));
     writeFileSync(join(temporary, "index.html"), '<script type="module" src="/src.ts"></script>\n');
-    writeFileSync(join(temporary, "src.ts"), 'import { createGizWayBrowserClient, type Region } from "@gizclaw/gizway-browser-sdk"; const region: Region = "global"; void createGizWayBrowserClient({entryOrigin:"https://entry.example.test", region});\n');
+    writeFileSync(join(temporary, "src.ts"), 'import { createGizWayClient, type Region } from "gizway"; const region: Region = "global"; void createGizWayClient({entryOrigin:"https://entry.example.test", region});\n');
     writeFileSync(join(temporary, "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ES2022", moduleResolution: "Bundler", strict: true, lib: ["ES2023", "DOM"] }, include: ["src.ts"] }));
     execFileSync("npm", ["install", "--dry-run=false", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: temporary, stdio: "pipe" });
     execFileSync("npm", ["run", "check"], { cwd: temporary, stdio: "pipe" });
-    const packageJSON = JSON.parse(readFileSync(join(temporary, "node_modules/@gizclaw/gizway-browser-sdk/package.json"), "utf8"));
-    assert.equal(packageJSON.name, "@gizclaw/gizway-browser-sdk");
+    const packageJSON = JSON.parse(readFileSync(join(temporary, "node_modules/gizway/package.json"), "utf8"));
+    assert.equal(packageJSON.name, "gizway");
     assert.equal(packageJSON.version, sourcePackageJSON.version);
     assert.equal(packageJSON.private, undefined);
     assert.deepEqual(packageJSON.files, ["dist", "package.json"]);
-    assert.equal(packageJSON.publishConfig.registry, "https://npm.pkg.github.com");
+    assert.equal(packageJSON.publishConfig.access, "public");
+    assert.equal(packageJSON.publishConfig.registry, "https://registry.npmjs.org");
     assert.equal(packageJSON.repository.url, "git+https://github.com/GizClaw/gizway.git");
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 });
