@@ -12,9 +12,9 @@ export NPM_DIST_TAG
 	fmt fmt-go fmt-hurl fmt-module \
 	lint lint-go lint-actions \
 	verify-modules build \
-	build-images publish-npm test-release-images test-package-browser-sdk \
+	build-images publish-npm test-release-images test-package-gizway-sdk \
 	test test-unit test-unit-go test-unit-go-race test-unit-api test-unit-postgresql \
-	test-unit-sdk test-unit-powersync test-unit-browser-sdk test-e2e test-e2e-sdk test-e2e-powersync test-e2e-browser-sdk
+	test-unit-sdk test-unit-powersync test-unit-gizway-sdk test-e2e test-e2e-sdk test-e2e-powersync test-e2e-gizway-sdk
 
 help:
 	@printf '%s\n' \
@@ -43,14 +43,14 @@ help:
 		'  test-unit-postgresql run production-dialect tests on local PostgreSQL' \
 		'  test-unit-sdk       compile the pinned official SDK test module' \
 		'  test-unit-powersync typecheck and run offline PowerSync client contracts' \
-		'  test-unit-browser-sdk run browser SDK type, lint, unit, build, and package gates' \
+		'  test-unit-gizway-sdk run GizWay SDK type, lint, unit, build, and package gates' \
 		'  test-e2e            run Milestone 03 Compose acceptance scenarios' \
 		'  test-e2e-sdk        run the official SDK compatibility matrix' \
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
-		'  test-e2e-browser-sdk run real Global/CN browser SDK acceptance' \
+		'  test-e2e-gizway-sdk run real Global/CN GizWay SDK acceptance' \
 		'  build-images        build six linux/amd64 production OCI layouts' \
-		'  publish-npm         publish the package.json version of the browser SDK' \
-		'  test-package-browser-sdk validate direct npm package and OCI release separation' \
+		'  publish-npm         publish the package.json version of the gizway SDK' \
+		'  test-package-gizway-sdk validate direct gizway package and OCI release separation' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 
 fmt: fmt-go fmt-hurl fmt-module
@@ -107,7 +107,7 @@ test-unit-sdk:
 test-unit-powersync:
 	@cd tests/powersync && npm run typecheck && npm test
 
-test-unit-browser-sdk:
+test-unit-gizway-sdk:
 	@./scripts/test-unit/test-unit-browser-sdk.sh
 
 test-e2e:
@@ -119,8 +119,8 @@ test-e2e-sdk:
 test-e2e-powersync:
 	@./tests/e2e/run.sh powersync
 
-test-e2e-browser-sdk:
-	@./tests/e2e/run.sh browser-sdk
+test-e2e-gizway-sdk:
+	@./tests/e2e/run.sh gizway-sdk
 
 build-images:
 	@./scripts/release/build-images.sh "$(RELEASE_VERSION)"
@@ -151,5 +151,5 @@ test-release-images:
 	@./scripts/release/verify-images.sh
 	@./tests/release/smoke.sh
 
-test-package-browser-sdk:
+test-package-gizway-sdk:
 	@./tests/release/web-sdk.sh

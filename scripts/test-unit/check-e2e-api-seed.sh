@@ -11,7 +11,7 @@ if rg -n 'jmoiron/sqlx|lib/pq|gorm\.io|internal/adapter/bifrost|gizpay-dsn|cn-ds
 fi
 
 if rg -n '\bpsql\b' "${browser_test}"; then
-    echo "real browser SDK E2E must mutate Model Listings through Admin API" >&2
+    echo "real GizWay SDK E2E must mutate Model Listings through Admin API" >&2
     exit 1
 fi
 

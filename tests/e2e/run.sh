@@ -4,7 +4,7 @@ set -u
 root="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 compose="$root/tests/e2e/compose.yaml"
 mode="${1:-}"
-case "$mode" in all|api|sdk|powersync|browser-sdk) ;; *) echo "usage: $0 all|api|sdk|powersync|browser-sdk" >&2; exit 2;; esac
+case "$mode" in all|api|sdk|powersync|gizway-sdk) ;; *) echo "usage: $0 all|api|sdk|powersync|gizway-sdk" >&2; exit 2;; esac
 for tls_input in TLS_CERT_FILE TLS_KEY_FILE; do
   eval "tls_path=\${$tls_input:-}"
   if [ -z "$tls_path" ] || [ ! -r "$tls_path" ]; then
@@ -248,11 +248,11 @@ run_browser_sdk() {
 }
 
 case "$mode" in
-  all) run_case api run_api; run_case sdk run_sdk; run_case powersync run_powersync; run_case browser-sdk run_browser_sdk ;;
+  all) run_case api run_api; run_case sdk run_sdk; run_case powersync run_powersync; run_case gizway-sdk run_browser_sdk ;;
   api) run_case api run_api ;;
   sdk) run_case sdk run_sdk ;;
   powersync) run_case powersync run_powersync ;;
-  browser-sdk) run_case browser-sdk run_browser_sdk ;;
+  gizway-sdk) run_case gizway-sdk run_browser_sdk ;;
 esac
 cat "$results"
 grep -q 'FAIL' "$results" && exit 1

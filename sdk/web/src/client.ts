@@ -1,5 +1,5 @@
 import type { PowerSyncBackendConnector, PowerSyncDatabase } from "@powersync/web";
-import { createBrowserAuth, subjectFromToken, type BrowserAuth } from "./auth";
+import { createBrowserAuth, subjectFromToken, type GizWayAuth } from "./auth";
 import { loadRuntimeConfig, publicCatalogToken, type Fetch, type PublicRuntimeConfig } from "./config";
 import type { CatalogProduct } from "./contracts/gizpay";
 import type { GizPayRepository } from "./contracts/gizpay";
@@ -22,10 +22,10 @@ export type PublicCatalogConnection = ConnectionBase & {
   getCatalog(): Promise<{ products: CatalogProduct[]; models: CatalogModel[] }>;
 };
 export type AuthenticatedConnection = ConnectionBase & { gizpay: GizPayRepository; gizway: GizWayRepository };
-export type GizWayBrowserClient = {
+export type GizWayClient = {
   readonly region: Region;
   readonly config: PublicRuntimeConfig;
-  readonly auth: BrowserAuth;
+  readonly auth: GizWayAuth;
   connectPublicCatalog(options?: { signal?: AbortSignal }): Promise<PublicCatalogConnection>;
   connectAuthenticated(options?: { signal?: AbortSignal; onMutationError?: (error: Error) => void }): Promise<AuthenticatedConnection>;
   clearLocalData(): Promise<void>;
@@ -40,7 +40,7 @@ export type CreateClientOptions = {
   clock?: () => number;
 };
 
-export async function createGizWayBrowserClient(options: CreateClientOptions): Promise<GizWayBrowserClient> {
+export async function createGizWayClient(options: CreateClientOptions): Promise<GizWayClient> {
   const fetcher = options.fetch ?? globalThis.fetch;
   const crypto = options.crypto ?? globalThis.crypto;
   const storage = options.storage ?? globalThis.sessionStorage;
@@ -50,12 +50,12 @@ export async function createGizWayBrowserClient(options: CreateClientOptions): P
   return createClientWithDatabaseFactory(options.region, config, auth, fetcher, crypto, options.clock ?? Date.now, defaultDatabaseFactory);
 }
 
-function createClientWithDatabaseFactory(region: Region, config: PublicRuntimeConfig, auth: BrowserAuth, fetcher: Fetch, crypto: Pick<Crypto, "subtle">, clock: () => number, databaseFactory: DatabaseFactory): GizWayBrowserClient {
+function createClientWithDatabaseFactory(region: Region, config: PublicRuntimeConfig, auth: GizWayAuth, fetcher: Fetch, crypto: Pick<Crypto, "subtle">, clock: () => number, databaseFactory: DatabaseFactory): GizWayClient {
   const active = new Set<ConnectionBase>();
   let lastSubject: string | undefined;
   let closing: Promise<void> | undefined;
   let closed = false;
-  const ensureOpen = () => { if (closed) throw new Error("browser SDK client is closed"); };
+  const ensureOpen = () => { if (closed) throw new Error("GizWay SDK client is closed"); };
   const track = <T extends ConnectionBase>(connection: T): T => {
     const close = connection.close;
     connection.close = async () => { try { await close(); } finally { active.delete(connection); } };
