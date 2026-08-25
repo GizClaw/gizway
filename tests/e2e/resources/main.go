@@ -33,6 +33,7 @@ type options struct {
 	identityFile, story                            string
 	resourceConfigFile, hmacSecretFile             string
 	cnProviderURL, globalProviderURL               string
+	globalEntryPort, cnEntryPort                   int
 }
 
 func main() {
@@ -50,6 +51,8 @@ func main() {
 	flag.StringVar(&options.hmacSecretFile, "hmac-secret-file", "", "shared HMAC Secret file")
 	flag.StringVar(&options.cnProviderURL, "cn-provider-url", "", "CN fake Provider URL")
 	flag.StringVar(&options.globalProviderURL, "global-provider-url", "", "Global fake Provider URL")
+	flag.IntVar(&options.globalEntryPort, "global-entry-port", 3000, "Global Entry host port advertised to browser clients")
+	flag.IntVar(&options.cnEntryPort, "cn-entry-port", 3001, "CN Entry host port advertised to browser clients")
 	flag.Parse()
 	var err error
 	switch options.mode {
@@ -219,7 +222,8 @@ func bootstrapZITADEL(options options) error {
 	if err := os.WriteFile(filepath.Join(options.outputDirectory, "zitadel-action-signing-key"), []byte("pending-action-target"), 0600); err != nil {
 		return err
 	}
-	if err := writeGizWayE2EConfigs(options.outputDirectory, variables, applications[0]); err != nil {
+	variables["browser_client_id"] = applications[0]
+	if err := writeGizWayE2EConfigs(options.outputDirectory, variables, options.globalEntryPort, options.cnEntryPort); err != nil {
 		return err
 	}
 	mapIdentityVariables(variables, projects, identityKeys)
@@ -234,7 +238,7 @@ func reusableZITADELFixtures(outputDirectory string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read existing ZITADEL fixture output: %w", err)
 	}
-	for _, name := range []string{"human_subject", "human_token", "human_username", "human_password", "browser_client_first_login_username", "browser_client_first_login_password", "service_token", "cn_catalog_token", "global_catalog_token"} {
+	for _, name := range []string{"human_subject", "human_token", "human_username", "human_password", "browser_client_id", "browser_client_first_login_username", "browser_client_first_login_password", "service_token", "cn_catalog_token", "global_catalog_token"} {
 		if variables[name] == "" {
 			return false, fmt.Errorf("existing ZITADEL fixture output is incomplete: %s is missing", name)
 		}
@@ -311,18 +315,20 @@ func (c *zitadelClient) configureUserInitializationAction(outputDirectory string
 	return os.WriteFile(filepath.Join(outputDirectory, "zitadel-action-signing-key"), []byte(target.SigningKey), 0600)
 }
 
-func writeGizWayE2EConfigs(outputDirectory string, values map[string]string, browserClientID string) error {
+func writeGizWayE2EConfigs(outputDirectory string, values map[string]string, globalEntryPort, cnEntryPort int) error {
+	if globalEntryPort < 1 || globalEntryPort > 65535 || cnEntryPort < 1 || cnEntryPort > 65535 {
+		return errors.New("global and CN Entry ports must be between 1 and 65535")
+	}
 	for _, region := range []string{"cn", "global"} {
 		clientID, clientSecret := values["gizway-"+region+"-catalog@client_id"], values["gizway-"+region+"-catalog@client_secret"]
 		if clientID == "" || clientSecret == "" {
 			return fmt.Errorf("%s Public Catalog credentials are missing", region)
 		}
-		entryPort := 3000
+		entryPort := globalEntryPort
 		if region == "cn" {
-			entryPort = 3001
+			entryPort = cnEntryPort
 		}
 		entryBaseURL := fmt.Sprintf("https://%s.e2e.gizclaw.test:%d", region, entryPort)
-		browserBaseURL := "http://127.0.0.1:4173"
 		contents := fmt.Sprintf(`version: 1
 server:
   name: %s.e2e.gizclaw.test
@@ -333,9 +339,6 @@ site:
   hostname: %s.e2e.gizclaw.test
 identity:
   issuer: https://identity.e2e.gizclaw.test:18080
-  client_id: %s
-  redirect_uri: %s/harness.html
-  post_logout_redirect_uri: %s/harness.html
   public_catalog_service_account:
     client_id: %s
     client_secret: %s
@@ -379,7 +382,7 @@ bifrost:
     type: postgresql
     dsn: postgres://gizway_%s_app:gizway_%s_app@postgres-%s:5432/gizway?sslmode=disable
     schema: bifrost_logs
-`, region, region, browserClientID, browserBaseURL, browserBaseURL, clientID, clientSecret, entryBaseURL, entryBaseURL, entryBaseURL, entryBaseURL, entryBaseURL, region, region, region, region, region, region, region, region, region, region)
+`, region, region, clientID, clientSecret, entryBaseURL, entryBaseURL, entryBaseURL, entryBaseURL, entryBaseURL, region, region, region, region, region, region, region, region, region, region)
 		if err := os.WriteFile(filepath.Join(outputDirectory, "gizway-"+region+".yaml"), []byte(contents), 0600); err != nil {
 			return err
 		}

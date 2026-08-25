@@ -25,6 +25,9 @@ private_key="$(openssl pkey -in "$TLS_KEY_FILE" -pubout -outform DER | openssl d
 [ "$certificate_key" = "$private_key" ] || { echo "TLS private key does not match certificate" >&2; exit 2; }
 tls_spki="$(openssl x509 -in "$TLS_CERT_FILE" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | openssl base64 -A)"
 project="gizway-e2e-${mode}-$$"
+global_entry_port="${GIZWAY_E2E_GLOBAL_PORT:-3000}"
+cn_entry_port="${GIZWAY_E2E_CN_PORT:-3001}"
+export GIZWAY_E2E_GLOBAL_PORT="$global_entry_port" GIZWAY_E2E_CN_PORT="$cn_entry_port"
 fixture="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e.XXXXXX")"
 results="$(mktemp "${TMPDIR:-/tmp}/gizway-e2e-results.XXXXXX")"
 postgres_tls_directory="$(mktemp -d "${TMPDIR:-/tmp}/gizway-postgres-tls.XXXXXX")"
@@ -160,30 +163,58 @@ wait_postgres_tls_role postgres-powersync postgres powersync_cn_storage || fail_
 assert_same_route_fingerprint login-exact http://zitadel-login:3000/ui/v2/login identity.e2e.gizclaw.test 18080 /ui/v2/login || fail_with_logs
 assert_same_route_fingerprint login-descendant http://zitadel-login:3000/ui/v2/login/healthy identity.e2e.gizclaw.test 18080 /ui/v2/login/healthy || fail_with_logs
 assert_same_route_fingerprint login-lookalike http://zitadel:8080/ui/v2/loginx identity.e2e.gizclaw.test 18080 /ui/v2/loginx || fail_with_logs
-assert_same_route_fingerprint pay-sync-exact http://powersync-pay:8080/ global.e2e.gizclaw.test 3000 /_sync/gizpay || fail_with_logs
-assert_same_route_fingerprint pay-sync-descendant 'http://powersync-pay:8080/sync/stream?probe=route' global.e2e.gizclaw.test 3000 '/_sync/gizpay/sync/stream?probe=route' || fail_with_logs
-assert_same_route_fingerprint way-sync-exact http://powersync-global:8080/ global.e2e.gizclaw.test 3000 /_sync/gizway || fail_with_logs
+assert_same_route_fingerprint pay-sync-exact http://powersync-pay:8080/ global.e2e.gizclaw.test "$global_entry_port" /_sync/gizpay || fail_with_logs
+assert_same_route_fingerprint pay-sync-descendant 'http://powersync-pay:8080/sync/stream?probe=route' global.e2e.gizclaw.test "$global_entry_port" '/_sync/gizpay/sync/stream?probe=route' || fail_with_logs
+assert_same_route_fingerprint way-sync-exact http://powersync-global:8080/ global.e2e.gizclaw.test "$global_entry_port" /_sync/gizway || fail_with_logs
 for path in / /marketplace /_sync/gizpayx /_sync/gizwayx; do
-  [ "$(routed_fingerprint global.e2e.gizclaw.test 3000 "$path" | cut -f1)" = 404 ] || { echo "API-only Entry routed unexpected path $path" >&2; fail_with_logs; }
+  [ "$(routed_fingerprint global.e2e.gizclaw.test "$global_entry_port" "$path" | cut -f1)" = 404 ] || { echo "API-only Entry routed unexpected path $path" >&2; fail_with_logs; }
 done
-cors_headers="$(mktemp "${TMPDIR:-/tmp}/gizway-cors.XXXXXX")"
-curl --noproxy '*' --silent --show-error --cacert "$TLS_CERT_FILE" --resolve global.e2e.gizclaw.test:3000:127.0.0.1 \
-  --request OPTIONS --header 'Origin: http://127.0.0.1:4173' --header 'Access-Control-Request-Method: POST' \
-  --header 'Access-Control-Request-Headers: authorization,content-type,x-user-agent' --dump-header "$cors_headers" --output /dev/null \
-  https://global.e2e.gizclaw.test:3000/auth/runtime-config || fail_with_logs
-tr -d '\r' <"$cors_headers" >"$cors_headers.normalized"
-grep -Eiq '^Access-Control-Allow-Origin: http://127\.0\.0\.1:4173$' "$cors_headers.normalized" || { echo 'CORS preflight omitted the exact allowed origin' >&2; fail_with_logs; }
-grep -Eiq '^Access-Control-Allow-Headers: .*X-User-Agent' "$cors_headers.normalized" || { echo 'CORS preflight omitted X-User-Agent allowance' >&2; fail_with_logs; }
-grep -Eiq '^Access-Control-Expose-Headers: Retry-After$' "$cors_headers.normalized" || { echo 'CORS preflight omitted Retry-After exposure' >&2; fail_with_logs; }
-grep -Eiq '^Vary: Origin$' "$cors_headers.normalized" || { echo 'CORS preflight omitted Vary: Origin' >&2; fail_with_logs; }
-rm -f "$cors_headers" "$cors_headers.normalized"
+for cors_region in global cn; do
+  case "$cors_region" in
+    global) cors_host=global.e2e.gizclaw.test; cors_port="$global_entry_port" ;;
+    cn) cors_host=cn.e2e.gizclaw.test; cors_port="$cn_entry_port" ;;
+  esac
+  expected_auth_status=''
+  expected_auth_code=''
+  for cors_origin in http://127.0.0.1:4173 https://consumer.example.test; do
+    cors_headers="$(mktemp "${TMPDIR:-/tmp}/gizway-cors.XXXXXX")"
+    cors_body="$(mktemp "${TMPDIR:-/tmp}/gizway-cors-body.XXXXXX")"
+    curl --noproxy '*' --silent --show-error --cacert "$TLS_CERT_FILE" --resolve "$cors_host:$cors_port:127.0.0.1" \
+      --request OPTIONS --header "Origin: $cors_origin" --header 'Access-Control-Request-Method: POST' \
+      --header 'Access-Control-Request-Headers: authorization,content-type,x-user-agent' --dump-header "$cors_headers" --output /dev/null \
+      "https://$cors_host:$cors_port/auth/runtime-config" || fail_with_logs
+    tr -d '\r' <"$cors_headers" >"$cors_headers.normalized"
+    grep -Eiq '^Access-Control-Allow-Origin: \*$' "$cors_headers.normalized" || { echo "$cors_region CORS preflight for $cors_origin omitted wildcard origin" >&2; fail_with_logs; }
+    grep -Eiq '^Access-Control-Allow-Methods: .*GET.*POST.*PUT.*PATCH.*DELETE.*OPTIONS' "$cors_headers.normalized" || { echo "$cors_region CORS preflight for $cors_origin omitted fixed methods" >&2; fail_with_logs; }
+    grep -Eiq '^Access-Control-Allow-Headers: .*X-User-Agent' "$cors_headers.normalized" || { echo "$cors_region CORS preflight for $cors_origin omitted X-User-Agent allowance" >&2; fail_with_logs; }
+    if grep -Eiq '^Access-Control-Allow-Credentials:|^Vary:.*Origin' "$cors_headers.normalized"; then echo "$cors_region CORS preflight for $cors_origin enabled credentials or varied by Origin" >&2; fail_with_logs; fi
+
+    auth_status="$(curl --noproxy '*' --silent --show-error --cacert "$TLS_CERT_FILE" --resolve "$cors_host:$cors_port:127.0.0.1" \
+      --header "Origin: $cors_origin" --dump-header "$cors_headers" --output "$cors_body" --write-out '%{http_code}' \
+      "https://$cors_host:$cors_port/openai/v1/models")" || fail_with_logs
+    tr -d '\r' <"$cors_headers" >"$cors_headers.normalized"
+    grep -Eiq '^Access-Control-Allow-Origin: \*$' "$cors_headers.normalized" || { echo "$cors_region actual CORS response for $cors_origin omitted wildcard origin" >&2; fail_with_logs; }
+    grep -Eiq '^Access-Control-Expose-Headers: Retry-After$' "$cors_headers.normalized" || { echo "$cors_region actual CORS response for $cors_origin omitted Retry-After exposure" >&2; fail_with_logs; }
+    if grep -Eiq '^Access-Control-Allow-Credentials:|^Vary:.*Origin' "$cors_headers.normalized"; then echo "$cors_region actual CORS response for $cors_origin enabled credentials or varied by Origin" >&2; fail_with_logs; fi
+    if [ -z "$expected_auth_status" ]; then
+      [ "$auth_status" -ge 400 ] || { echo "$cors_region unauthenticated API request unexpectedly succeeded with $auth_status" >&2; fail_with_logs; }
+      expected_auth_status="$auth_status"
+      expected_auth_code="$(sed -n 's/.*"code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cors_body")"
+      [ -n "$expected_auth_code" ] || { echo "$cors_region unauthenticated API response omitted its error code" >&2; fail_with_logs; }
+    elif [ "$auth_status" != "$expected_auth_status" ] || ! grep -Eq '"code"[[:space:]]*:[[:space:]]*"'"$expected_auth_code"'"' "$cors_body"; then
+      echo "$cors_region API authorization result changed with Origin: expected $expected_auth_status" >&2
+      fail_with_logs
+    fi
+    rm -f "$cors_headers" "$cors_headers.normalized" "$cors_body"
+  done
+done
 if curl --noproxy '*' --fail --silent --show-error --cacert "$TLS_CERT_FILE" \
-  --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
+  --resolve "invalid.e2e.gizclaw.test:$global_entry_port:127.0.0.1" "https://invalid.e2e.gizclaw.test:$global_entry_port/healthz" >/dev/null 2>&1; then
   echo "Entry accepted a certificate/SNI mismatch" >&2
   fail_with_logs
 fi
 if curl --noproxy '*' --insecure --fail --silent --show-error \
-  --resolve invalid.e2e.gizclaw.test:3000:127.0.0.1 https://invalid.e2e.gizclaw.test:3000/healthz >/dev/null 2>&1; then
+  --resolve "invalid.e2e.gizclaw.test:$global_entry_port:127.0.0.1" "https://invalid.e2e.gizclaw.test:$global_entry_port/healthz" >/dev/null 2>&1; then
   echo "Entry routed an unknown host" >&2
   fail_with_logs
 fi
@@ -243,7 +274,8 @@ run_powersync() {
 run_browser_sdk() {
   (cd "$root/sdk/web" && M04_REAL_E2E=1 M04_E2E_COMPOSE_PROJECT="$project" \
     M04_TLS_SPKI="$tls_spki" \
-    M04_ENTRY_PORT=3000 M04_ENTRY_CN_PORT=3001 M04_E2E_USERNAME="$human_username" M04_E2E_PASSWORD="$human_password" \
+    M04_ENTRY_PORT="$global_entry_port" M04_ENTRY_CN_PORT="$cn_entry_port" M04_BROWSER_CLIENT_ID="$browser_client_id" \
+    M04_E2E_USERNAME="$human_username" M04_E2E_PASSWORD="$human_password" \
     npm run test:e2e -- e2e/browser-client.spec.ts)
 }
 

@@ -5,6 +5,19 @@ type TokenSet = { access_token: string; refresh_token?: string; id_token?: strin
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type CryptoLike = Pick<Crypto, "getRandomValues" | "subtle">;
 
+export type BrowserOAuthClient = {
+  clientId: string;
+  redirectUri: string;
+  postLogoutRedirectUri: string;
+};
+
+export class AuthenticationConfigurationError extends Error {
+  constructor(message = "browser OAuth configuration is required") {
+    super(message);
+    this.name = "AuthenticationConfigurationError";
+  }
+}
+
 export class AuthenticationRequiredError extends Error {
   constructor(message = "authentication is required", options?: ErrorOptions) {
     super(message, options);
@@ -23,16 +36,21 @@ export type GizWayAuth = {
 export function createBrowserAuth(options: {
   config: PublicRuntimeConfig;
   region: Region;
-  storage: StorageLike;
+  oauth?: BrowserOAuthClient;
+  storage?: StorageLike;
   fetcher?: Fetch;
   crypto?: CryptoLike;
   clock?: () => number;
 }): GizWayAuth {
-  const { config, region, storage } = options;
+  const { config, region } = options;
+  if (!options.oauth) return unconfiguredBrowserAuth();
+  const oauth = validateOAuthClient(options.oauth);
+  if (!options.storage) throw new AuthenticationConfigurationError("browser session storage is unavailable");
+  const storage = options.storage;
   const fetcher = options.fetcher ?? globalThis.fetch;
   const crypto = options.crypto ?? globalThis.crypto;
   const clock = options.clock ?? Date.now;
-  const prefix = `gizway.oidc.${region}.${encodeURIComponent(config.identity.issuer)}.${encodeURIComponent(config.identity.client_id)}`;
+  const prefix = `gizway.oidc.${region}.${encodeURIComponent(config.identity.issuer)}.${encodeURIComponent(oauth.clientId)}`;
   const tokenKey = `${prefix}.tokens`;
   const transactionKey = `${prefix}.transaction`;
   let refreshPromise: Promise<string> | undefined;
@@ -76,8 +94,8 @@ export function createBrowserAuth(options: {
       storage.setItem(transactionKey, JSON.stringify({ verifier, state }));
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
       const query = new URLSearchParams({
-        client_id: config.identity.client_id,
-        redirect_uri: config.identity.redirect_uri,
+        client_id: oauth.clientId,
+        redirect_uri: oauth.redirectUri,
         response_type: "code",
         scope: `openid profile email offline_access urn:zitadel:iam:org:projects:roles urn:zitadel:iam:org:project:id:${config.identity.audience}:aud`,
         code_challenge: base64url(new Uint8Array(digest)),
@@ -88,7 +106,7 @@ export function createBrowserAuth(options: {
     },
     async completeLogin(rawCallbackURL) {
       const callbackURL = new URL(rawCallbackURL);
-      const expectedCallback = new URL(config.identity.redirect_uri);
+      const expectedCallback = new URL(oauth.redirectUri);
       if (callbackURL.origin !== expectedCallback.origin || callbackURL.pathname !== expectedCallback.pathname) {
         throw new AuthenticationRequiredError("OIDC callback URL does not match the configured redirect URI");
       }
@@ -107,7 +125,7 @@ export function createBrowserAuth(options: {
         method: "POST",
         credentials: "omit",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ grant_type: "authorization_code", client_id: config.identity.client_id, redirect_uri: config.identity.redirect_uri, code, code_verifier: transaction.verifier }),
+        body: new URLSearchParams({ grant_type: "authorization_code", client_id: oauth.clientId, redirect_uri: oauth.redirectUri, code, code_verifier: transaction.verifier }),
       }));
     },
     async getAccessToken() {
@@ -126,7 +144,7 @@ export function createBrowserAuth(options: {
             method: "POST",
             credentials: "omit",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ grant_type: "refresh_token", client_id: config.identity.client_id, refresh_token: activeRefresh }),
+            body: new URLSearchParams({ grant_type: "refresh_token", client_id: oauth.clientId, refresh_token: activeRefresh }),
           });
           return (await saveTokenResponse(response, tokens, () => sessionGeneration === generation && storedTokens()?.refresh_token === activeRefresh)).access_token;
         } catch (error) {
@@ -137,13 +155,45 @@ export function createBrowserAuth(options: {
       return refreshPromise;
     },
     getLogoutURL() {
-      const query = new URLSearchParams({ client_id: config.identity.client_id, post_logout_redirect_uri: config.identity.post_logout_redirect_uri });
+      const query = new URLSearchParams({ client_id: oauth.clientId, post_logout_redirect_uri: oauth.postLogoutRedirectUri });
       const idToken = storedTokens()?.id_token;
       if (idToken) query.set("id_token_hint", idToken);
       return `${config.identity.issuer.replace(/\/$/, "")}/oidc/v1/end_session?${query}`;
     },
     clearSession,
   };
+}
+
+function unconfiguredBrowserAuth(): GizWayAuth {
+  const unavailable = () => new AuthenticationConfigurationError();
+  return {
+    async beginLogin() { throw unavailable(); },
+    async completeLogin() { throw unavailable(); },
+    async getAccessToken() { throw unavailable(); },
+    getLogoutURL() { throw unavailable(); },
+    clearSession() { /* no OAuth namespace exists */ },
+  };
+}
+
+function validateOAuthClient(value: BrowserOAuthClient): BrowserOAuthClient {
+  if (typeof value.clientId !== "string" || value.clientId.trim() === "" || value.clientId !== value.clientId.trim()) {
+    throw new AuthenticationConfigurationError("browser OAuth clientId must be a non-empty value without surrounding whitespace");
+  }
+  validateOAuthRedirect(value.redirectUri, "redirectUri");
+  validateOAuthRedirect(value.postLogoutRedirectUri, "postLogoutRedirectUri");
+  return value;
+}
+
+function validateOAuthRedirect(raw: string, name: string): URL {
+  let url: URL;
+  try { url = new URL(raw); } catch { throw new AuthenticationConfigurationError(`browser OAuth ${name} must be an absolute URL`); }
+  if (url.username || url.password || url.hash) throw new AuthenticationConfigurationError(`browser OAuth ${name} must not contain credentials or a fragment`);
+  if (url.hostname.includes("*")) throw new AuthenticationConfigurationError(`browser OAuth ${name} must not contain a wildcard host`);
+  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new AuthenticationConfigurationError(`browser OAuth ${name} must use HTTPS (HTTP is loopback-only)`);
+  }
+  return url;
 }
 
 export function subjectFromToken(raw: string): string {

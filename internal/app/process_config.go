@@ -56,11 +56,8 @@ type ProcessConfig struct {
 		Hostname string `yaml:"hostname" json:"hostname"`
 	} `yaml:"site" json:"site"`
 	Identity struct {
-		Issuer                string `yaml:"issuer" json:"issuer"`
-		ClientID              string `yaml:"client_id" json:"client_id"`
-		RedirectURI           string `yaml:"redirect_uri" json:"redirect_uri"`
-		PostLogoutRedirectURI string `yaml:"post_logout_redirect_uri" json:"post_logout_redirect_uri"`
-		PublicCatalog         struct {
+		Issuer        string `yaml:"issuer" json:"issuer"`
+		PublicCatalog struct {
 			ClientID        string `yaml:"client_id" json:"client_id"`
 			ClientSecret    string `yaml:"client_secret" json:"-"`
 			AccessTokenType string `yaml:"access_token_type" json:"access_token_type"`
@@ -272,7 +269,7 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 		if config.GizPay.ServiceDSN == "" {
 			return errors.New("gizpay.service_dsn is required")
 		}
-		if config.Site.Hostname != "" || config.Identity.ClientID != "" || config.Identity.PublicCatalog.ClientID != "" {
+		if config.Site.Hostname != "" || config.Identity.Issuer != "" || config.Identity.PublicCatalog.ClientID != "" {
 			if err := validateM04SiteConfig(config); err != nil {
 				return err
 			}
@@ -343,8 +340,7 @@ func ValidateProcessConfig(config ProcessConfig, kind ProcessKind) error {
 
 func validateM04SiteConfig(config ProcessConfig) error {
 	catalog := config.Identity.PublicCatalog
-	if config.Site.Hostname == "" || config.Identity.Issuer == "" || config.Identity.ClientID == "" ||
-		config.Identity.RedirectURI == "" || config.Identity.PostLogoutRedirectURI == "" ||
+	if config.Site.Hostname == "" || config.Identity.Issuer == "" ||
 		catalog.ClientID == "" || catalog.ClientSecret == "" || catalog.Scope == "" ||
 		config.Services.PublicCatalogTokenURL == "" || config.Services.GizPayPowerSyncURL == "" ||
 		config.Services.GizPayAPIURL == "" || config.Services.GizWayPowerSyncURL == "" || config.Services.GizWayAPIURL == "" {
@@ -371,9 +367,7 @@ func (config ProcessConfig) MarshalPublicRuntimeConfig() ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"site": map[string]string{"hostname": config.Site.Hostname},
 		"identity": map[string]string{
-			"issuer": config.Identity.Issuer, "client_id": config.Identity.ClientID,
-			"redirect_uri": config.Identity.RedirectURI, "post_logout_redirect_uri": config.Identity.PostLogoutRedirectURI,
-			"audience": config.Authentication.ZITADEL.HumanAudience,
+			"issuer": config.Identity.Issuer, "audience": config.Authentication.ZITADEL.HumanAudience,
 		},
 		"services": map[string]string{
 			"public_catalog_token_url": config.Services.PublicCatalogTokenURL,
