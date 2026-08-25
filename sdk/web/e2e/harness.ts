@@ -1,4 +1,4 @@
-import { createGizWayClient, type GizWayClient, type PublicCatalogConnection, type Region } from "../src";
+import { createGizWayClient, type BrowserOAuthClient, type GizWayClient, type PublicCatalogConnection, type Region } from "../src";
 
 let client: GizWayClient | undefined;
 let connection: PublicCatalogConnection | undefined;
@@ -13,12 +13,12 @@ globalThis.sdkTest = {
     return { states: connection.getStates(), products: catalog.products.length, models: catalog.models.length };
   },
   async state() { return connection?.getStates(); },
-  async beginLogin(entryOrigin: string, region: Region) {
-    client = await createGizWayClient({ entryOrigin, region });
+  async beginLogin(entryOrigin: string, region: Region, oauth: BrowserOAuthClient) {
+    client = await createGizWayClient({ entryOrigin, region, oauth });
     return client.auth.beginLogin();
   },
-  async completeLogin(entryOrigin: string, region: Region, callbackURL: string) {
-    client = await createGizWayClient({ entryOrigin, region });
+  async completeLogin(entryOrigin: string, region: Region, oauth: BrowserOAuthClient, callbackURL: string) {
+    client = await createGizWayClient({ entryOrigin, region, oauth });
     await client.auth.completeLogin(callbackURL);
     authenticated = await client.connectAuthenticated();
     const [pay, way] = await Promise.all([authenticated.gizpay.getSnapshot(), authenticated.gizway.getSnapshot()]);
@@ -47,6 +47,10 @@ globalThis.sdkTest = {
     way = await authenticated.gizway.disableProviderKey(providerKey.id);
     return { keys: (await authenticated.gizpay.getSnapshot()).keys.length, providerStatus: way.providerKeys.find((item) => item.id === providerKey.id)?.status };
   },
+  async logoutURL() {
+    if (!client) throw new Error("SDK client is unavailable");
+    return client.auth.getLogoutURL();
+  },
   async close(clear = false) { if (clear) await client?.clearLocalData(); else await client?.close(); },
 };
 
@@ -54,9 +58,10 @@ declare global {
   var sdkTest: {
     connectPublic(entryOrigin: string, region: Region): Promise<{ states: unknown; products: number; models: number }>;
     state(): Promise<unknown>;
-    beginLogin(entryOrigin: string, region: Region): Promise<string>;
-    completeLogin(entryOrigin: string, region: Region, callbackURL: string): Promise<{ states: unknown; products: number; models: number }>;
+    beginLogin(entryOrigin: string, region: Region, oauth: BrowserOAuthClient): Promise<string>;
+    completeLogin(entryOrigin: string, region: Region, oauth: BrowserOAuthClient, callbackURL: string): Promise<{ states: unknown; products: number; models: number }>;
     mutate(): Promise<{ keys: number; providerStatus?: string }>;
+    logoutURL(): Promise<string>;
     close(clear?: boolean): Promise<void>;
   };
 }

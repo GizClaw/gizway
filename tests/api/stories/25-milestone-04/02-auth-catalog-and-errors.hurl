@@ -46,8 +46,10 @@ HTTP 200
 [Asserts]
 jsonpath "$.site.hostname" exists
 jsonpath "$.identity.issuer" exists
-jsonpath "$.identity.client_id" exists
 jsonpath "$.identity.audience" exists
+jsonpath "$.identity.client_id" not exists
+jsonpath "$.identity.redirect_uri" not exists
+jsonpath "$.identity.post_logout_redirect_uri" not exists
 jsonpath "$.services.gizpay_powersync_url" exists
 jsonpath "$.services.gizway_powersync_url" exists
 

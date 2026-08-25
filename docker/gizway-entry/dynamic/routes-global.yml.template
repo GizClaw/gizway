@@ -12,47 +12,43 @@ http:
       priority: 200
       entryPoints: [websecure]
       tls: {}
-      middlewares: [browser-vary, browser-cors]
+      middlewares: [browser-cors]
       service: gizway
     auth-user:
       rule: Host(`@@GLOBAL_HOST@@`) && (Path(`/auth/runtime-config`) || Path(`/auth/catalog-token`) || PathPrefix(`/user/v1/`))
       priority: 190
       entryPoints: [websecure]
       tls: {}
-      middlewares: [browser-vary, browser-cors]
+      middlewares: [browser-cors]
       service: gizway
     account:
       rule: Host(`@@GLOBAL_HOST@@`) && PathPrefix(`/account/v1/`)
       priority: 190
       entryPoints: [websecure]
       tls: {}
-      middlewares: [browser-vary, browser-cors]
+      middlewares: [browser-cors]
       service: gizpay
     gizway-sync:
       rule: Host(`@@GLOBAL_HOST@@`) && (Path(`/_sync/gizway`) || PathPrefix(`/_sync/gizway/`))
       priority: 180
       entryPoints: [websecure]
       tls: {}
-      middlewares: [browser-vary, browser-cors, strip-gizway-sync]
+      middlewares: [browser-cors, strip-gizway-sync]
       service: powersync-gizway
     gizpay-sync:
       rule: Host(`@@GLOBAL_HOST@@`) && (Path(`/_sync/gizpay`) || PathPrefix(`/_sync/gizpay/`))
       priority: 180
       entryPoints: [websecure]
       tls: {}
-      middlewares: [browser-vary, browser-cors, strip-gizpay-sync]
+      middlewares: [browser-cors, strip-gizpay-sync]
       service: powersync-pay
   middlewares:
-    browser-vary:
-      headers:
-        customResponseHeaders: {Vary: Origin}
     browser-cors:
       headers:
-        accessControlAllowOriginList: [@@BROWSER_ALLOWED_ORIGINS@@]
+        accessControlAllowOriginList: ["*"]
         accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
         accessControlAllowHeaders: [Authorization, Content-Type, X-User-Agent]
         accessControlExposeHeaders: [Retry-After]
-        addVaryHeader: true
     strip-gizway-sync: {stripPrefix: {prefixes: [/_sync/gizway]}}
     strip-gizpay-sync: {stripPrefix: {prefixes: [/_sync/gizpay]}}
   services:

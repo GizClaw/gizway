@@ -37,7 +37,7 @@ done < <(jq -r '.images[] | [.key,.image,.command] | @tsv' "$catalog")
 entry_env=(
   -e PROFILE=global -e TLS_CERT_FILE=/etc/hosts -e TLS_KEY_FILE=/etc/hosts
   -e GLOBAL_HOST=global.e2e.gizclaw.test -e GIZPAY_UPSTREAM=http://gizpay:8081
-  -e GIZWAY_UPSTREAM=http://gizway:8080 -e BROWSER_ALLOWED_ORIGINS=https://www.example.test
+  -e GIZWAY_UPSTREAM=http://gizway:8080
   -e POWERSYNC_PAY_UPSTREAM=http://powersync-pay:8080 -e POWERSYNC_GIZWAY_UPSTREAM=http://powersync-global:8080
 )
 powersync_common_env=(
@@ -95,8 +95,11 @@ for routes in "$temporary/entry/routes-global.yml.template" "$temporary/entry/ro
   grep -F 'Path(`/_sync/gizpay`) || PathPrefix(`/_sync/gizpay/`)' "$routes" >/dev/null
   # shellcheck disable=SC2016
   grep -F 'Path(`/_sync/gizway`) || PathPrefix(`/_sync/gizway/`)' "$routes" >/dev/null
-  grep -F 'accessControlAllowOriginList: [@@BROWSER_ALLOWED_ORIGINS@@]' "$routes" >/dev/null
-  if grep -Eq 'service: web|@@WEB_UPSTREAM@@' "$routes"; then echo 'Entry image retained Web routing' >&2; exit 1; fi
+  grep -F 'accessControlAllowOriginList: ["*"]' "$routes" >/dev/null
+  if grep -Eq 'service: web|@@WEB_UPSTREAM@@|@@BROWSER_.*ORIGINS@@|accessControlAllowCredentials: true|browser-vary|Vary: Origin' "$routes"; then
+    echo 'Entry image retained Web routing or origin-specific/credentialed CORS' >&2
+    exit 1
+  fi
 done
 test -f "$temporary/powersync/pay/service.yaml" -a -f "$temporary/powersync/global/service.yaml" -a -f "$temporary/powersync/cn/service.yaml"
 
@@ -106,16 +109,10 @@ if docker run --rm "$ENTRY_IMAGE" >/dev/null 2>&1; then echo 'entry accepted mis
 if docker run --rm "${entry_env[@]}" -e 'GLOBAL_HOST=global.e2e.gizclaw.test|inject' "$ENTRY_IMAGE" >/dev/null 2>&1; then
   echo 'entry accepted template metacharacters in a host' >&2; exit 1
 fi
-for origins in '' '*' 'https://.' 'https://-bad.example.test' 'https://www.example.test:65536' 'https://www.example.test/' 'http://www.example.test' 'https://www.example.test,https://www.example.test' 'https://www.example.test, https://two.example.test' 'https://www.example.test|inject'; do
-  if docker run --rm "${entry_env[@]}" -e "BROWSER_ALLOWED_ORIGINS=$origins" "$ENTRY_IMAGE" --help >/dev/null 2>&1; then
-    echo "entry accepted invalid browser origin list: $origins" >&2; exit 1
-  fi
-done
-
 entry_cn_env=(
   -e PROFILE=cn -e TLS_CERT_FILE=/etc/hosts -e TLS_KEY_FILE=/etc/hosts
   -e CN_HOST=cn.gizway.com -e GIZPAY_UPSTREAM=http://gizpay:8081
-  -e GIZWAY_UPSTREAM=http://gizway:8080 -e BROWSER_ALLOWED_ORIGINS=http://localhost:4173
+  -e GIZWAY_UPSTREAM=http://gizway:8080
   -e POWERSYNC_PAY_UPSTREAM=http://powersync-pay:8080 -e POWERSYNC_GIZWAY_UPSTREAM=http://powersync-cn:8080
 )
 entry_central_env=(

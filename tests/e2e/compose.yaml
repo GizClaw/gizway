@@ -35,7 +35,6 @@ x-entry-environment: &entry-environment
   ZITADEL_UPSTREAM: h2c://zitadel:8080
   ZITADEL_LOGIN_UPSTREAM: http://zitadel-login:3000
   POWERSYNC_PAY_UPSTREAM: http://powersync-pay:8080
-  BROWSER_ALLOWED_ORIGINS: ${BROWSER_ALLOWED_ORIGINS:-http://127.0.0.1:4173}
 
 x-entry-volumes: &entry-volumes
   - ${TLS_CERT_FILE:?set TLS_CERT_FILE to an external E2E certificate}:/run/secrets/tls.crt:ro
@@ -168,7 +167,7 @@ services:
     depends_on: {entry-central: {condition: service_healthy}}
     environment: {SSL_CERT_FILE: /tls/tls.crt}
     volumes: [fixtures:/fixtures, '${TLS_CERT_FILE:?set TLS_CERT_FILE}:/tls/tls.crt:ro']
-    command: [e2e-resources, --mode=zitadel, --zitadel-url=https://identity.e2e.gizclaw.test:18080, --output-directory=/fixtures]
+    command: [e2e-resources, --mode=zitadel, --zitadel-url=https://identity.e2e.gizclaw.test:18080, --output-directory=/fixtures, '--global-entry-port=${GIZWAY_E2E_GLOBAL_PORT:-3000}', '--cn-entry-port=${GIZWAY_E2E_CN_PORT:-3001}']
 
   identity-fixtures-ready:
     image: busybox:1.37.0
@@ -307,7 +306,7 @@ services:
       POWERSYNC_GIZWAY_UPSTREAM: http://powersync-global:8080
     volumes: *entry-volumes
     networks: {default: {aliases: [global.e2e.gizclaw.test]}}
-    ports: ["127.0.0.1:3000:8443"]
+    ports: ["127.0.0.1:${GIZWAY_E2E_GLOBAL_PORT:-3000}:8443"]
     healthcheck: {test: [CMD, traefik, healthcheck, --ping], interval: 2s, timeout: 5s, retries: 60}
   entry-cn:
     image: gizway-e2e-entry:dev
@@ -319,7 +318,7 @@ services:
       POWERSYNC_GIZWAY_UPSTREAM: http://powersync-cn:8080
     volumes: *entry-volumes
     networks: {default: {aliases: [cn.e2e.gizclaw.test]}}
-    ports: ["127.0.0.1:3001:8443"]
+    ports: ["127.0.0.1:${GIZWAY_E2E_CN_PORT:-3001}:8443"]
     healthcheck: {test: [CMD, traefik, healthcheck, --ping], interval: 2s, timeout: 5s, retries: 60}
 
   hurl-api:

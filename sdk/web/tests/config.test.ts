@@ -3,7 +3,7 @@ import { loadRuntimeConfig, validateCatalogJWT } from "../src/config";
 
 const runtime = {
   site: { hostname: "global.example.test" },
-  identity: { issuer: "https://identity.example.test", client_id: "browser", redirect_uri: "https://www.example.test/callback", post_logout_redirect_uri: "https://www.example.test/", audience: "project" },
+  identity: { issuer: "https://identity.example.test", audience: "project" },
   services: { public_catalog_token_url: "https://global.example.test/auth/catalog-token", gizpay_powersync_url: "https://global.example.test/_sync/gizpay", gizpay_api_url: "https://global.example.test", gizway_powersync_url: "https://global.example.test/_sync/gizway", gizway_api_url: "https://global.example.test" },
 };
 
@@ -32,9 +32,14 @@ describe("runtime configuration", () => {
     for (const key of Object.keys(local.services)) local.services[key] = `http://127.0.0.1:8080/${key}`;
     local.services.gizpay_api_url = local.services.gizway_api_url = "http://127.0.0.1:8080";
     local.identity.issuer = "http://localhost:8081";
-    local.identity.redirect_uri = "http://localhost:4173/callback";
-    local.identity.post_logout_redirect_uri = "http://localhost:4173/";
     await expect(loadRuntimeConfig("http://127.0.0.1:8080", "global", async () => Response.json(local))).resolves.toBeTruthy();
+  });
+  it("does not require deployment-owned browser OAuth fields", async () => {
+    const config = await loadRuntimeConfig("https://global.example.test", "global", async () => Response.json(runtime));
+    expect(config.identity).toEqual({ issuer: "https://identity.example.test", audience: "project" });
+    expect(config.identity).not.toHaveProperty("client_id");
+    expect(config.identity).not.toHaveProperty("redirect_uri");
+    expect(config.identity).not.toHaveProperty("post_logout_redirect_uri");
   });
 });
 

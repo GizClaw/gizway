@@ -4,9 +4,6 @@ export type PublicRuntimeConfig = {
   site: { hostname: string };
   identity: {
     issuer: string;
-    client_id: string;
-    redirect_uri: string;
-    post_logout_redirect_uri: string;
     audience: string;
   };
   services: {
@@ -35,9 +32,6 @@ export function validateRuntimeConfig(value: unknown, entryOrigin: URL, region: 
   const strings = [
     config.site.hostname,
     config.identity.issuer,
-    config.identity.client_id,
-    config.identity.redirect_uri,
-    config.identity.post_logout_redirect_uri,
     config.identity.audience,
     config.services.public_catalog_token_url,
     config.services.gizpay_powersync_url,
@@ -50,8 +44,6 @@ export function validateRuntimeConfig(value: unknown, entryOrigin: URL, region: 
   const expectedRegion: Region = config.site.hostname.startsWith("cn.") ? "cn" : "global";
   if (expectedRegion !== region) throw new Error(`runtime configuration region mismatch: expected ${region}`);
   validateOrigin(config.identity.issuer, "identity issuer");
-  validateURL(config.identity.redirect_uri, "redirect URI");
-  validateURL(config.identity.post_logout_redirect_uri, "post-logout redirect URI");
   validateURL(config.services.public_catalog_token_url, "Catalog token URL");
   validateURL(config.services.gizpay_powersync_url, "GizPay PowerSync URL");
   validateOrigin(config.services.gizpay_api_url, "GizPay API origin");

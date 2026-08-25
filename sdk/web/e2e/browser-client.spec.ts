@@ -7,6 +7,12 @@ function composeContainer(service: string): string {
   return `${project}-${service}-1`;
 }
 
+function browserOAuth() {
+  const clientId = process.env.M04_BROWSER_CLIENT_ID;
+  if (!clientId) throw new Error("M04_BROWSER_CLIENT_ID is required");
+  return { clientId, redirectUri: "http://127.0.0.1:4173/harness.html", postLogoutRedirectUri: "http://127.0.0.1:4173/harness.html" };
+}
+
 for (const regional of [
   { region: "global" as const, port: process.env.M04_ENTRY_PORT ?? "3000" },
   { region: "cn" as const, port: process.env.M04_ENTRY_CN_PORT ?? "3001" },
@@ -43,8 +49,9 @@ test("PKCE login reaches both authenticated services through the UI-neutral SDK"
   test.skip(process.env.M04_REAL_E2E !== "1", "requires the Compose stack");
   test.setTimeout(180_000);
   const entry = `https://global.e2e.gizclaw.test:${process.env.M04_ENTRY_PORT ?? "3000"}`;
+  const oauth = browserOAuth();
   await page.goto("/harness.html");
-  const loginURL = await page.evaluate((origin) => globalThis.sdkTest.beginLogin(origin, "global"), entry);
+  const loginURL = await page.evaluate(({ origin, oauth }) => globalThis.sdkTest.beginLogin(origin, "global", oauth), { origin: entry, oauth });
   await page.goto(loginURL);
   const loginname = page.getByRole("textbox", { name: /loginname/i });
   const continueButton = page.getByRole("button", { name: "Continue", exact: true });
@@ -53,12 +60,15 @@ test("PKCE login reaches both authenticated services through the UI-neutral SDK"
   await page.getByLabel(/password/i).fill(process.env.M04_E2E_PASSWORD ?? "");
   await continueButton.click();
   await expect(page).toHaveURL(/127\.0\.0\.1:4173\/harness\.html\?code=/, { timeout: 60_000 });
-  const result = await page.evaluate((origin) => globalThis.sdkTest.completeLogin(origin, "global", location.href), entry);
+  const result = await page.evaluate(({ origin, oauth }) => globalThis.sdkTest.completeLogin(origin, "global", oauth, location.href), { origin: entry, oauth });
   expect(result.products).toBeGreaterThan(0);
   expect(result.models).toBeGreaterThan(0);
   expect(result.states).toEqual({ gizpay: "ready", gizway: "ready" });
   const mutations = await page.evaluate(() => globalThis.sdkTest.mutate());
   expect(mutations.keys).toBeGreaterThan(0);
   expect(mutations.providerStatus).toBe("disabled");
+  const logoutURL = new URL(await page.evaluate(() => globalThis.sdkTest.logoutURL()));
+  expect(logoutURL.searchParams.get("client_id")).toBe(oauth.clientId);
+  expect(logoutURL.searchParams.get("post_logout_redirect_uri")).toBe(oauth.postLogoutRedirectUri);
   await page.evaluate(() => globalThis.sdkTest.close(true));
 });

@@ -1,5 +1,5 @@
 import type { PowerSyncBackendConnector, PowerSyncDatabase } from "@powersync/web";
-import { createBrowserAuth, subjectFromToken, type GizWayAuth } from "./auth";
+import { AuthenticationConfigurationError, createBrowserAuth, subjectFromToken, type BrowserOAuthClient, type GizWayAuth } from "./auth";
 import { loadRuntimeConfig, publicCatalogToken, type Fetch, type PublicRuntimeConfig } from "./config";
 import type { CatalogProduct } from "./contracts/gizpay";
 import type { GizPayRepository } from "./contracts/gizpay";
@@ -34,6 +34,7 @@ export type GizWayClient = {
 export type CreateClientOptions = {
   entryOrigin: string;
   region: Region;
+  oauth?: BrowserOAuthClient;
   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   fetch?: Fetch;
   crypto?: Pick<Crypto, "getRandomValues" | "subtle">;
@@ -43,19 +44,29 @@ export type CreateClientOptions = {
 export async function createGizWayClient(options: CreateClientOptions): Promise<GizWayClient> {
   const fetcher = options.fetch ?? globalThis.fetch;
   const crypto = options.crypto ?? globalThis.crypto;
-  const storage = options.storage ?? globalThis.sessionStorage;
-  if (!storage) throw new Error("browser session storage is unavailable");
+  const storage = options.oauth ? (options.storage ?? defaultSessionStorage()) : options.storage;
   const config = await loadRuntimeConfig(options.entryOrigin, options.region, fetcher);
-  const auth = createBrowserAuth({ config, region: options.region, storage, fetcher, crypto, clock: options.clock });
-  return createClientWithDatabaseFactory(options.region, config, auth, fetcher, crypto, options.clock ?? Date.now, defaultDatabaseFactory);
+  const auth = createBrowserAuth({ config, region: options.region, oauth: options.oauth, storage, fetcher, crypto, clock: options.clock });
+  return createClientWithDatabaseFactory(options.region, config, auth, options.oauth?.clientId, fetcher, crypto, options.clock ?? Date.now, defaultDatabaseFactory);
 }
 
-function createClientWithDatabaseFactory(region: Region, config: PublicRuntimeConfig, auth: GizWayAuth, fetcher: Fetch, crypto: Pick<Crypto, "subtle">, clock: () => number, databaseFactory: DatabaseFactory): GizWayClient {
+function defaultSessionStorage(): Storage {
+  try {
+    if (globalThis.sessionStorage) return globalThis.sessionStorage;
+  } catch { /* access can be denied by the browser security model */ }
+  throw new AuthenticationConfigurationError("browser session storage is unavailable");
+}
+
+function createClientWithDatabaseFactory(region: Region, config: PublicRuntimeConfig, auth: GizWayAuth, oauthClientId: string | undefined, fetcher: Fetch, crypto: Pick<Crypto, "subtle">, clock: () => number, databaseFactory: DatabaseFactory): GizWayClient {
   const active = new Set<ConnectionBase>();
   let lastSubject: string | undefined;
   let closing: Promise<void> | undefined;
   let closed = false;
   const ensureOpen = () => { if (closed) throw new Error("GizWay SDK client is closed"); };
+  const requireOAuthClientId = () => {
+    if (!oauthClientId) throw new AuthenticationConfigurationError();
+    return oauthClientId;
+  };
   const track = <T extends ConnectionBase>(connection: T): T => {
     const close = connection.close;
     connection.close = async () => { try { await close(); } finally { active.delete(connection); } };
@@ -95,7 +106,7 @@ function createClientWithDatabaseFactory(region: Region, config: PublicRuntimeCo
       ensureOpen();
       const initialToken = await auth.getAccessToken();
       lastSubject = subjectFromToken(initialToken);
-      const names = await authenticatedDatabaseNames(region, config.identity.issuer, config.identity.client_id, lastSubject, crypto);
+      const names = await authenticatedDatabaseNames(region, config.identity.issuer, requireOAuthClientId(), lastSubject, crypto);
       const mutations = new MutationCoordinator();
       const mutationError = (error: { table: string; id: string; code: string; message: string }) => {
         const failure = new Error(`${error.code}: ${error.message}`);
@@ -114,7 +125,7 @@ function createClientWithDatabaseFactory(region: Region, config: PublicRuntimeCo
       const failures: unknown[] = [];
       for (const connection of [...active]) await connection.close().catch((error) => failures.push(error));
       const namespaces = [publicDatabaseNames(region)];
-      if (lastSubject) namespaces.push(await authenticatedDatabaseNames(region, config.identity.issuer, config.identity.client_id, lastSubject, crypto));
+      if (lastSubject) namespaces.push(await authenticatedDatabaseNames(region, config.identity.issuer, requireOAuthClientId(), lastSubject, crypto));
       for (const names of namespaces) {
         try {
           const [pay, way] = await openDatabasePair(names, databaseFactory);

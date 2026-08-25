@@ -31,13 +31,18 @@ func TestLoadProcessConfigAcceptsMilestone04SiteAndCatalogIdentity(t *testing.T)
 		t.Fatal(err)
 	}
 	public := string(encoded)
-	for _, required := range []string{"global.example.test", "gizway-web", "/auth/catalog-token", "https://sync.pay.example.test", "https://sync.global.example.test"} {
+	for _, required := range []string{"global.example.test", "gizway-human", "/auth/catalog-token", "https://sync.pay.example.test", "https://sync.global.example.test"} {
 		if !strings.Contains(public, required) {
 			t.Errorf("public runtime config lacks %q: %s", required, public)
 		}
 	}
 	if strings.Contains(public, "catalog-secret") || strings.Contains(public, "public_catalog_service_account") {
 		t.Fatalf("public runtime config leaked Service Account configuration: %s", public)
+	}
+	for _, websiteField := range []string{"client_id", "redirect_uri", "post_logout_redirect_uri"} {
+		if strings.Contains(public, websiteField) {
+			t.Fatalf("public runtime config retained website field %q: %s", websiteField, public)
+		}
 	}
 	if strings.Contains(public, secret) || strings.Contains(public, "admin") {
 		t.Fatalf("public runtime config leaked Admin configuration: %s", public)
@@ -108,9 +113,6 @@ site:
   hostname: global.example.test
 identity:
   issuer: https://identity.example.test
-  client_id: gizway-web
-  redirect_uri: https://global.example.test/auth/callback
-  post_logout_redirect_uri: https://global.example.test/
   public_catalog_service_account:
     client_id: gizway-global-catalog
     client_secret: catalog-secret

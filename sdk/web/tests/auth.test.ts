@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { AuthenticationRequiredError, createBrowserAuth, subjectFromToken } from "../src/auth";
+import { AuthenticationConfigurationError, AuthenticationRequiredError, createBrowserAuth, subjectFromToken } from "../src/auth";
 import type { PublicRuntimeConfig } from "../src/config";
 
 const config: PublicRuntimeConfig = {
   site: { hostname: "global.example.test" },
-  identity: { issuer: "https://identity.example.test", client_id: "browser", redirect_uri: "https://www.example.test/callback", post_logout_redirect_uri: "https://www.example.test/", audience: "project" },
+  identity: { issuer: "https://identity.example.test", audience: "project" },
   services: { public_catalog_token_url: "https://global.example.test/auth/catalog-token", gizpay_powersync_url: "https://global.example.test/_sync/gizpay", gizpay_api_url: "https://global.example.test", gizway_powersync_url: "https://global.example.test/_sync/gizway", gizway_api_url: "https://global.example.test" },
 };
+const oauth = { clientId: "browser", redirectUri: "https://www.example.test/callback", postLogoutRedirectUri: "https://www.example.test/" };
 function storage() {
   const values = new Map<string, string>();
   return { values, getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => { values.delete(key); } };
@@ -16,7 +17,7 @@ const crypto = { getRandomValues<T extends ArrayBufferView | null>(value: T): T 
 describe("browser auth", () => {
   it("returns an authorization URL without navigation and enforces state", async () => {
     const store = storage();
-    const auth = createBrowserAuth({ config, region: "global", storage: store, crypto, fetcher: async () => Response.json({ access_token: "token", expires_in: 300 }) });
+    const auth = createBrowserAuth({ config, region: "global", oauth, storage: store, crypto, fetcher: async () => Response.json({ access_token: "token", expires_in: 300 }) });
     const url = new URL(await auth.beginLogin());
     expect(url.pathname).toBe("/oauth/v2/authorize");
     const transaction = JSON.parse([...store.values.values()][0]!) as { state: string };
@@ -25,6 +26,9 @@ describe("browser auth", () => {
     const next = JSON.parse([...store.values.values()][0]!) as { state: string };
     await auth.completeLogin(`https://www.example.test/callback?code=c&state=${next.state}`);
     await expect(auth.getAccessToken()).resolves.toBe("token");
+    const logout = new URL(auth.getLogoutURL());
+    expect(logout.searchParams.get("client_id")).toBe(oauth.clientId);
+    expect(logout.searchParams.get("post_logout_redirect_uri")).toBe(oauth.postLogoutRedirectUri);
     expect(transaction.state).toBe(next.state);
   });
   it("single-flights refresh, retains a non-rotated refresh token, and clears failed sessions", async () => {
@@ -36,7 +40,7 @@ describe("browser auth", () => {
       if (String(init?.body).includes("authorization_code")) return Response.json({ access_token: "old", refresh_token: "refresh", expires_in: 1 });
       return Response.json({ access_token: "new", expires_in: 300 });
     });
-    const auth = createBrowserAuth({ config, region: "global", storage: store, crypto, fetcher, clock: () => now });
+    const auth = createBrowserAuth({ config, region: "global", oauth, storage: store, crypto, fetcher, clock: () => now });
     await auth.beginLogin();
     const transaction = JSON.parse([...store.values.values()][0]!) as { state: string };
     await auth.completeLogin(`https://www.example.test/callback?code=c&state=${transaction.state}`);
@@ -57,7 +61,7 @@ describe("browser auth", () => {
       if (String(init?.body).includes("authorization_code")) return Response.json({ access_token: "old", refresh_token: "refresh", expires_in: 1 });
       return { ok: true, status: 200, json: () => refreshBody } as Response;
     });
-    const auth = createBrowserAuth({ config, region: "global", storage: store, crypto, fetcher, clock: () => now });
+    const auth = createBrowserAuth({ config, region: "global", oauth, storage: store, crypto, fetcher, clock: () => now });
     await auth.beginLogin();
     const transaction = JSON.parse([...store.values.values()][0]!) as { state: string };
     await auth.completeLogin(`https://www.example.test/callback?code=c&state=${transaction.state}`);
@@ -71,13 +75,29 @@ describe("browser auth", () => {
   });
   it("isolates region namespaces", async () => {
     const store = storage();
-    const globalAuth = createBrowserAuth({ config, region: "global", storage: store, crypto });
-    const cnAuth = createBrowserAuth({ config, region: "cn", storage: store, crypto });
+    const globalAuth = createBrowserAuth({ config, region: "global", oauth, storage: store, crypto });
+    const cnAuth = createBrowserAuth({ config, region: "cn", oauth, storage: store, crypto });
     await globalAuth.beginLogin();
     await cnAuth.beginLogin();
     expect(store.values.size).toBe(2);
     globalAuth.clearSession();
     expect(store.values.size).toBe(1);
+  });
+  it("fails interactive methods locally when OAuth is not configured", async () => {
+    const auth = createBrowserAuth({ config, region: "global" });
+    await expect(auth.beginLogin()).rejects.toBeInstanceOf(AuthenticationConfigurationError);
+    await expect(auth.completeLogin("https://www.example.test/callback")).rejects.toBeInstanceOf(AuthenticationConfigurationError);
+    await expect(auth.getAccessToken()).rejects.toBeInstanceOf(AuthenticationConfigurationError);
+    expect(() => auth.getLogoutURL()).toThrow(AuthenticationConfigurationError);
+    expect(() => auth.clearSession()).not.toThrow();
+  });
+  it.each([
+    [{ ...oauth, clientId: " " }, "clientId"],
+    [{ ...oauth, redirectUri: "http://www.example.test/callback" }, "redirectUri"],
+    [{ ...oauth, redirectUri: "https://*.example.test/callback" }, "wildcard"],
+    [{ ...oauth, postLogoutRedirectUri: "https://user:pass@www.example.test/" }, "postLogoutRedirectUri"],
+  ] as const)("rejects invalid consumer OAuth input %#", (invalid, field) => {
+    expect(() => createBrowserAuth({ config, region: "global", oauth: invalid, storage: storage() })).toThrow(field);
   });
 });
 
