@@ -20,6 +20,7 @@ paths:
         '204': {description: Human initialized or non-Human ignored}
         '400': {$ref: 'common.yaml#/components/responses/BadRequest'}
         '401': {$ref: 'common.yaml#/components/responses/Unauthorized'}
+        '409': {$ref: 'common.yaml#/components/responses/Conflict'}
         '500': {$ref: 'common.yaml#/components/responses/InternalError'}
 components:
   schemas:
@@ -29,6 +30,7 @@ components:
       additionalProperties: true
       required: [user]
       properties:
+        merchant_id: {type: string, format: uuid}
         user:
           type: object
           additionalProperties: true

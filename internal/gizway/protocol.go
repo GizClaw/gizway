@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"math/bits"
@@ -149,6 +150,10 @@ func (h *Handler) protocol(w http.ResponseWriter, r *http.Request) {
 	keyHMAC := subscriptionkey.HMAC(h.config.HMACSecret, rawKey)
 	admission, admissionErr := h.admit(r.Context(), keyHMAC)
 	if admissionErr != nil {
+		if errors.Is(admissionErr, errInvalidSubscriptionKey) {
+			errJSON(w, http.StatusUnauthorized, "invalid_subscription_key", "Subscription Key is unknown or revoked")
+			return
+		}
 		h.diagnostic("Credit Check failed", admissionErr)
 		errJSON(w, http.StatusServiceUnavailable, "credit_check_unavailable", "Credit Check unavailable")
 		return
@@ -457,6 +462,8 @@ type creditCheckResult struct {
 	expires   time.Time
 }
 
+var errInvalidSubscriptionKey = errors.New("invalid Subscription Key")
+
 func (h *Handler) checkCredit(ctx context.Context, keyHMAC string) (creditCheckResult, error) {
 	if h.config.GizPayURL == "" || h.config.ServiceToken == nil {
 		return creditCheckResult{}, errors.New("credit check is not configured")
@@ -491,6 +498,17 @@ func (h *Handler) checkCredit(ctx context.Context, keyHMAC string) (creditCheckR
 		CheckedAt           time.Time `json:"checked_at"`
 	}
 	if response.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 64*1024+1))
+		if readErr == nil && len(body) <= 64*1024 && response.StatusCode == http.StatusUnauthorized {
+			var failure struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(body, &failure) == nil && failure.Error.Code == "invalid_subscription_key" {
+				return creditCheckResult{}, errInvalidSubscriptionKey
+			}
+		}
 		return creditCheckResult{}, fmt.Errorf("credit check returned %d", response.StatusCode)
 	}
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {

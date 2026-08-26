@@ -24,35 +24,59 @@ paths:
   /openai/v1/models:
     get:
       operationId: listModels
-      responses: {'200': {$ref: '#/components/responses/ModelList'}}
+      responses:
+        '200': {$ref: '#/components/responses/ModelList'}
+        '401': {$ref: '#/components/responses/InvalidSubscriptionKey'}
+        '402': {$ref: '#/components/responses/CreditDenied'}
+        '503': {$ref: '#/components/responses/CreditCheckUnavailable'}
   /openai/v1/chat/completions:
     post:
       operationId: createChatCompletion
       requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
-      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+      responses:
+        '200': {$ref: '#/components/responses/AIResponse'}
+        '401': {$ref: '#/components/responses/InvalidSubscriptionKey'}
+        '402': {$ref: '#/components/responses/CreditDenied'}
+        '503': {$ref: '#/components/responses/CreditCheckUnavailable'}
   /anthropic/v1/messages:
     post:
       operationId: createAnthropicMessage
       parameters: [{name: anthropic-version, in: header, required: true, schema: {type: string, minLength: 1}}]
       requestBody: {$ref: '#/components/requestBodies/ChatCompletion'}
-      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+      responses:
+        '200': {$ref: '#/components/responses/AIResponse'}
+        '401': {$ref: '#/components/responses/InvalidSubscriptionKey'}
+        '402': {$ref: '#/components/responses/CreditDenied'}
+        '503': {$ref: '#/components/responses/CreditCheckUnavailable'}
   /genai/v1beta/models/{model}:generateContent:
     parameters: [{name: model, in: path, required: true, schema: {type: string, minLength: 1}}]
     post:
       operationId: generateGeminiContent
       requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
-      responses: {'200': {$ref: '#/components/responses/AIResponse'}}
+      responses:
+        '200': {$ref: '#/components/responses/AIResponse'}
+        '401': {$ref: '#/components/responses/InvalidSubscriptionKey'}
+        '402': {$ref: '#/components/responses/CreditDenied'}
+        '503': {$ref: '#/components/responses/CreditCheckUnavailable'}
   /genai/v1beta/models/{model}:streamGenerateContent:
     parameters: [{name: model, in: path, required: true, schema: {type: string, minLength: 1}}]
     post:
       operationId: streamGeminiContent
       requestBody: {$ref: '#/components/requestBodies/GeminiContent'}
-      responses: {'200': {$ref: '#/components/responses/AIStreamResponse'}}
+      responses:
+        '200': {$ref: '#/components/responses/AIStreamResponse'}
+        '401': {$ref: '#/components/responses/InvalidSubscriptionKey'}
+        '402': {$ref: '#/components/responses/CreditDenied'}
+        '503': {$ref: '#/components/responses/CreditCheckUnavailable'}
   /openai/v1/realtime/client_secrets:
     post:
       operationId: createRealtimeClientSecret
       requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [model, transport], properties: {model: {type: string, minLength: 1}, transport: {type: string, const: websocket}}}}}}
-      responses: {'201': {description: Ephemeral regional Realtime session, content: {application/json: {schema: {$ref: '#/components/schemas/RealtimeSecret'}}}}}
+      responses:
+        '201': {description: Ephemeral regional Realtime session, content: {application/json: {schema: {$ref: '#/components/schemas/RealtimeSecret'}}}}
+        '401': {$ref: '#/components/responses/InvalidSubscriptionKey'}
+        '402': {$ref: '#/components/responses/CreditDenied'}
+        '503': {$ref: '#/components/responses/CreditCheckUnavailable'}
   /openai/v1/realtime:
     get:
       operationId: connectRealtimeWebSocket
@@ -164,3 +188,6 @@ components:
     ModelList: {description: Regional active models, content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: array, items: {$ref: '#/components/schemas/Model'}}}}}}}
     AIResponse: {description: Provider-compatible response, content: {application/json: {schema: {$ref: '#/components/schemas/AIResponse'}}, text/event-stream: {schema: {type: string}}}}
     AIStreamResponse: {description: Provider-compatible server-sent event stream, content: {text/event-stream: {schema: {type: string}}}}
+    InvalidSubscriptionKey: {description: invalid_subscription_key, content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
+    CreditDenied: {description: credit_denied, content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
+    CreditCheckUnavailable: {description: credit_check_unavailable, content: {application/json: {schema: {$ref: 'common.yaml#/components/schemas/ErrorResponse'}}}}
