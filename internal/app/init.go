@@ -115,13 +115,27 @@ func ensureLoginRole(adminDSN, roleDSN string, replication bool) (databaseRole, 
 		statement = "CREATE ROLE "
 	}
 	quotedRole := pq.QuoteIdentifier(role.Name)
+	if exists {
+		if err := grantDatabaseAdministratorRoleMembership(db, quotedRole); err != nil {
+			return databaseRole{}, err
+		}
+	}
 	if _, err := db.ExecContext(context.Background(), statement+quotedRole+" WITH "+attributes+" PASSWORD "+pq.QuoteLiteral(role.Password)); err != nil {
 		return databaseRole{}, fmt.Errorf("configure database role: %w", err)
 	}
-	if _, err := db.ExecContext(context.Background(), "GRANT "+quotedRole+" TO CURRENT_USER WITH SET TRUE"); err != nil {
-		return databaseRole{}, fmt.Errorf("grant database administrator role membership: %w", err)
+	if !exists {
+		if err := grantDatabaseAdministratorRoleMembership(db, quotedRole); err != nil {
+			return databaseRole{}, err
+		}
 	}
 	return role, nil
+}
+
+func grantDatabaseAdministratorRoleMembership(db *sql.DB, quotedRole string) error {
+	if _, err := db.ExecContext(context.Background(), "GRANT "+quotedRole+" TO CURRENT_USER WITH SET TRUE"); err != nil {
+		return fmt.Errorf("grant database administrator role membership: %w", err)
+	}
+	return nil
 }
 
 func ensureOwnedSchema(adminDSN, database, schema, owner string) error {

@@ -167,6 +167,67 @@ func TestEnsureLoginRoleGrantsRestrictedAdministratorMembership(t *testing.T) {
 	}
 }
 
+func TestRunInitializationStopsAndSanitizesMembershipGrantFailure(t *testing.T) {
+	adminDSN := testdb.NewDatabase(t)
+	bootstrap := openTestDatabase(t, adminDSN)
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	adminRole := "managed_admin_" + suffix
+	schema := "blocked_schema_" + suffix
+	adminPassword := "admin-password-" + suffix
+	servicePassword := "service-password-" + suffix
+	database := databaseName(t, adminDSN)
+
+	t.Cleanup(func() {
+		if _, err := bootstrap.Exec("DROP OWNED BY " + pq.QuoteIdentifier(adminRole)); err != nil {
+			t.Errorf("membership failure cleanup: %v", err)
+		}
+		if _, err := bootstrap.Exec("DROP ROLE IF EXISTS " + pq.QuoteIdentifier(adminRole)); err != nil {
+			t.Errorf("membership failure cleanup: %v", err)
+		}
+	})
+	if _, err := bootstrap.Exec("CREATE ROLE " + pq.QuoteIdentifier(adminRole) +
+		" WITH LOGIN CREATEROLE PASSWORD " + pq.QuoteLiteral(adminPassword)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bootstrap.Exec("GRANT CONNECT, CREATE ON DATABASE " + pq.QuoteIdentifier(database) +
+		" TO " + pq.QuoteIdentifier(adminRole) + " WITH GRANT OPTION"); err != nil {
+		t.Fatal(err)
+	}
+
+	restrictedAdminDSN := roleDSN(t, adminDSN, adminRole, adminPassword)
+	config := InitConfig{Version: 1, Process: ProcessGizPay}
+	config.Database.AdminDSN = restrictedAdminDSN
+	config.Database.ServiceDSN = roleDSN(t, adminDSN, adminRole, servicePassword)
+	config.Database.Schema = schema
+	config.PowerSync.SourceDSN = roleDSN(t, adminDSN, "unused_source_"+suffix, "source-password-"+suffix)
+	config.PowerSync.StorageAdminDSN = restrictedAdminDSN
+	config.PowerSync.StorageDSN = roleDSN(t, adminDSN, "unused_storage_"+suffix, "storage-password-"+suffix)
+
+	err := RunInitialization(config, ProcessGizPay)
+	if err == nil || !strings.Contains(err.Error(), "grant database administrator role membership") {
+		t.Fatalf("RunInitialization() error = %v", err)
+	}
+	for _, secret := range []string{
+		config.Database.AdminDSN,
+		config.Database.ServiceDSN,
+		adminPassword,
+		servicePassword,
+		"source-password-" + suffix,
+		"storage-password-" + suffix,
+	} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("RunInitialization() exposed secret %q in %q", secret, err)
+		}
+	}
+	var schemaExists bool
+	if err := bootstrap.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname=$1)`, schema).Scan(&schemaExists); err != nil {
+		t.Fatal(err)
+	}
+	if schemaExists {
+		t.Fatalf("schema %q exists after membership grant failure", schema)
+	}
+}
+
 func roleDSN(t *testing.T, dsn, role, password string) string {
 	t.Helper()
 	parsed, err := url.Parse(dsn)
