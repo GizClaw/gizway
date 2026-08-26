@@ -96,22 +96,30 @@ func ensureLoginRole(adminDSN, roleDSN string, replication bool) (databaseRole, 
 		return databaseRole{}, err
 	}
 	defer db.Close()
-	var exists bool
-	if err := db.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=$1)`, role.Name).Scan(&exists); err != nil {
+	var currentReplication bool
+	err = db.QueryRowContext(context.Background(), `SELECT rolreplication FROM pg_roles WHERE rolname=$1`, role.Name).Scan(&currentReplication)
+	exists := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return databaseRole{}, fmt.Errorf("inspect database role: %w", err)
 	}
 	attributes := "LOGIN"
 	if replication {
-		attributes += " REPLICATION"
-	} else {
+		if !exists || !currentReplication {
+			attributes += " REPLICATION"
+		}
+	} else if exists && currentReplication {
 		attributes += " NOREPLICATION"
 	}
 	statement := "ALTER ROLE "
 	if !exists {
 		statement = "CREATE ROLE "
 	}
-	if _, err := db.ExecContext(context.Background(), statement+pq.QuoteIdentifier(role.Name)+" WITH "+attributes+" PASSWORD "+pq.QuoteLiteral(role.Password)); err != nil {
+	quotedRole := pq.QuoteIdentifier(role.Name)
+	if _, err := db.ExecContext(context.Background(), statement+quotedRole+" WITH "+attributes+" PASSWORD "+pq.QuoteLiteral(role.Password)); err != nil {
 		return databaseRole{}, fmt.Errorf("configure database role: %w", err)
+	}
+	if _, err := db.ExecContext(context.Background(), "GRANT "+quotedRole+" TO CURRENT_USER WITH SET TRUE"); err != nil {
+		return databaseRole{}, fmt.Errorf("grant database administrator role membership: %w", err)
 	}
 	return role, nil
 }

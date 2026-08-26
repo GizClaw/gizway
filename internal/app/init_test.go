@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 
 	"github.com/GizClaw/gizway/internal/testdb"
 )
@@ -95,6 +95,75 @@ func TestInitializationRejectsConflictingPublication(t *testing.T) {
 	}
 	if err := ensurePowerSyncSource(adminDSN, databaseName(t, adminDSN), []string{"public"}, currentRole(t, db), currentRole(t, db), publication); err == nil || !strings.Contains(err.Error(), "not FOR ALL TABLES") {
 		t.Fatalf("conflicting publication error = %v", err)
+	}
+}
+
+func TestEnsureLoginRoleGrantsRestrictedAdministratorMembership(t *testing.T) {
+	adminDSN := testdb.NewDatabase(t)
+	bootstrap := openTestDatabase(t, adminDSN)
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	adminRole := "managed_admin_" + suffix
+	serviceRole := "managed_service_" + suffix
+	schema := "managed_schema_" + suffix
+	adminPassword := "managed-admin-password"
+	servicePassword := "managed-service-password"
+	database := databaseName(t, adminDSN)
+
+	t.Cleanup(func() {
+		statements := []string{
+			"DROP SCHEMA IF EXISTS " + pq.QuoteIdentifier(schema) + " CASCADE",
+			"REVOKE " + pq.QuoteIdentifier(serviceRole) + " FROM " + pq.QuoteIdentifier(adminRole) + " GRANTED BY " + pq.QuoteIdentifier(adminRole),
+			"REVOKE " + pq.QuoteIdentifier(serviceRole) + " FROM " + pq.QuoteIdentifier(adminRole) + " GRANTED BY CURRENT_USER",
+			"DROP OWNED BY " + pq.QuoteIdentifier(serviceRole),
+			"DROP OWNED BY " + pq.QuoteIdentifier(adminRole),
+			"DROP ROLE IF EXISTS " + pq.QuoteIdentifier(serviceRole),
+			"DROP ROLE IF EXISTS " + pq.QuoteIdentifier(adminRole),
+		}
+		for _, statement := range statements {
+			if _, err := bootstrap.Exec(statement); err != nil {
+				t.Errorf("restricted administrator cleanup: %v", err)
+			}
+		}
+	})
+
+	if _, err := bootstrap.Exec("CREATE ROLE " + pq.QuoteIdentifier(adminRole) +
+		" WITH LOGIN CREATEROLE PASSWORD " + pq.QuoteLiteral(adminPassword)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bootstrap.Exec("GRANT CONNECT, CREATE ON DATABASE " + pq.QuoteIdentifier(database) +
+		" TO " + pq.QuoteIdentifier(adminRole) + " WITH GRANT OPTION"); err != nil {
+		t.Fatal(err)
+	}
+	restrictedAdminDSN := roleDSN(t, adminDSN, adminRole, adminPassword)
+	serviceDSN := roleDSN(t, adminDSN, serviceRole, servicePassword)
+
+	for attempt := range 2 {
+		if _, err := ensureLoginRole(restrictedAdminDSN, serviceDSN, false); err != nil {
+			t.Fatalf("ensureLoginRole() attempt %d: %v", attempt+1, err)
+		}
+		if err := ensureOwnedSchema(restrictedAdminDSN, database, schema, serviceRole); err != nil {
+			t.Fatalf("ensureOwnedSchema() attempt %d: %v", attempt+1, err)
+		}
+		if attempt == 0 {
+			if _, err := bootstrap.Exec("REVOKE " + pq.QuoteIdentifier(serviceRole) + " FROM " + pq.QuoteIdentifier(adminRole) + " GRANTED BY " + pq.QuoteIdentifier(adminRole)); err != nil {
+				t.Fatalf("remove explicit SET membership before retry: %v", err)
+			}
+		}
+	}
+
+	var adminCanSetRole, serviceIsMember bool
+	if err := bootstrap.QueryRow(`SELECT pg_has_role($1, $2, 'SET'), pg_has_role($2, $1, 'MEMBER')`, adminRole, serviceRole).Scan(&adminCanSetRole, &serviceIsMember); err != nil {
+		t.Fatal(err)
+	}
+	if !adminCanSetRole || serviceIsMember {
+		t.Fatalf("role membership direction: admin-can-set-service=%v service-to-admin=%v", adminCanSetRole, serviceIsMember)
+	}
+	var owner string
+	if err := bootstrap.QueryRow(`SELECT r.rolname FROM pg_namespace n JOIN pg_roles r ON r.oid=n.nspowner WHERE n.nspname=$1`, schema).Scan(&owner); err != nil {
+		t.Fatal(err)
+	}
+	if owner != serviceRole {
+		t.Fatalf("schema owner = %q, want %q", owner, serviceRole)
 	}
 }
 
