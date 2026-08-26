@@ -219,6 +219,22 @@ func TestRunInitializationStopsAndSanitizesMembershipGrantFailure(t *testing.T) 
 			t.Fatalf("RunInitialization() exposed secret %q in %q", secret, err)
 		}
 	}
+	originalCredential, err := sql.Open("postgres", restrictedAdminDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer originalCredential.Close()
+	if err := originalCredential.PingContext(context.Background()); err != nil {
+		t.Fatalf("original administrator credential was rotated: %v", err)
+	}
+	replacementCredential, err := sql.Open("postgres", config.Database.ServiceDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replacementCredential.Close()
+	if err := replacementCredential.PingContext(context.Background()); err == nil {
+		t.Fatal("requested replacement credential became valid after membership grant failure")
+	}
 	var schemaExists bool
 	if err := bootstrap.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname=$1)`, schema).Scan(&schemaExists); err != nil {
 		t.Fatal(err)
