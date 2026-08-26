@@ -255,10 +255,10 @@ services:
     depends_on: {business-resources: {condition: service_completed_successfully}}
     environment:
       POWERSYNC_CONFIG_PATH: /etc/gizway/powersync/pay/service.yaml
-      PS_SOURCE_URI: postgres://powersync_pay_source:powersync_pay_source@postgres-gizpay:5432/gizpay
+      PS_SOURCE_URI: postgres://powersync_pay_source:pay-source%21%23%25%3A@postgres-gizpay:5432/gizpay
       PS_SOURCE_SSL_MODE: verify-full
       PS_SOURCE_CA_FILE: /run/secrets/postgres-ca.crt
-      PS_STORAGE_URI: postgres://powersync_pay_storage:powersync_pay_storage@postgres-powersync:5432/gizpay_sync
+      PS_STORAGE_URI: postgres://powersync_pay_storage:pay-storage%21%23%25%3A@postgres-powersync:5432/gizpay_sync
       PS_STORAGE_SSL_MODE: verify-full
       PS_STORAGE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_JWKS_URI: http://oauth-spy:19500/oauth/v2/keys
@@ -270,10 +270,10 @@ services:
     depends_on: {business-resources: {condition: service_completed_successfully}}
     environment:
       POWERSYNC_CONFIG_PATH: /etc/gizway/powersync/global/service.yaml
-      PS_SOURCE_URI: postgres://powersync_global_source:powersync_global_source@postgres-global:5432/gizway
+      PS_SOURCE_URI: postgres://powersync_global_source:global-source%21%23%25%3A@postgres-global:5432/gizway
       PS_SOURCE_SSL_MODE: verify-full
       PS_SOURCE_CA_FILE: /run/secrets/postgres-ca.crt
-      PS_STORAGE_URI: postgres://powersync_global_storage:powersync_global_storage@postgres-powersync:5432/global_sync
+      PS_STORAGE_URI: postgres://powersync_global_storage:global-storage%21%23%25%3A@postgres-powersync:5432/global_sync
       PS_STORAGE_SSL_MODE: verify-full
       PS_STORAGE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_JWKS_URI: http://oauth-spy:19500/oauth/v2/keys
@@ -285,10 +285,10 @@ services:
     depends_on: {business-resources: {condition: service_completed_successfully}}
     environment:
       POWERSYNC_CONFIG_PATH: /etc/gizway/powersync/cn/service.yaml
-      PS_SOURCE_URI: postgres://powersync_cn_source:powersync_cn_source@postgres-cn:5432/gizway
+      PS_SOURCE_URI: postgres://powersync_cn_source:cn-source%21%23%25%3A@postgres-cn:5432/gizway
       PS_SOURCE_SSL_MODE: verify-full
       PS_SOURCE_CA_FILE: /run/secrets/postgres-ca.crt
-      PS_STORAGE_URI: postgres://powersync_cn_storage:powersync_cn_storage@postgres-powersync:5432/cn_sync
+      PS_STORAGE_URI: postgres://powersync_cn_storage:cn-storage%21%23%25%3A@postgres-powersync:5432/cn_sync
       PS_STORAGE_SSL_MODE: verify-full
       PS_STORAGE_CA_FILE: /run/secrets/postgres-ca.crt
       PS_JWKS_URI: http://oauth-spy:19500/oauth/v2/keys

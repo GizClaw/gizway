@@ -7,6 +7,6 @@ database:
 powersync:
   publication: powersync
   source_schemas: [public, client_sync]
-  source_dsn: postgres://powersync_pay_source:powersync_pay_source@postgres-gizpay:5432/gizpay?sslmode=disable
+  source_dsn: postgres://powersync_pay_source:pay-source%21%23%25%3A@postgres-gizpay:5432/gizpay?sslmode=disable
   storage_admin_dsn: postgres://postgres:postgres@postgres-powersync:5432/postgres?sslmode=disable
-  storage_dsn: postgres://powersync_pay_storage:powersync_pay_storage@postgres-powersync:5432/gizpay_sync?sslmode=disable
+  storage_dsn: postgres://powersync_pay_storage:pay-storage%21%23%25%3A@postgres-powersync:5432/gizpay_sync?sslmode=disable

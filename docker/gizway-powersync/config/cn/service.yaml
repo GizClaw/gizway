@@ -2,11 +2,15 @@ replication:
   connections:
     - type: postgresql
       uri: !env PS_SOURCE_URI
+      username: !env PS_SOURCE_USERNAME
+      password: !env PS_SOURCE_PASSWORD
       sslmode: !env PS_SOURCE_SSL_MODE
       cacert: !env PS_SOURCE_CA_CERT
 storage:
   type: postgresql
   uri: !env PS_STORAGE_URI
+  username: !env PS_STORAGE_USERNAME
+  password: !env PS_STORAGE_PASSWORD
   sslmode: !env PS_STORAGE_SSL_MODE
   cacert: !env PS_STORAGE_CA_CERT
 port: 8080
