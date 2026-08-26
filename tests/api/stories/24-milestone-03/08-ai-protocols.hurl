@@ -46,6 +46,23 @@ HTTP 401
 jsonpath "$.error.code" == "invalid_subscription_key"
 
 GET {{way_url}}/openai/v1/models
+Authorization: Bearer unknown-subscription-key
+
+HTTP 401
+[Asserts]
+jsonpath "$.error.code" == "invalid_subscription_key"
+
+
+POST {{way_url}}/openai/v1/realtime/client_secrets
+Authorization: Bearer unknown-subscription-key
+Content-Type: application/json
+{"model":"{{seeded_model_name}}","transport":"websocket"}
+
+HTTP 401
+[Asserts]
+jsonpath "$.error.code" == "invalid_subscription_key"
+
+GET {{way_url}}/openai/v1/models
 Authorization: Bearer {{raw_subscription_key}}
 
 HTTP 200

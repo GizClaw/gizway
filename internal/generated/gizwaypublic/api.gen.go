@@ -1508,6 +1508,27 @@ type ListModelsResponse struct {
 			Object ListModels200JSONResponseBodyDataObject `json:"object"`
 		} `json:"data"`
 	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -1518,6 +1539,36 @@ func (r ListModelsResponse) GetJSON200() *struct {
 	} `json:"data"`
 } {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ListModelsResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r ListModelsResponse) GetJSON402() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON402
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ListModelsResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -1598,6 +1649,27 @@ type CreateRealtimeClientSecretResponse struct {
 			Transport CreateRealtimeClientSecret201JSONResponseBodySessionTransport `json:"transport"`
 		} `json:"session"`
 	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
@@ -1613,6 +1685,36 @@ func (r CreateRealtimeClientSecretResponse) GetJSON201() *struct {
 	} `json:"session"`
 } {
 	return r.JSON201
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r CreateRealtimeClientSecretResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r CreateRealtimeClientSecretResponse) GetJSON402() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON402
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r CreateRealtimeClientSecretResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -2169,6 +2271,42 @@ func ParseListModelsResponse(rsp *http.Response) (*ListModelsResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	return response, nil
@@ -2220,6 +2358,42 @@ func ParseCreateRealtimeClientSecretResponse(rsp *http.Response) (*CreateRealtim
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -2603,32 +2777,33 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"KMIdXZ0k/IFl9O6EyZys5+t/AwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
