@@ -50,6 +50,8 @@ type Handler struct {
 	config Config
 }
 
+var errIdentityInitializationConflict = errors.New("identity initialization conflicts with the existing default Merchant")
+
 func New(config Config) (*Handler, error) {
 	if config.DB == nil || config.Verifier == nil || config.ServiceAccounts == nil || len(config.HMACSecret) == 0 {
 		return nil, errors.New("incomplete GizPay handler configuration")
@@ -177,7 +179,8 @@ func (h *Handler) zitadelUserAuthenticated(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var payload struct {
-		User struct {
+		MerchantID string `json:"merchant_id"`
+		User       struct {
 			ID    string          `json:"id"`
 			Human json.RawMessage `json:"human"`
 		} `json:"user"`
@@ -195,6 +198,14 @@ func (h *Handler) zitadelUserAuthenticated(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	merchantID := strings.TrimSpace(payload.MerchantID)
+	if merchantID != "" {
+		parsed, parseErr := uuid.Parse(merchantID)
+		if parseErr != nil || parsed.String() != merchantID {
+			errorJSON(w, http.StatusBadRequest, "invalid_request", "merchant_id must be a canonical UUID")
+			return
+		}
+	}
 	displayName := strings.TrimSpace(payload.UserInfo.Name)
 	if displayName == "" {
 		displayName = strings.TrimSpace(payload.UserInfo.PreferredUsername)
@@ -202,7 +213,11 @@ func (h *Handler) zitadelUserAuthenticated(w http.ResponseWriter, r *http.Reques
 	if displayName == "" {
 		displayName = payload.User.ID
 	}
-	if _, _, _, _, err := h.initializeIdentity(r.Context(), h.config.ZITADELIssuer, payload.User.ID, strings.TrimSpace(payload.UserInfo.Email), displayName); err != nil {
+	if _, _, _, _, err := h.initializeIdentity(r.Context(), h.config.ZITADELIssuer, payload.User.ID, strings.TrimSpace(payload.UserInfo.Email), displayName, merchantID); err != nil {
+		if errors.Is(err, errIdentityInitializationConflict) {
+			errorJSON(w, http.StatusConflict, "identity_initialization_conflict", "requested Merchant conflicts with existing identity initialization")
+			return
+		}
 		internal(w)
 		return
 	}
@@ -245,7 +260,7 @@ func validateActionSignature(body []byte, header string, secret []byte, now time
 	return hmac.Equal(provided, mac.Sum(nil))
 }
 
-func (h *Handler) initializeIdentity(ctx context.Context, issuer, subject, email, displayName string) (string, string, string, string, error) {
+func (h *Handler) initializeIdentity(ctx context.Context, issuer, subject, email, displayName, requestedMerchantID string) (string, string, string, string, error) {
 	if strings.TrimSpace(issuer) == "" || strings.TrimSpace(subject) == "" || strings.TrimSpace(displayName) == "" {
 		return "", "", "", "", errors.New("invalid Human identity")
 	}
@@ -254,6 +269,24 @@ func (h *Handler) initializeIdentity(ctx context.Context, issuer, subject, email
 		return "", "", "", "", err
 	}
 	defer tx.Rollback()
+	var existingMerchantID string
+	err = tx.GetContext(ctx, &existingMerchantID, `SELECT m.id FROM merchants m JOIN accounts a ON a.id=m.settlement_account_id JOIN users u ON u.id=a.owner_user_id WHERE u.identity_issuer=$1 AND u.identity_subject=$2 AND m.is_default=true`, issuer, subject)
+	if err == nil && requestedMerchantID != "" && existingMerchantID != requestedMerchantID {
+		return "", "", "", "", errIdentityInitializationConflict
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", "", err
+	}
+	if requestedMerchantID != "" && existingMerchantID == "" {
+		var existingSettlementAccountID string
+		err = tx.GetContext(ctx, &existingSettlementAccountID, `SELECT settlement_account_id FROM merchants WHERE id=$1`, requestedMerchantID)
+		if err == nil {
+			return "", "", "", "", errIdentityInitializationConflict
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", "", "", "", err
+		}
+	}
 	userID := "usr_" + uuid.NewString()
 	now := h.config.Now().UTC()
 	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,identity_issuer,identity_subject,email,display_name,status,created_at) VALUES($1,$2,$3,$4,$5,'active',$6) ON CONFLICT(identity_issuer,identity_subject) DO UPDATE SET email=EXCLUDED.email,display_name=EXCLUDED.display_name`, userID, issuer, subject, email, displayName, now)
@@ -279,13 +312,22 @@ func (h *Handler) initializeIdentity(ctx context.Context, issuer, subject, email
 	if err = tx.GetContext(ctx, &ledgerID, `SELECT id FROM ledger_accounts WHERE owner_account_id=$1 AND asset_code='credit'`, accountID); err != nil {
 		return "", "", "", "", err
 	}
-	merchantID := "merchant_" + uuid.NewString()
+	merchantID := requestedMerchantID
+	if merchantID == "" {
+		merchantID = uuid.NewString()
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO merchants(id,settlement_account_id,legal_name,public_name,is_default,status,created_at,updated_at) VALUES($1,$2,$3,$3,true,'active',$4,$4) ON CONFLICT DO NOTHING`, merchantID, accountID, displayName, now)
 	if err != nil {
 		return "", "", "", "", err
 	}
 	if err = tx.GetContext(ctx, &merchantID, `SELECT id FROM merchants WHERE settlement_account_id=$1 AND is_default=true`, accountID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) && requestedMerchantID != "" {
+			return "", "", "", "", errIdentityInitializationConflict
+		}
 		return "", "", "", "", err
+	}
+	if requestedMerchantID != "" && merchantID != requestedMerchantID {
+		return "", "", "", "", errIdentityInitializationConflict
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO client_sync.user_profiles(id,owner_identity_issuer,owner_identity_subject,email,display_name,merchant_id,status,created_at) VALUES($1,$2,$3,$4,$5,$6,'active',$7) ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email,display_name=EXCLUDED.display_name,merchant_id=EXCLUDED.merchant_id,status=EXCLUDED.status`, userID, issuer, subject, email, displayName, merchantID, now)
 	if err != nil {

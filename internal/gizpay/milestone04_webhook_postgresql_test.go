@@ -10,10 +10,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/GizClaw/gizway/internal/testdb"
+	"github.com/google/uuid"
 )
 
 func TestMilestone04ZITADELWebhookVerifiesAndInitializesOnlyHumans(t *testing.T) {
@@ -56,6 +58,14 @@ func TestMilestone04ZITADELWebhookVerifiesAndInitializesOnlyHumans(t *testing.T)
 	if email != "human@example.test" || displayName != "Human M04" {
 		t.Fatalf("profile=(%q,%q)", email, displayName)
 	}
+	var generatedMerchantID string
+	if err := db.Get(&generatedMerchantID, `SELECT merchant_id FROM client_sync.user_profiles WHERE owner_identity_subject='human-m04'`); err != nil {
+		t.Fatal(err)
+	}
+	parsedMerchantID, err := uuid.Parse(generatedMerchantID)
+	if err != nil || parsedMerchantID.String() != generatedMerchantID {
+		t.Fatalf("generated default Merchant ID=%q is not a canonical UUID", generatedMerchantID)
+	}
 
 	service := []byte(`{"user":{"id":"service-m04"},"userinfo":{}}`)
 	recorder := serveSignedWebhookWithHeader(handler, service, now, []byte("m04-action-signing-key"), "ZITADEL-Signature")
@@ -89,6 +99,76 @@ func TestMilestone04ZITADELWebhookRejectsMissingOrStaleSignature(t *testing.T) {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
 		})
+	}
+}
+
+func TestMilestone04ZITADELWebhookHonorsFixedMerchantUUID(t *testing.T) {
+	if os.Getenv("GIZWAY_TEST_POSTGRES_DSN") == "" {
+		t.Skip("GIZWAY_TEST_POSTGRES_DSN is required")
+	}
+	db := testdb.OpenGizPay(t).SQL
+	now := time.Date(2026, 8, 27, 4, 0, 0, 0, time.UTC)
+	handler := &Handler{config: Config{DB: db, Now: func() time.Time { return now }}}
+	setM04ConfigField(t, &handler.config, "ZITADELIssuer", "https://identity.example.test")
+	setM04ConfigField(t, &handler.config, "ActionSigningKey", []byte("fixed-merchant-signing-key"))
+
+	fixed := "7c891eb4-38ff-4726-8ea3-e59211cbd191"
+	payload := []byte(`{"merchant_id":"` + fixed + `","user":{"id":"fixed-merchant-human","human":{}},"userinfo":{"name":"Fixed Merchant Human"}}`)
+	for range 2 {
+		recorder := serveSignedWebhook(handler, payload, now, []byte("fixed-merchant-signing-key"))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("fixed Merchant webhook status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	}
+	var merchantID string
+	if err := db.Get(&merchantID, `SELECT m.id FROM merchants m JOIN accounts a ON a.id=m.settlement_account_id JOIN users u ON u.id=a.owner_user_id WHERE u.identity_subject='fixed-merchant-human' AND m.is_default=true`); err != nil {
+		t.Fatal(err)
+	}
+	if merchantID != fixed {
+		t.Fatalf("default Merchant ID=%q want=%q", merchantID, fixed)
+	}
+
+	collision := []byte(`{"merchant_id":"` + fixed + `","user":{"id":"other-fixed-merchant-human","human":{}},"userinfo":{"name":"Other Fixed Merchant Human"}}`)
+	recorder := serveSignedWebhook(handler, collision, now, []byte("fixed-merchant-signing-key"))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"identity_initialization_conflict"`) {
+		t.Fatalf("Merchant UUID collision status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var collisionUserCount int
+	if err := db.Get(&collisionUserCount, `SELECT count(*) FROM users WHERE identity_subject='other-fixed-merchant-human'`); err != nil || collisionUserCount != 0 {
+		t.Fatalf("Merchant UUID collision created %d users: %v", collisionUserCount, err)
+	}
+
+	conflict := []byte(`{"merchant_id":"f5698fc7-f31b-4a3f-9827-47a288d1d427","user":{"id":"fixed-merchant-human","human":{}},"userinfo":{"name":"Changed Name"}}`)
+	recorder = serveSignedWebhook(handler, conflict, now, []byte("fixed-merchant-signing-key"))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"identity_initialization_conflict"`) {
+		t.Fatalf("conflicting replay status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var displayName string
+	if err := db.Get(&displayName, `SELECT display_name FROM users WHERE identity_subject='fixed-merchant-human'`); err != nil {
+		t.Fatal(err)
+	}
+	if displayName != "Fixed Merchant Human" {
+		t.Fatalf("conflicting replay changed display name to %q", displayName)
+	}
+}
+
+func TestMilestone04ZITADELWebhookRejectsInvalidMerchantUUIDBeforeMutation(t *testing.T) {
+	if os.Getenv("GIZWAY_TEST_POSTGRES_DSN") == "" {
+		t.Skip("GIZWAY_TEST_POSTGRES_DSN is required")
+	}
+	db := testdb.OpenGizPay(t).SQL
+	now := time.Date(2026, 8, 27, 4, 0, 0, 0, time.UTC)
+	handler := &Handler{config: Config{DB: db, Now: func() time.Time { return now }}}
+	setM04ConfigField(t, &handler.config, "ZITADELIssuer", "https://identity.example.test")
+	setM04ConfigField(t, &handler.config, "ActionSigningKey", []byte("invalid-merchant-signing-key"))
+	payload := []byte(`{"merchant_id":"not-a-uuid","user":{"id":"invalid-merchant-human","human":{}},"userinfo":{"name":"Invalid Merchant Human"}}`)
+	recorder := serveSignedWebhook(handler, payload, now, []byte("invalid-merchant-signing-key"))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("invalid Merchant UUID status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var count int
+	if err := db.Get(&count, `SELECT count(*) FROM users WHERE identity_subject='invalid-merchant-human'`); err != nil || count != 0 {
+		t.Fatalf("invalid Merchant UUID created %d users: %v", count, err)
 	}
 }
 

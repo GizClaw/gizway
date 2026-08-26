@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -185,6 +186,82 @@ func TestAdmitCachesDeniedCreditUntilCheckedAtExpiry(t *testing.T) {
 	}
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("expired result made %d Credit Check requests, want 2", got)
+	}
+}
+
+func TestProtocolPreservesInvalidSubscriptionKeyAcrossSDKRoutes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_subscription_key","message":"internal detail"}}`))
+	}))
+	defer server.Close()
+
+	for name, setup := range map[string]func(*http.Request){
+		"openai": func(request *http.Request) { request.Header.Set("Authorization", "Bearer unknown") },
+		"anthropic": func(request *http.Request) {
+			request.Header.Set("x-api-key", "unknown")
+			request.Header.Set("anthropic-version", "2023-06-01")
+		},
+		"gemini": func(request *http.Request) { request.Header.Set("x-goog-api-key", "unknown") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			paths := map[string]string{
+				"openai": "/openai/v1/chat/completions", "anthropic": "/anthropic/v1/messages",
+				"gemini": "/genai/v1beta/models/model:generateContent",
+			}
+			handler := creditTestHandler(newCreditTestClock(time.Now()), server)
+			handler.config.HMACSecret = []byte("test-hmac")
+			request := httptest.NewRequest(http.MethodPost, paths[name], strings.NewReader(`{}`))
+			setup(request)
+			recorder := httptest.NewRecorder()
+			handler.protocol(recorder, request)
+			if recorder.Code != http.StatusUnauthorized || !strings.Contains(recorder.Body.String(), `"code":"invalid_subscription_key"`) || strings.Contains(recorder.Body.String(), "internal detail") {
+				t.Fatalf("response status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestCreditCheckDoesNotTrustUnexpectedUpstreamErrors(t *testing.T) {
+	for name, response := range map[string]struct {
+		status int
+		body   string
+	}{
+		"wrong code":     {status: http.StatusUnauthorized, body: `{"error":{"code":"invalid_token"}}`},
+		"wrong status":   {status: http.StatusForbidden, body: `{"error":{"code":"invalid_subscription_key"}}`},
+		"malformed":      {status: http.StatusUnauthorized, body: `not-json`},
+		"server failure": {status: http.StatusServiceUnavailable, body: `{"error":{"code":"invalid_subscription_key"}}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(response.status)
+				_, _ = w.Write([]byte(response.body))
+			}))
+			defer server.Close()
+			handler := creditTestHandler(newCreditTestClock(time.Now()), server)
+			_, err := handler.checkCredit(t.Context(), "unknown")
+			if err == nil || errors.Is(err, errInvalidSubscriptionKey) {
+				t.Fatalf("checkCredit error=%v", err)
+			}
+		})
+	}
+}
+
+func TestProtocolKeepsUnexpectedCreditCheckFailureUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_token","message":"must not leak"}}`))
+	}))
+	defer server.Close()
+	handler := creditTestHandler(newCreditTestClock(time.Now()), server)
+	handler.config.HMACSecret = []byte("test-hmac")
+	request := httptest.NewRequest(http.MethodPost, "/openai/v1/chat/completions", strings.NewReader(`{}`))
+	request.Header.Set("Authorization", "Bearer unknown")
+	recorder := httptest.NewRecorder()
+	handler.protocol(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), `"code":"credit_check_unavailable"`) || strings.Contains(recorder.Body.String(), "must not leak") {
+		t.Fatalf("response status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

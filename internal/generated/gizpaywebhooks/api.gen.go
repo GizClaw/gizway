@@ -22,10 +22,12 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // InitializeHumanFromZitadelJSONBody defines parameters for InitializeHumanFromZitadel.
 type InitializeHumanFromZitadelJSONBody struct {
+	MerchantId           *openapi_types.UUID                          `json:"merchant_id,omitempty"`
 	User                 InitializeHumanFromZitadelJSONBody_User      `json:"user"`
 	Userinfo             *InitializeHumanFromZitadelJSONBody_Userinfo `json:"userinfo,omitempty"`
 	AdditionalProperties map[string]interface{}                       `json:"-"`
@@ -79,6 +81,14 @@ func (a *InitializeHumanFromZitadelJSONBody) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["merchant_id"]; found {
+		err = json.Unmarshal(raw, &a.MerchantId)
+		if err != nil {
+			return fmt.Errorf("error reading 'merchant_id': %w", err)
+		}
+		delete(object, "merchant_id")
+	}
+
 	if raw, found := object["user"]; found {
 		err = json.Unmarshal(raw, &a.User)
 		if err != nil {
@@ -113,6 +123,13 @@ func (a *InitializeHumanFromZitadelJSONBody) UnmarshalJSON(b []byte) error {
 func (a InitializeHumanFromZitadelJSONBody) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
+
+	if a.MerchantId != nil {
+		object["merchant_id"], err = json.Marshal(a.MerchantId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'merchant_id': %w", err)
+		}
+	}
 
 	object["user"], err = json.Marshal(a.User)
 	if err != nil {
@@ -550,6 +567,13 @@ type InitializeHumanFromZitadelResponse struct {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *struct {
 		Error struct {
@@ -577,6 +601,16 @@ func (r InitializeHumanFromZitadelResponse) GetJSON401() *struct {
 	} `json:"error"`
 } {
 	return r.JSON401
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r InitializeHumanFromZitadelResponse) GetJSON409() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON409
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -680,6 +714,18 @@ func ParseInitializeHumanFromZitadelResponse(rsp *http.Response) (*InitializeHum
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest struct {
@@ -889,16 +935,17 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"7FVNb9s4EP0rwmBvK1vybvawuqXol4EcArRAixhqMJHG1qQUyZIjB7ah/16MZOejTpEGyDEnAZyv9948",
-	"ijuoXOudJSsRil2fAtulg2IHwmIICvjA23PcJBfzz6dv350lX+iqce57hBTWFCI7CwWcTPNpDn0KzpNF",
-	"z1DAv9PZNIcUPEqjnSHbsmBNJusihQl20pAVrlCo1rB3UfTrPAUUdnZeQwFzy8JoeEsfuxbt++Dai7HN",
-	"0DpgS0IhQrHYASuShrCmAClYbBX918ke+OQTryxKFwhSCPSj46CDJXSUQqwaalHHt2zPyK6kgWKWgmy8",
-	"NokS2K6g78uxlKK8cfVG8ytnheyAHL03yoedza6j6rK71xjrmjWE5jwoR2GKh/H+3skOVJ/nVTSqzVMl",
-	"I5cFuKtrqkQV6oyBUjdeP838vmYLrShvc/YN+3RAfrDPn6OnFtkMjns487DDRwI+0JJCoPpSR/4mrT9C",
-	"+AuLQehjHg/TFPFwEL2zcUT8T36in5piFdjLeAcGgyZ8a9g6cSGxzk72gZV12rBP4STPX8A6SzTxWMsQ",
-	"XHhmTeXqQT6PIhSUyrcFTrb55P/L8u+/ID2Wv6UYcUXPdc0w6K66fGo/I5nHF/RQ+7ldo+E62V/OUeTZ",
-	"q8gvKvLp3S+bnU2WyGb083+vfn5xPytyNEmksOaKkrFUEyNVXWDZQLEo+/EgrA9PYBeMvoEiPhZZ5nEz",
-	"XfG2MngzrVyb3eyf7mw9g77sfwYAAP//",
+	"7JbLbus2EIZfhRh0V/nWpoujXYr0YiCLoC3QIoZrMORYmpQi2eHIgW3o3QtKdm5OkRPAy6wEkJyZfz7+",
+	"pLgHE5oYPHpJUO67AsivA5R7EBKHUMIvtLvRW3U7/+Py6qdr9Sfe1SH8k6CADXKi4KGEi/F0PIWugBDR",
+	"60hQwvfj2XgKBUQtdc4Mkx2JtugmbUIe6VZq9EJGC9o8HUOS/A0RWQsFP7dQwtyTkHa0w1/bRvufOTS3",
+	"Q5o+NesGBTlBudgDZSU1aosMBXjdZPV/jQ7CR79T5bW0jFAA478tcS4s3GIBydTY6Fy+IX+NvpIaylkB",
+	"so05SRImX0HXLYdQTPJjsNu83gQv6HvlOkaX+6HgJ/cpc9k/S6ytpTyl3Q3nHoUwHcvHZyN7aJBNrb2s",
+	"qAezDtxogRLaliycaCog8/xYhTqzfC9kqLOAcHePRjLR1jlYZofY90k9Z7zIEcvHNYeEB+VHu329emw0",
+	"ud6hr0kMe/7GRGRcIzPaVS75P8u6E4WvuuhBn/bxcllW3A+kGHwaFH83vcgfi8kwRRnOTG9oRY8Gtyqw",
+	"8sGPDhOVDzlhV8DFdHoGq621S6csmQN/MMYE2+OLWgQ5t/L3Qo9209GX1fLbb95yaIMp6Qo/6pq+0FP0",
+	"8r39GZp5e4Nesp/7jXZk1eEwD5Bnn5DPCvny6Yqn4NVakzv6+csn6rOi/g1TaNmgSqIF80ViHKGXUYU+",
+	"/07RqvmVMsGvHRlJ6oGkVlLj8QAUirxxrSVfKT7kWpFdHSNy0z983kJnv4Wycu1UQt6QQTWE5oUJTcsk",
+	"WygXy24Y4M3xodOyyy8dkZjKySTq7biinXH6YWxCM3k4PNAmmxl0y+6/AAAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

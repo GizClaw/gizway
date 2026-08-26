@@ -12,6 +12,38 @@
 # protocol covers: Gemini x-goog-api-key authentication and model operation mapping
 # protocol-case: m03.ai.rejected-routes
 # protocol covers: removed root APIs and unknown prefixed operations return 404
+# protocol-case: m03.ai.invalid-subscription-key
+# protocol covers: all SDK protocols preserve the invalid Subscription Key business rejection
+
+POST {{way_url}}/openai/v1/chat/completions
+Authorization: Bearer unknown-subscription-key
+Content-Type: application/json
+{"model":"{{seeded_model_name}}","messages":[{"role":"user","content":"must reject"}]}
+
+HTTP 401
+[Asserts]
+jsonpath "$.error.code" == "invalid_subscription_key"
+
+
+POST {{way_url}}/anthropic/v1/messages
+x-api-key: unknown-subscription-key
+anthropic-version: 2023-06-01
+Content-Type: application/json
+{"model":"{{seeded_model_name}}","max_tokens":32,"messages":[{"role":"user","content":"must reject"}]}
+
+HTTP 401
+[Asserts]
+jsonpath "$.error.code" == "invalid_subscription_key"
+
+
+POST {{way_url}}/genai/v1beta/models/{{seeded_model_name}}:generateContent
+x-goog-api-key: unknown-subscription-key
+Content-Type: application/json
+{"contents":[{"role":"user","parts":[{"text":"must reject"}]}]}
+
+HTTP 401
+[Asserts]
+jsonpath "$.error.code" == "invalid_subscription_key"
 
 GET {{way_url}}/openai/v1/models
 Authorization: Bearer {{raw_subscription_key}}

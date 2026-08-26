@@ -988,11 +988,62 @@ type CreateAnthropicMessageResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *map[string]interface{}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r CreateAnthropicMessageResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r CreateAnthropicMessageResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r CreateAnthropicMessageResponse) GetJSON402() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON402
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r CreateAnthropicMessageResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -1183,11 +1234,62 @@ type GenerateGeminiContentResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *map[string]interface{}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GenerateGeminiContentResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GenerateGeminiContentResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r GenerateGeminiContentResponse) GetJSON402() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON402
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GenerateGeminiContentResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -1222,6 +1324,57 @@ func (r GenerateGeminiContentResponse) ContentType() string {
 type StreamGeminiContentResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r StreamGeminiContentResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r StreamGeminiContentResponse) GetJSON402() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON402
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r StreamGeminiContentResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -1258,11 +1411,62 @@ type CreateChatCompletionResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *map[string]interface{}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r CreateChatCompletionResponse) GetJSON200() *map[string]interface{} {
 	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r CreateChatCompletionResponse) GetJSON401() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r CreateChatCompletionResponse) GetJSON402() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON402
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r CreateChatCompletionResponse) GetJSON503() *struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+} {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -1615,6 +1819,42 @@ func ParseCreateAnthropicMessageResponse(rsp *http.Response) (*CreateAnthropicMe
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	case rsp.StatusCode == 200:
 		// Content-type (text/event-stream) unsupported
 
@@ -1739,6 +1979,42 @@ func ParseGenerateGeminiContentResponse(rsp *http.Response) (*GenerateGeminiCont
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	case rsp.StatusCode == 200:
 		// Content-type (text/event-stream) unsupported
 
@@ -1758,6 +2034,45 @@ func ParseStreamGeminiContentResponse(rsp *http.Response) (*StreamGeminiContentR
 	response := &StreamGeminiContentResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	return response, nil
@@ -1783,6 +2098,42 @@ func ParseCreateChatCompletionResponse(rsp *http.Response) (*CreateChatCompletio
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	case rsp.StatusCode == 200:
 		// Content-type (text/event-stream) unsupported
@@ -2252,31 +2603,32 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"x2szi6KUItzTzVnKH1lG78+YzEm5KP8IAAD//w==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
