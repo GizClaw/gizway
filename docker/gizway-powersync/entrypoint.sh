@@ -6,12 +6,13 @@ fail() {
   exit 2
 }
 
-validate_uri() {
-  uri_name="$1"
+normalize_uri_credentials() {
+  prefix="$1"
+  uri_name="PS_${prefix}_URI"
   eval "uri_value=\${$uri_name:-}"
   [ -n "$uri_value" ] || fail "$uri_name is required"
 
-  if ! PS_VALIDATE_URI="$uri_value" node - <<'NODE'
+  if ! encoded_credentials="$(PS_VALIDATE_URI="$uri_value" node - <<'NODE'
 const value = process.env.PS_VALIDATE_URI;
 let uri;
 try {
@@ -29,10 +30,32 @@ for (const key of uri.searchParams.keys()) {
     process.exit(1);
   }
 }
+let username;
+let password;
+try {
+  username = decodeURIComponent(uri.username);
+  password = decodeURIComponent(uri.password);
+} catch {
+  process.exit(1);
+}
+if (username === '' || password === '' || /[\0\r\n]/.test(username) || /[\0\r\n]/.test(password)) {
+  process.exit(1);
+}
+process.stdout.write(`${Buffer.from(username).toString('base64')}\n${Buffer.from(password).toString('base64')}`);
 NODE
-  then
-    fail "$uri_name must be a PostgreSQL URI without a fragment or TLS query parameters"
+  )"; then
+    fail "$uri_name must be a PostgreSQL URI with valid login credentials and without a fragment or TLS query parameters"
   fi
+
+  credential_separator='
+'
+  username_base64="${encoded_credentials%%"$credential_separator"*}"
+  password_base64="${encoded_credentials#*"$credential_separator"}"
+  [ -n "$username_base64" ] && [ -n "$password_base64" ] && [ "$password_base64" != "$encoded_credentials" ] || fail "$uri_name credentials could not be normalized"
+  username="$(printf '%s' "$username_base64" | base64 -d)"
+  password="$(printf '%s' "$password_base64" | base64 -d)"
+  export "PS_${prefix}_USERNAME=$username"
+  export "PS_${prefix}_PASSWORD=$password"
 }
 
 load_ca_bundle() {
@@ -78,7 +101,7 @@ configure_connection() {
   file_name="PS_${prefix}_CA_FILE"
   cert_name="PS_${prefix}_CA_CERT"
 
-  validate_uri "$uri_name"
+  normalize_uri_credentials "$prefix"
   eval "mode_value=\${$mode_name:-}"
   case "$mode_value" in
     disable)

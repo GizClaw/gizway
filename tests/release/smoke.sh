@@ -102,6 +102,12 @@ for routes in "$temporary/entry/routes-global.yml.template" "$temporary/entry/ro
   fi
 done
 test -f "$temporary/powersync/pay/service.yaml" -a -f "$temporary/powersync/global/service.yaml" -a -f "$temporary/powersync/cn/service.yaml"
+for service_config in "$temporary"/powersync/{pay,global,cn}/service.yaml; do
+  grep -F 'username: !env PS_SOURCE_USERNAME' "$service_config" >/dev/null
+  grep -F 'password: !env PS_SOURCE_PASSWORD' "$service_config" >/dev/null
+  grep -F 'username: !env PS_STORAGE_USERNAME' "$service_config" >/dev/null
+  grep -F 'password: !env PS_STORAGE_PASSWORD' "$service_config" >/dev/null
+done
 
 if docker run --rm "$GIZPAY_IMAGE" init --config=/missing >/dev/null 2>&1; then echo 'gizpay init accepted missing config' >&2; exit 1; fi
 if docker run --rm "$GIZWAY_IMAGE" init --config=/missing >/dev/null 2>&1; then echo 'gizway init accepted missing config' >&2; exit 1; fi
@@ -134,6 +140,21 @@ fi
 timeout 10 docker run --rm "${powersync_disable_env[@]}" "$POWERSYNC_IMAGE" --help >/dev/null
 timeout 10 docker run --rm "${powersync_verify_env[@]}" "$POWERSYNC_IMAGE" --help >/dev/null
 timeout 10 docker run --rm "${powersync_verify_env[@]}" -e PS_SOURCE_SSL_MODE=verify-ca "$POWERSYNC_IMAGE" --help >/dev/null
+source_username='source:user'
+source_password='source!#%&*+-='
+storage_username='storage:user'
+storage_password='storage!#%&*+-='
+docker run --rm --entrypoint /usr/local/bin/gizway-powersync-entrypoint "${powersync_disable_env[@]}" \
+  -e 'PS_SOURCE_URI=postgres://source%3Auser:source%21%23%25%26%2A%2B-%3D@postgres.test:5432/source' \
+  -e 'PS_STORAGE_URI=postgres://storage%3Auser:storage%21%23%25%26%2A%2B-%3D@postgres.test:5432/storage' \
+  -e "EXPECTED_SOURCE_USERNAME=$source_username" -e "EXPECTED_SOURCE_PASSWORD=$source_password" \
+  -e "EXPECTED_STORAGE_USERNAME=$storage_username" -e "EXPECTED_STORAGE_PASSWORD=$storage_password" \
+  "$POWERSYNC_IMAGE" sh -eu -c '
+    test "$PS_SOURCE_USERNAME" = "$EXPECTED_SOURCE_USERNAME"
+    test "$PS_SOURCE_PASSWORD" = "$EXPECTED_SOURCE_PASSWORD"
+    test "$PS_STORAGE_USERNAME" = "$EXPECTED_STORAGE_USERNAME"
+    test "$PS_STORAGE_PASSWORD" = "$EXPECTED_STORAGE_PASSWORD"
+  '
 if docker run --rm "${powersync_common_env[@]}" -e PS_STORAGE_SSL_MODE=disable "$POWERSYNC_IMAGE" --help >/dev/null 2>&1; then
   echo 'powersync accepted a missing source SSL mode' >&2; exit 1
 fi
@@ -156,6 +177,21 @@ if docker run --rm "${powersync_verify_env[@]}" -e PS_SOURCE_CA_FILE=/run/secret
   echo 'powersync accepted a malformed CA file' >&2; exit 1
 fi
 uri_secret='uri-secret-must-not-leak'
+for connection in SOURCE STORAGE; do
+  connection_name="$(printf '%s' "$connection" | tr '[:upper:]' '[:lower:]')"
+  for credential_case in malformed missing-username missing-password; do
+    case "$credential_case" in
+      malformed) credential_uri="postgres://user:$uri_secret%ZZ@postgres.test:5432/database" ;;
+      missing-username) credential_uri='postgres://:password@postgres.test:5432/database' ;;
+      missing-password) credential_uri='postgres://user@postgres.test:5432/database' ;;
+    esac
+    if docker run --rm "${powersync_disable_env[@]}" \
+      -e "PS_${connection}_URI=$credential_uri" \
+      "$POWERSYNC_IMAGE" --help >"$temporary/powersync-${connection_name}-${credential_case}.log" 2>&1; then
+      echo "powersync accepted $connection_name $credential_case credentials" >&2; exit 1
+    fi
+  done
+done
 if docker run --rm "${powersync_disable_env[@]}" \
   -e "PS_SOURCE_URI=postgres://source:$uri_secret@postgres.test:5432/source?sslmode=disable" \
   "$POWERSYNC_IMAGE" --help >"$temporary/powersync-uri-conflict.log" 2>&1; then
@@ -174,7 +210,7 @@ if docker run --rm "${powersync_disable_env[@]}" \
   "$POWERSYNC_IMAGE" --help >"$temporary/powersync-uri-fragment.log" 2>&1; then
   echo 'powersync accepted a PostgreSQL URI fragment' >&2; exit 1
 fi
-if grep -F "$uri_secret" "$temporary"/powersync-*uri*.log >/dev/null; then
+if grep -F "$uri_secret" "$temporary"/powersync-*.log >/dev/null; then
   echo 'powersync leaked a PostgreSQL URI credential' >&2; exit 1
 fi
 if grep -F 'BEGIN CERTIFICATE' "$temporary"/*.log >/dev/null; then
