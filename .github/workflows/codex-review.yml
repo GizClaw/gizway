@@ -50,25 +50,8 @@ jobs:
           || startsWith(github.event.comment.body, '@codex review ')
         )
       )
-    uses: GizClaw/github-workflows/.github/workflows/codex-openai-review.yml@cff6ec446b57dff4cd682dd8539bc6de79f516c4
+    uses: ./.github/workflows/review-with-ci.yml
     with:
-      model: gpt-5.6-terra
-      effort: medium
-      max-diff-bytes: 5000000
-      review-instructions: >-
-        Review the complete pull-request diff for actionable correctness,
-        security, transaction, concurrency, lifecycle, and test-coverage
-        findings. Treat tests/api/stories/*.hurl as the sole business-behavior
-        source of truth and OpenAPI as the wire/schema contract. Do not request
-        restoration of prose TDD documents or a second requirements list.
-      issue-review-instructions: >-
-        Review the Issue against the current Hurl behavior contracts, OpenAPI
-        wire contracts, and actual package ownership. Require implementation
-        scope, measurable acceptance, and database/concurrency evidence without
-        creating a second business-behavior specification.
-      pr-readiness-instructions: >-
-        Require current full CI evidence, Hurl and OpenAPI consistency, complete
-        implementation of the stated scope, and no actionable findings.
       pull_request_number: ${{ inputs.pull_request_number }}
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -136,25 +119,8 @@ jobs:
       fail-fast: false
       matrix:
         pull_request_number: ${{ fromJSON(needs.resolve_linked_prs.outputs.pull_requests) }}
-    uses: GizClaw/github-workflows/.github/workflows/codex-openai-review.yml@cff6ec446b57dff4cd682dd8539bc6de79f516c4
+    uses: ./.github/workflows/review-with-ci.yml
     with:
-      model: gpt-5.6-terra
-      effort: medium
-      max-diff-bytes: 5000000
-      review-instructions: >-
-        Review the complete pull-request diff for actionable correctness,
-        security, transaction, concurrency, lifecycle, and test-coverage
-        findings. Treat tests/api/stories/*.hurl as the sole business-behavior
-        source of truth and OpenAPI as the wire/schema contract. Do not request
-        restoration of prose TDD documents or a second requirements list.
-      issue-review-instructions: >-
-        Review the Issue against the current Hurl behavior contracts, OpenAPI
-        wire contracts, and actual package ownership. Require implementation
-        scope, measurable acceptance, and database/concurrency evidence without
-        creating a second business-behavior specification.
-      pr-readiness-instructions: >-
-        Require current full CI evidence, Hurl and OpenAPI consistency, complete
-        implementation of the stated scope, and no actionable findings.
       pull_request_number: ${{ matrix.pull_request_number }}
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

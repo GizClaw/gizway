@@ -47,6 +47,13 @@ External pull requests do not receive repository secrets. A maintainer may
 explicitly request the protected OpenAI review workflow after inspecting the
 change.
 
+The Codex reviewer receives exact-head CI evidence from the GitHub Actions API
+through `.github/workflows/review-with-ci.yml`. It requires the newest PR CI
+run and all three required jobs to pass; missing, pending, failed, cancelled,
+or skipped checks are not accepted. Request a new review after CI completes
+so the evidence and cached stage identities refresh. The wrapper pins the
+shared reviewer version that supplies PR discussion to code-review turns.
+
 ## Releases and deployments
 
 Merging an SDK version change to `main` authorizes automatic GitHub Packages
