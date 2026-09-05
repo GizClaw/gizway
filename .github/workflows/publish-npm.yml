@@ -1,0 +1,69 @@
+name: Publish GizWay SDK
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-gizway-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish unpublished SDK version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 22.22.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+          cache-dependency-path: sdk/web/package-lock.json
+          registry-url: https://npm.pkg.github.com
+          scope: '@gizclaw'
+      - name: Check published versions
+        id: version
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('sdk/web/package.json', 'utf8'));
+          const lock = JSON.parse(readFileSync('sdk/web/package-lock.json', 'utf8'));
+          if (pkg.name !== '@gizclaw/gizway' || pkg.publishConfig.registry !== 'https://npm.pkg.github.com') {
+            throw new Error('Unexpected package or registry');
+          }
+          if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) {
+            throw new Error('Package and lockfile versions must match');
+          }
+          // Query the existing package: authentication, network, and registry errors must fail.
+          const result = JSON.parse(execFileSync('npm', ['view', pkg.name, 'versions', '--json',
+            '--registry=https://npm.pkg.github.com'], { encoding: 'utf8' }));
+          const versions = Array.isArray(result) ? result : [result];
+          const published = versions.includes(pkg.version);
+          appendFileSync(process.env.GITHUB_OUTPUT, `published=${published}\ntag=${pkg.version.includes('-') ? 'next' : 'latest'}\n`);
+          console.log(`${pkg.name}@${pkg.version}: ${published ? 'already published; skipping' : 'will publish'}`);
+          NODE
+      - name: Verify package and release separation
+        if: steps.version.outputs.published == 'false'
+        run: make test-package-gizway-sdk
+      - name: Test and publish to GitHub Packages
+        if: steps.version.outputs.published == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          NPM_DIST_TAG: ${{ steps.version.outputs.tag }}
+        # prepublishOnly runs typecheck, lint, unit tests, build, and consumer package tests.
+        run: make publish-npm

@@ -49,16 +49,17 @@ change.
 
 ## Releases and deployments
 
-Merging a pull request does not authorize a tag, package publication, GitHub
-Release, or deployment. These operations are performed separately by project
-maintainers after the corresponding release or deployment decision.
+Merging an SDK version change to `main` authorizes automatic GitHub Packages
+publication through `.github/workflows/publish-npm.yml`. Every push to `main`
+checks the version in `sdk/web/package.json`, which must match
+`sdk/web/package-lock.json`. Published versions are skipped; new versions are
+tested and published as `@gizclaw/gizway` (`latest` for stable versions, `next`
+for prereleases). Registry failures stop the workflow.
 
-The `gizway` SDK version is committed in `sdk/web/package.json` and kept equal
-to the root version in `sdk/web/package-lock.json`. For an approved, merged
-version, a maintainer runs `npm ci` in `sdk/web`, then runs `make publish-npm`
-from the repository root; this invokes `npm publish` back in `sdk/web`.
-Prereleases require an explicit non-`latest` dist-tag, for example
-`make publish-npm NPM_DIST_TAG=next`; arbitrary npm publish options are not
-accepted. The
-tag-driven repository Release publishes only OCI images and never rewrites or
-publishes the SDK version.
+Manual publication remains available through `make publish-npm` after
+`npm ci` in `sdk/web`, with GitHub Packages authentication. Manual prereleases
+require `NPM_DIST_TAG=next`.
+
+Tags, GitHub Releases, and deployments remain separate maintainer decisions.
+The tag-driven repository Release publishes only OCI images and never rewrites
+or publishes the SDK version. The SDK workflow does not create a GitHub Release.
