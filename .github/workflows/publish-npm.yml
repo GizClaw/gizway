@@ -10,6 +10,7 @@ permissions:
 
 concurrency:
   group: publish-gizway-npm
+  queue: max
   cancel-in-progress: false
 
 jobs:

@@ -103,7 +103,9 @@ in GitHub Packages. An existing version is skipped; a new version passes the
 SDK package and release-separation gates, then `make publish-npm` runs the
 publish tests and publishes it using the repository's `GITHUB_TOKEN`.
 Registry or authentication failures fail the workflow. Stable versions use
-`latest`; prereleases use `next`. Publication runs are serialized.
+`latest`; prereleases use `next`. Publication runs are serialized with
+`queue: max` (up to 100 waiting runs). Failed runs can be rerun from Actions;
+queued runs continue after the active run completes or fails.
 
 Maintainers can also run `npm ci` in `sdk/web`, then `make publish-npm` from
 the repository root with GitHub Packages authentication. Manual prereleases

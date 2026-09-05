@@ -2,6 +2,7 @@
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 package_root="$root/sdk/web"
+node --test "$root/tests/release/npm-workflow.test.mjs"
 first="$(mktemp -d)"
 second="$(mktemp -d)"
 trap 'rm -rf "$first" "$second"' EXIT
