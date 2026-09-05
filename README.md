@@ -95,16 +95,27 @@ publishes immutable version and revision tags, checks anonymous OCI access,
 signs exact digests with GitHub Actions OIDC, and attaches a deterministic
 `release-manifest.json`.
 
-The `gizway` SDK has an independent npm lifecycle. Its version is owned by
-`sdk/web/package.json` and synchronized to `sdk/web/package-lock.json`. After a
-version change has merged and passed CI, an authenticated maintainer may make a
-separate publication decision, run `npm ci` from `sdk/web`, and then run
-`make publish-npm` from the repository root. The Make target invokes the
-standard `npm publish` command in `sdk/web`; prereleases pass an explicit
-non-`latest` dist-tag with
-`make publish-npm NPM_DIST_TAG=next`. The target rejects arbitrary npm options,
-and a prerelease version cannot use the default or `latest` tag. Repository
-tags and the OCI release workflow do not set or publish the SDK version.
+The `@gizclaw/gizway` SDK is published independently to GitHub Packages
+(`https://npm.pkg.github.com`), with public package visibility. Its version is owned by
+`sdk/web/package.json` and synchronized to `sdk/web/package-lock.json`.
+On every push to `main`, `.github/workflows/publish-npm.yml` checks that version
+in GitHub Packages. An existing version is skipped; a new version passes the
+SDK package and release-separation gates, then `make publish-npm` runs the
+publish tests and publishes it using the repository's `GITHUB_TOKEN`.
+Registry or authentication failures fail the workflow. Stable versions use
+`latest`; prereleases use `next`. Publication runs are serialized with
+`queue: max` (up to 100 waiting runs). Failed runs can be rerun from Actions;
+queued runs continue after the active run completes or fails.
+
+Maintainers can also run `npm ci` in `sdk/web`, then `make publish-npm` from
+the repository root with GitHub Packages authentication. Manual prereleases
+require `NPM_DIST_TAG=next`. Repository tags and the OCI release workflow do
+not set or publish the SDK version, and SDK publication creates no GitHub Release.
+
+SDK consumers configure `@gizclaw:registry=https://npm.pkg.github.com` in
+`.npmrc`, authenticate with a GitHub token with `read:packages`, and install
+`@gizclaw/gizway`. Publishing requires `write:packages`; authentication tokens
+must stay outside the repository.
 
 Consumers should deploy OCI images by digest and verify the Cosign certificate
 identity recorded in the manifest. A repository release does not authorize or

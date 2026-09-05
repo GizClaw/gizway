@@ -49,7 +49,7 @@ help:
 		'  test-e2e-powersync  run the PowerSync Client SDK acceptance matrix' \
 		'  test-e2e-gizway-sdk run real Global/CN GizWay SDK acceptance' \
 		'  build-images        build six linux/amd64 production OCI layouts' \
-		'  publish-npm         publish the package.json version of the gizway SDK' \
+		'  publish-npm         publish @gizclaw/gizway to GitHub Packages' \
 		'  test-package-gizway-sdk validate direct gizway package and OCI release separation' \
 		'  test-release-images validate tags and inspect/smoke the built OCI layouts'
 

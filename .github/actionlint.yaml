@@ -1,0 +1,8 @@
+# actionlint 1.7.12 predates GitHub's supported concurrency.queue property.
+# https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
+# Remove this compatibility rule when the pinned actionlint supports queue.
+# tests/release/npm-workflow.test.mjs validates this workflow's queue settings.
+paths:
+  .github/workflows/publish-npm.yml:
+    ignore:
+      - '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'

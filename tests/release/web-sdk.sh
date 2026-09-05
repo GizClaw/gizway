@@ -2,6 +2,7 @@
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 package_root="$root/sdk/web"
+node --test "$root/tests/release/npm-workflow.test.mjs" "$root/tests/release/review-evidence.test.mjs"
 first="$(mktemp -d)"
 second="$(mktemp -d)"
 trap 'rm -rf "$first" "$second"' EXIT
@@ -76,10 +77,10 @@ grep -qx 'package/package.json' "$first/contents"
 
 packed_package_json="$(tar -xOf "$first/$artifact" package/package.json)"
 jq -e --arg version "$package_version" '
-  .name == "gizway" and
+  .name == "@gizclaw/gizway" and
   .version == $version and
   .publishConfig.access == "public" and
-  .publishConfig.registry == "https://registry.npmjs.org" and
+  .publishConfig.registry == "https://npm.pkg.github.com" and
   .repository.url == "git+https://github.com/GizClaw/gizway.git" and
   (.private | not)
 ' <<<"$packed_package_json" >/dev/null

@@ -47,18 +47,26 @@ External pull requests do not receive repository secrets. A maintainer may
 explicitly request the protected OpenAI review workflow after inspecting the
 change.
 
+The Codex reviewer receives exact-head CI evidence from the GitHub Actions API
+through `.github/workflows/review-with-ci.yml`. It requires the newest PR CI
+run and all three required jobs to pass; missing, pending, failed, cancelled,
+or skipped checks are not accepted. Request a new review after CI completes
+so the evidence and cached stage identities refresh. The wrapper pins the
+shared reviewer version that supplies PR discussion to code-review turns.
+
 ## Releases and deployments
 
-Merging a pull request does not authorize a tag, package publication, GitHub
-Release, or deployment. These operations are performed separately by project
-maintainers after the corresponding release or deployment decision.
+Merging an SDK version change to `main` authorizes automatic GitHub Packages
+publication through `.github/workflows/publish-npm.yml`. Every push to `main`
+checks the version in `sdk/web/package.json`, which must match
+`sdk/web/package-lock.json`. Published versions are skipped; new versions are
+tested and published as `@gizclaw/gizway` (`latest` for stable versions, `next`
+for prereleases). Registry failures stop the workflow.
 
-The `gizway` SDK version is committed in `sdk/web/package.json` and kept equal
-to the root version in `sdk/web/package-lock.json`. For an approved, merged
-version, a maintainer runs `npm ci` in `sdk/web`, then runs `make publish-npm`
-from the repository root; this invokes `npm publish` back in `sdk/web`.
-Prereleases require an explicit non-`latest` dist-tag, for example
-`make publish-npm NPM_DIST_TAG=next`; arbitrary npm publish options are not
-accepted. The
-tag-driven repository Release publishes only OCI images and never rewrites or
-publishes the SDK version.
+Manual publication remains available through `make publish-npm` after
+`npm ci` in `sdk/web`, with GitHub Packages authentication. Manual prereleases
+require `NPM_DIST_TAG=next`.
+
+Tags, GitHub Releases, and deployments remain separate maintainer decisions.
+The tag-driven repository Release publishes only OCI images and never rewrites
+or publishes the SDK version. The SDK workflow does not create a GitHub Release.

@@ -1,0 +1,97 @@
+name: Review with current CI evidence
+
+on:
+  workflow_call:
+    inputs:
+      pull_request_number:
+        type: string
+        required: false
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+
+permissions:
+  actions: write
+  checks: write
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: read
+    outputs:
+      ci: ${{ steps.collect.outputs.ci }}
+    steps:
+      - id: collect
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          REQUESTED_PULL_NUMBER: ${{ inputs.pull_request_number }}
+        with:
+          script: |
+            const number = Number(process.env.REQUESTED_PULL_NUMBER
+              || context.payload.pull_request?.number || context.payload.issue?.number);
+            if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Invalid PR number');
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: number });
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: 'ci.yml', head_sha: pr.head.sha, per_page: 100,
+            });
+            const run = data.workflow_runs
+              .filter(item => item.head_sha === pr.head.sha && item.event === 'pull_request')
+              .sort((a, b) => b.id - a.id)[0];
+            const required = ['GizWay SDK gate', 'Full Go and API gate', 'Split-service Compose E2E'];
+            const jobs = run ? await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+            }) : [];
+            const checks = required.map(name => {
+              const job = jobs.find(item => item.name === name);
+              return { name, status: job?.status || 'missing',
+                conclusion: job?.conclusion || null, url: job?.html_url || null };
+            });
+            core.setOutput('ci', JSON.stringify({
+              source: 'GitHub Actions API', repository: `${context.repo.owner}/${context.repo.repo}`,
+              pull_request: number, head_sha: pr.head.sha, run_id: run?.id || null,
+              run_attempt: run?.run_attempt || null, run_status: run?.status || 'missing',
+              run_conclusion: run?.conclusion || null,
+              all_passed: run?.status === 'completed' && run?.conclusion === 'success'
+                && checks.every(item => item.status === 'completed' && item.conclusion === 'success'),
+              checks,
+            }));
+
+  review:
+    needs: evidence
+    uses: GizClaw/github-workflows/.github/workflows/codex-openai-review.yml@b6904f156a4d59f30b40f5bb3a3ca1d235fdd299
+    with:
+      model: gpt-5.6-terra
+      effort: medium
+      max-diff-bytes: 5000000
+      pull_request_number: ${{ inputs.pull_request_number }}
+      review-instructions: >-
+        Review the complete pull-request diff for actionable correctness,
+        security, transaction, concurrency, lifecycle, and test-coverage
+        findings. Treat tests/api/stories/*.hurl as the sole business-behavior
+        source of truth and OpenAPI as the wire/schema contract. Do not request
+        restoration of prose TDD documents or a second requirements list.
+      issue-review-instructions: >-
+        Review the Issue against the current Hurl behavior contracts, OpenAPI
+        wire contracts, and actual package ownership. Require implementation
+        scope, measurable acceptance, and database/concurrency evidence without
+        creating a second business-behavior specification.
+      pr-readiness-instructions: >-
+        Require current full CI evidence, Hurl and OpenAPI consistency, complete
+        implementation of the stated scope, and no actionable findings.
+        The following CI evidence is collected directly by the caller from the
+        GitHub Actions API, not from author claims. Use it only when head_sha
+        matches the reviewed head. Missing, pending, failed, or cancelled checks
+        do not satisfy the CI requirement. CI evidence: ${{ needs.evidence.outputs.ci }}
+        Platform reference verified September 6, 2026: GitHub announced
+        concurrency queue: max on May 7, 2026, supporting up to 100 pending runs
+        when cancel-in-progress is false or absent. Source:
+        https://github.blog/changelog/2026-05-07-github-actions-concurrency-groups-now-allow-larger-queues/
+        Evaluate the actual queue configuration against this current platform
+        contract; older actionlint releases can predate supported GitHub syntax.
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
